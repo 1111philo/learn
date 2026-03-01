@@ -27,7 +27,7 @@ The full learning loop works end-to-end:
 - **Learner profiles & customization** — The profile form exists but doesn't meaningfully shape generated content yet
 - **Asset generation** — No images, diagrams, or visual aids in lessons (text-only)
 - **Model support** — Currently hardcoded to Claude (Sonnet). No model selection or provider switching.
-- **Productionization** — Auth is stubbed (single dev user), no rate limiting, no cloud deployment yet.
+- **Productionization** — No rate limiting, no cloud deployment yet.
 
 ## Prerequisites
 
@@ -63,7 +63,7 @@ Open **http://localhost:5173** to start.
 
 1. Browse the catalog or click **Create Your Own**
 2. Enter a topic description and 2-5 learning objectives
-3. Hit **Generate** and watch the stepper — each objective takes ~30-60 seconds
+3. Hit **Generate** and watch the stepper — objectives generate in parallel, a full course takes ~1-2 minutes
 4. Once complete, click **Start Learning** to read the first lesson
 5. After reading, complete the practice activity and submit
 6. Work through all lessons, then take the final assessment
