@@ -18,7 +18,7 @@ class ActivitySubmitRequest(BaseModel):
 class ActivityReviewOutput(BaseModel):
     """Output from the activity_reviewer agent."""
 
-    score: int = Field(ge=0, le=100)
+    score: float = Field(ge=0, le=100)
     rationale: str = Field(min_length=50)
     strengths: list[str] = Field(min_length=2, max_length=5)
     improvements: list[str] = Field(min_length=2, max_length=5)
@@ -27,9 +27,16 @@ class ActivityReviewOutput(BaseModel):
 
 
 class ActivitySubmitResponse(BaseModel):
-    score: int
-    mastery_decision: str
-    rationale: str
-    strengths: list[str]
-    improvements: list[str]
-    tips: list[str]
+    id: str
+    status: str  # "reviewing"
+
+
+class ActivityResponse(BaseModel):
+    id: str
+    activity_spec: dict | None = None
+    latest_score: float | None = None
+    latest_feedback: dict | None = None
+    mastery_decision: str | None = None
+    attempt_count: int = 0
+    submissions: list[dict] = []
+    reviewing: bool = False

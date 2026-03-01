@@ -31,12 +31,12 @@ class LessonResponse(BaseModel):
     objective_index: int
     lesson_content: str | None
     status: str
-    activity: "ActivityResponse | None" = None
+    activity: "ActivitySummary | None" = None
 
     model_config = {"from_attributes": True}
 
 
-class ActivityResponse(BaseModel):
+class ActivitySummary(BaseModel):
     id: str
     activity_spec: dict | None
     latest_score: float | None

@@ -69,6 +69,16 @@ class LearnerProfile(Base):
 
     user: Mapped["User"] = relationship(back_populates="learner_profile")
 
+    def to_agent_dict(self) -> dict:
+        """Serialize profile fields for agent consumption."""
+        return {
+            "experience_level": self.experience_level,
+            "learning_goals": self.learning_goals,
+            "interests": self.interests,
+            "learning_style": self.learning_style,
+            "tone_preference": self.tone_preference,
+        }
+
 
 class CourseInstance(Base):
     __tablename__ = "course_instances"

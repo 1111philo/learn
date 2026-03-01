@@ -51,7 +51,7 @@ export interface LessonResponse {
   objective_index: number;
   lesson_content: string | null;
   status: 'locked' | 'unlocked' | 'completed';
-  activity: ActivityResponse | null;
+  activity: ActivitySummary | null;
 }
 
 // ---- Activity ----
@@ -70,7 +70,8 @@ export interface ActivityFeedback {
   tips: string[];
 }
 
-export interface ActivityResponse {
+/** Activity as embedded in the course response (no submissions/reviewing). */
+export interface ActivitySummary {
   id: string;
   activity_spec: ActivitySpec | null;
   latest_score: number | null;
@@ -79,7 +80,18 @@ export interface ActivityResponse {
   attempt_count: number;
 }
 
+/** Full activity from GET /activities/{id} (includes submissions + reviewing). */
+export interface ActivityDetail extends ActivitySummary {
+  submissions: { text: string; submitted_at: string }[];
+  reviewing: boolean;
+}
+
 export interface ActivitySubmitResponse {
+  id: string;
+  status: 'reviewing';
+}
+
+export interface ActivityReviewResult {
   score: number;
   mastery_decision: 'not_yet' | 'meets' | 'exceeds';
   rationale: string;
@@ -102,7 +114,7 @@ export interface AssessmentSpec {
 
 export interface AssessmentResponse {
   id: string;
-  status: 'pending' | 'reviewed' | 'failed';
+  status: 'pending' | 'submitted' | 'reviewed' | 'failed';
   score: number | null;
   passed: boolean | null;
   feedback: Record<string, unknown> | null;
@@ -145,5 +157,20 @@ export interface GenerationCompleteEvent {
 
 export interface GenerationErrorEvent {
   objective_index: number;
+  error: string;
+}
+
+// ---- Review SSE Events ----
+export interface ReviewCompleteEvent extends ActivityReviewResult {}
+
+export interface ReviewErrorEvent {
+  error: string;
+}
+
+export interface AssessmentReviewCompleteEvent {
+  assessment_id: string;
+}
+
+export interface AssessmentReviewErrorEvent {
   error: string;
 }

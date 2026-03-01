@@ -6,6 +6,7 @@ import {
   generateAssessment,
   getAssessment,
   submitAssessment,
+  connectAssessmentReviewStream,
 } from '@/api/assessments';
 import { AssessmentForm } from '@/components/assessment/AssessmentForm';
 import { AssessmentResults } from '@/components/assessment/AssessmentResults';
@@ -18,9 +19,10 @@ export function AssessmentPage() {
   const { course, loadCourse } = useCourseStore();
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reviewCleanupRef = useRef<(() => void) | null>(null);
 
   // Load course on mount
   useEffect(() => {
@@ -32,35 +34,42 @@ export function AssessmentPage() {
     if (!course || !courseId) return;
 
     const existing = course.assessments.find(
-      (a) => a.status === 'pending' || a.status === 'reviewed',
+      (a) => a.status === 'pending' || a.status === 'reviewed' || a.status === 'submitted',
     );
 
     if (existing) {
       // Assessment exists — fetch full data via REST
-      getAssessment(courseId).then(setAssessment).catch(() => {
+      getAssessment(courseId).then((result) => {
+        setAssessment(result);
+        // If assessment is submitted (review in flight), connect SSE
+        if (result.status === 'submitted') {
+          setReviewing(true);
+          connectReviewSSE(result.id);
+        }
+      }).catch(() => {
         // If fetch fails, let user trigger generation
       });
     } else if (
       course.status === 'generating_assessment' ||
       course.status === 'awaiting_assessment'
     ) {
-      // Course is mid-generation or ready — connect SSE or let user trigger
       if (course.status === 'generating_assessment') {
         setGenerating(true);
-        connectSSE(courseId);
+        connectGenerationSSE(courseId);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course?.id]);
 
-  // Cleanup SSE on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       eventSourceRef.current?.close();
+      reviewCleanupRef.current?.();
     };
   }, []);
 
-  function connectSSE(id: string) {
+  function connectGenerationSSE(id: string) {
     eventSourceRef.current?.close();
 
     const evtSource = new EventSource(
@@ -89,8 +98,6 @@ export function AssessmentPage() {
     });
 
     evtSource.onerror = () => {
-      // Only treat as terminal if the connection is fully closed
-      // (allows browser auto-reconnect for transient network blips)
       if (evtSource.readyState === EventSource.CLOSED) {
         eventSourceRef.current = null;
         setError('Lost connection during assessment generation');
@@ -99,17 +106,49 @@ export function AssessmentPage() {
     };
   }
 
+  function connectReviewSSE(assessmentId: string) {
+    reviewCleanupRef.current?.();
+    reviewCleanupRef.current = connectAssessmentReviewStream(
+      assessmentId,
+      async (event) => {
+        if (event.type === 'review_complete') {
+          // Fetch updated assessment with full results
+          try {
+            if (courseId) {
+              const result = await getAssessment(courseId);
+              setAssessment(result);
+              await loadCourse(courseId);
+            }
+          } catch {
+            setError('Review completed but could not load results.');
+          }
+          setReviewing(false);
+        } else if (event.type === 'review_error') {
+          setError(event.data.error);
+          setReviewing(false);
+          // Reset assessment status to pending for retry
+          if (assessment) {
+            setAssessment({ ...assessment, status: 'pending' });
+          }
+        }
+      },
+      () => {
+        setError('Lost connection during review');
+        setReviewing(false);
+      },
+    );
+  }
+
   async function handleGenerate() {
     if (!courseId) return;
     setGenerating(true);
     setError(null);
     try {
       await generateAssessment(courseId);
-      connectSSE(courseId);
+      connectGenerationSSE(courseId);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        // Already in progress — just connect SSE
-        connectSSE(courseId);
+        connectGenerationSSE(courseId);
       } else {
         setError((e as Error).message);
         setGenerating(false);
@@ -121,16 +160,14 @@ export function AssessmentPage() {
     responses: { objective: string; text: string }[],
   ) {
     if (!assessment) return;
-    setSubmitting(true);
+    setReviewing(true);
     setError(null);
     try {
-      const result = await submitAssessment(assessment.id, { responses });
-      setAssessment(result);
-      if (courseId) await loadCourse(courseId);
+      await submitAssessment(assessment.id, { responses });
+      connectReviewSSE(assessment.id);
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setSubmitting(false);
+      setReviewing(false);
     }
   }
 
@@ -162,15 +199,28 @@ export function AssessmentPage() {
     );
   }
 
+  // Show reviewing state
+  if (reviewing) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <h1 className="text-2xl font-bold">Assessment</h1>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Reviewing your assessment...
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </div>
+    );
+  }
+
   // Show form if assessment spec is loaded
-  if (assessment?.assessment_spec) {
+  if (assessment?.assessment_spec && assessment.status === 'pending') {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="text-2xl font-bold">Assessment</h1>
         <AssessmentForm
           spec={assessment.assessment_spec}
           onSubmit={handleSubmit}
-          submitting={submitting}
         />
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>

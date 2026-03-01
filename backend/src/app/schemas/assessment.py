@@ -25,14 +25,14 @@ class AssessmentItemResponse(BaseModel):
 
 class ObjectiveScore(BaseModel):
     objective: str
-    score: int = Field(ge=0, le=100)
+    score: float = Field(ge=0, le=100)
     feedback: str
 
 
 class AssessmentReviewOutput(BaseModel):
     """Output from the assessment_reviewer agent."""
 
-    overall_score: int = Field(ge=0, le=100)
+    overall_score: float = Field(ge=0, le=100)
     objective_scores: list[ObjectiveScore]
     pass_decision: str  # pass, fail
     next_steps: list[str] = Field(min_length=1)

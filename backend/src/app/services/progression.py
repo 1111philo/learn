@@ -40,7 +40,7 @@ async def check_guard(db: AsyncSession, course: CourseInstance, guard: str) -> b
             lesson.status == "completed" for lesson in course.lessons
         )
     if guard == "assessment_generated":
-        return len(course.assessments) > 0
+        return any(a.status == "pending" for a in course.assessments)
     if guard == "assessment_passed":
         return any(a.passed for a in course.assessments)
     return False

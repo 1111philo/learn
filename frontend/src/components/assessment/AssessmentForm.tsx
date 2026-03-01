@@ -6,13 +6,13 @@ import type { AssessmentSpec } from '@/api/types';
 interface AssessmentFormProps {
   spec: AssessmentSpec;
   onSubmit: (responses: { objective: string; text: string }[]) => Promise<void>;
-  submitting: boolean;
 }
 
-export function AssessmentForm({ spec, onSubmit, submitting }: AssessmentFormProps) {
+export function AssessmentForm({ spec, onSubmit }: AssessmentFormProps) {
   const [answers, setAnswers] = useState<Record<number, string>>(
     () => Object.fromEntries(spec.items.map((_, i) => [i, ''])),
   );
+  const [submitting, setSubmitting] = useState(false);
 
   function update(i: number, text: string) {
     setAnswers((a) => ({ ...a, [i]: text }));
@@ -20,12 +20,18 @@ export function AssessmentForm({ spec, onSubmit, submitting }: AssessmentFormPro
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     const responses = spec.items.map((item, i) => ({
       objective: item.objective,
       text: answers[i]?.trim() ?? '',
     }));
     if (responses.some((r) => !r.text)) return;
-    await onSubmit(responses);
+    setSubmitting(true);
+    try {
+      await onSubmit(responses);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const allFilled = spec.items.every((_, i) => answers[i]?.trim());

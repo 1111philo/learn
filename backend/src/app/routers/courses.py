@@ -1,7 +1,3 @@
-import asyncio
-import json
-from collections.abc import AsyncGenerator
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,12 +8,8 @@ from app.auth.dependencies import get_current_user
 from app.db.models import CourseInstance, Lesson, User
 from app.db.session import get_db_session
 from app.services.generation import generate_course_background
-from app.services.generation_tracker import (
-    is_running,
-    start_generation,
-    subscribe,
-    unsubscribe,
-)
+from app.services.generation_tracker import is_running
+from app.services.sse import kickoff_background_task, sse_event_generator
 from app.schemas.course import CourseCreateRequest, CourseListItem
 from app.services.progression import InvalidTransitionError, transition_course
 
@@ -48,10 +40,6 @@ async def trigger_generation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    # Check if generation is already running
-    if is_running(course_id):
-        raise HTTPException(status_code=409, detail="Generation already in progress")
-
     result = await db.execute(
         select(CourseInstance)
         .where(CourseInstance.id == course_id, CourseInstance.user_id == user.id)
@@ -67,17 +55,7 @@ async def trigger_generation(
             detail=f"Course must be in 'draft' or 'generation_failed' state, got '{course.status}'",
         )
 
-    # Compute learner profile before spawning the task
-    profile_dict = None
-    if user.learner_profile:
-        p = user.learner_profile
-        profile_dict = {
-            "experience_level": p.experience_level,
-            "learning_goals": p.learning_goals,
-            "interests": p.interests,
-            "learning_style": p.learning_style,
-            "tone_preference": p.tone_preference,
-        }
+    profile_dict = user.learner_profile.to_agent_dict() if user.learner_profile else None
 
     # Capture plain data for the background task
     objectives = list(course.input_objectives)
@@ -87,8 +65,7 @@ async def trigger_generation(
     await transition_course(db, course, "generating")
     await db.commit()
 
-    # Spawn background generation
-    start_generation(
+    kickoff_background_task(
         course_id,
         generate_course_background(
             course_id=course_id,
@@ -97,6 +74,7 @@ async def trigger_generation(
             description=description,
             learner_profile=profile_dict,
         ),
+        conflict_detail="Generation already in progress",
     )
 
     return {"id": course.id, "status": "generating"}
@@ -108,11 +86,8 @@ async def generation_stream(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    # Capture user ID as a plain value so we never trigger lazy loads on the
-    # ORM object later (e.g. after db.expire_all() inside _get_current_lesson_count).
     user_id = user.id
 
-    # Verify the course exists and belongs to this user
     result = await db.execute(
         select(CourseInstance)
         .where(CourseInstance.id == course_id, CourseInstance.user_id == user_id)
@@ -124,11 +99,7 @@ async def generation_stream(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    generation_in_flight = is_running(course_id)
-
-    # Build catchup events from lessons already in DB.
-    # Send all three stages (planned, written, activity_created) so that a
-    # client that reconnects mid-generation sees the full progress.
+    # Build catchup events from lessons already in DB
     existing_lessons = sorted(course.lessons, key=lambda l: l.objective_index)
     catchup_events: list[dict] = []
     for lesson in existing_lessons:
@@ -152,71 +123,30 @@ async def generation_stream(
                 },
             })
 
-    async def _get_current_lesson_count() -> int:
-        """Re-query the DB so we never report a stale lesson count.
+    is_done = not is_running(course_id) and course.status != "generating"
 
-        Expire all cached ORM state first so the subsequent SELECT sees rows
-        committed by the background generation task (which uses its own session).
-        """
+    async def _timeout_fallback():
         db.expire_all()
         result_inner = await db.execute(
             select(Lesson).where(Lesson.course_instance_id == course_id)
         )
-        return len(result_inner.scalars().all())
+        lesson_count = len(result_inner.scalars().all())
+        return {
+            "event": "generation_complete",
+            "data": {"course_id": course_id, "lesson_count": lesson_count},
+        }
 
-    async def event_generator() -> AsyncGenerator[dict, None]:
-        # Send catchup events first
-        for evt in catchup_events:
-            yield {"event": evt["event"], "data": json.dumps(evt["data"])}
-
-        if not generation_in_flight and course.status != "generating":
-            # Generation is done -- use already-loaded lessons (guaranteed fresh
-            # since we just queried them at the top of this endpoint)
-            yield {
-                "event": "generation_complete",
-                "data": json.dumps({
-                    "course_id": course_id,
-                    "lesson_count": len(existing_lessons),
-                }),
-            }
-            return
-
-        # Subscribe to live events.
-        # Use a short poll interval so we detect completion quickly even if
-        # the generation_complete broadcast was missed (e.g. race on connect).
-        queue = subscribe(course_id)
-        try:
-            while True:
-                try:
-                    message = await asyncio.wait_for(queue.get(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    # Check if generation finished while we were waiting
-                    if not is_running(course_id):
-                        lesson_count = await _get_current_lesson_count()
-                        yield {
-                            "event": "generation_complete",
-                            "data": json.dumps({
-                                "course_id": course_id,
-                                "lesson_count": lesson_count,
-                            }),
-                        }
-                        return
-                    # Otherwise send a keepalive comment
-                    yield {"comment": "keepalive"}
-                    continue
-
-                yield {
-                    "event": message["event"],
-                    "data": json.dumps(message["data"]),
-                }
-
-                # Close the stream after generation_complete
-                if message["event"] == "generation_complete":
-                    return
-        finally:
-            unsubscribe(course_id, queue)
-
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(sse_event_generator(
+        course_id,
+        catchup=catchup_events or None,
+        is_done=is_done,
+        done_event={
+            "event": "generation_complete",
+            "data": {"course_id": course_id, "lesson_count": len(existing_lessons)},
+        },
+        terminal_events={"generation_complete"},
+        on_timeout_fallback=_timeout_fallback,
+    ))
 
 
 @router.get("", response_model=list)
@@ -272,7 +202,7 @@ async def get_course(
         await db.flush()
         await db.commit()
 
-    from app.schemas.course import ActivityResponse, AssessmentSummary, CourseResponse, LessonResponse
+    from app.schemas.course import ActivitySummary, AssessmentSummary, CourseResponse, LessonResponse
 
     return CourseResponse(
         id=course.id,
@@ -287,7 +217,7 @@ async def get_course(
                 objective_index=l.objective_index,
                 lesson_content=l.lesson_content,
                 status=l.status,
-                activity=ActivityResponse(
+                activity=ActivitySummary(
                     id=l.activities[0].id,
                     activity_spec=l.activities[0].activity_spec,
                     latest_score=l.activities[0].latest_score,
