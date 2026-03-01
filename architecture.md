@@ -55,8 +55,9 @@ All agents share a lightweight execution helper (`run_agent`) that handles timin
 and logging to the AgentLog table. An `AgentContext` dataclass carries the DB session, user ID, and
 course ID through agent calls. This is minimal shared infrastructure — not a framework, just DRY.
 
-No graph library. The generation pipeline is sequential — plan, write, create activity —
-repeated per objective. That's a for-loop.
+Pipeline internals — whether a simple for-loop, a DAG, or a graph orchestration library — are
+an implementation choice that can evolve as pipelines grow in complexity. See "Generation tasks
+are opaque pipelines" below.
 
 ### Provider-agnostic via PydanticAI
 
@@ -272,7 +273,24 @@ HTTP request.** The pattern:
 4. On success, the background task transitions the course to `in_progress`. On failure, it
    transitions to `generation_failed` and records the error.
 
-All long-running LLM workflows — including assessment generation — should follow this pattern.
+All long-running LLM workflows — including assessment generation — follow this pattern.
+
+#### Generation tasks are opaque pipelines
+
+The contract between a generation task and the rest of the system is narrow: a kickoff endpoint
+that returns immediately, SSE events for progress, and DB records as the durable output. What
+happens inside the task — how many LLM calls, in what order, with what intermediate steps — is
+invisible to the client and the API layer.
+
+This means any generation task can be replaced with an arbitrarily complex pipeline of composed
+steps without changing the external interface. A lesson that's currently produced by a single
+`write` call could become `write → review → revise` or `write → identify asset opportunities →
+generate assets → insert → review` — the kickoff endpoint, SSE contract, and data model stay
+the same. The pipeline's internal complexity is its own concern.
+
+This is a deliberate architectural choice: generation logic should be composable and evolvable
+(improving content quality is the core product lever) without requiring changes to API contracts,
+client code, or state management. The DB record is the interface boundary, not the agent call.
 
 #### Background Task Lifecycle
 
