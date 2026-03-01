@@ -1,3 +1,4 @@
+import { sseUrl } from './sse-auth';
 import type {
   LessonPlannedEvent,
   LessonWrittenEvent,
@@ -27,7 +28,7 @@ export function connectGenerationStream(
   onError?: (err: Event) => void,
 ): () => void {
   const evtSource = new EventSource(
-    `/api/courses/${courseId}/generation-stream`,
+    sseUrl(`/api/courses/${courseId}/generation-stream`),
   );
 
   for (const type of EVENT_TYPES) {

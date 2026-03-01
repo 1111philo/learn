@@ -1,4 +1,5 @@
 import { get, post } from './client';
+import { sseUrl } from './sse-auth';
 import type {
   AssessmentResponse,
   AssessmentReviewCompleteEvent,
@@ -40,7 +41,7 @@ export function connectAssessmentReviewStream(
   onError?: (err: Event) => void,
 ): () => void {
   const evtSource = new EventSource(
-    `/api/assessments/${assessmentId}/review-stream`,
+    sseUrl(`/api/assessments/${assessmentId}/review-stream`),
   );
 
   for (const type of ['review_complete', 'review_error'] as const) {

@@ -1,4 +1,5 @@
 import { get, post } from './client';
+import { sseUrl } from './sse-auth';
 import type {
   ActivityDetail,
   ActivitySubmitResponse,
@@ -29,7 +30,7 @@ export function connectReviewStream(
   onError?: (err: Event) => void,
 ): () => void {
   const evtSource = new EventSource(
-    `/api/activities/${activityId}/review-stream`,
+    sseUrl(`/api/activities/${activityId}/review-stream`),
   );
 
   for (const type of ['review_complete', 'review_error'] as const) {

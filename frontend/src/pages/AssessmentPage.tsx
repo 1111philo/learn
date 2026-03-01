@@ -12,6 +12,7 @@ import { AssessmentForm } from '@/components/assessment/AssessmentForm';
 import { AssessmentResults } from '@/components/assessment/AssessmentResults';
 import type { AssessmentResponse } from '@/api/types';
 import { ApiError } from '@/api/client';
+import { sseUrl } from '@/api/sse-auth';
 
 export function AssessmentPage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -73,7 +74,7 @@ export function AssessmentPage() {
     eventSourceRef.current?.close();
 
     const evtSource = new EventSource(
-      `/api/assessments/${id}/assessment-stream`,
+      sseUrl(`/api/assessments/${id}/assessment-stream`),
     );
     eventSourceRef.current = evtSource;
 

@@ -69,16 +69,36 @@ PydanticAI handles the LLM abstraction layer:
 - Model selection via string identifier — change the model, not the code
 - Default to Claude (Anthropic) for development; swap providers by changing config
 
+### JWT authentication
+
+Authentication uses email + password registration with JWT tokens:
+
+- **Registration**: User provides email + password. Password is hashed with bcrypt (via passlib).
+  A JWT is returned immediately, no email verification required.
+- **Login**: Email + password verified against bcrypt hash. JWT issued on success.
+- **Token format**: JWT with `sub` (user ID) and `exp` claims, signed with HS256. Default expiry
+  is 7 days — long enough for a POC, short enough to limit exposure.
+- **Token transport**: Clients send `Authorization: Bearer <token>` on every request. For SSE
+  endpoints (where `EventSource` cannot send custom headers), the token is passed as a `?token=`
+  query parameter. Both paths use the same decode logic.
+- **Token storage**: The SPA stores the JWT in `localStorage`. This is vulnerable to XSS but
+  immune to CSRF — an acceptable tradeoff for a POC where the API is same-origin and there are
+  no sensitive cookie-based sessions to protect.
+- **Password hashing**: bcrypt directly (via the `bcrypt` library). The `password_hash` column is nullable
+  to support future OAuth/social login where users authenticate without a password.
+
+The `get_current_user()` FastAPI dependency extracts the JWT, decodes it, and loads the user with
+an eagerly-loaded learner profile. All endpoints that need user identity depend on this — no
+endpoint accesses user data without going through the auth dependency.
+
 ### User scoping from day one
 
-Every database query is scoped by `user_id`, even while auth is stubbed. This means:
+Every database query is scoped by `user_id`. This means:
 
-- A `get_current_user()` FastAPI dependency exists from the first commit (returns a hardcoded dev
-  user initially, swapped for real auth later)
+- The `get_current_user()` dependency provides the authenticated user to every protected endpoint
 - The auth dependency eagerly loads the learner profile, making it available to all endpoints
   without additional queries
 - Every repository/query method takes or infers `user_id`
-- No retrofit needed when real auth lands
 
 ### PostgreSQL everywhere
 
@@ -445,7 +465,9 @@ backend/
       profile.py
       health.py
     auth/
-      dependencies.py      # get_current_user (stubbed initially, eagerly loads profile)
+      dependencies.py      # get_current_user (JWT extraction, eagerly loads profile)
+      router.py            # Register, login, me endpoints
+      utils.py             # Password hashing, JWT encode/decode
 frontend/
   src/
     # Existing React 19 SPA structure preserved
@@ -556,4 +578,4 @@ before starting the server, so there's no manual setup step.
 - **Horizontal scaling** — The in-process generation tracker (background tasks, SSE pub/sub) is
   single-instance. Multiple replicas would need Redis-backed pub/sub. See "Scaling Beyond the
   POC" above.
-- **Auth** — Still stubbed. Containerization doesn't change this.
+- **Auth** — JWT-based. No external auth provider dependency.

@@ -8,11 +8,24 @@ class Settings(BaseSettings):
     default_model: str = "anthropic:claude-sonnet-4-6"
     anthropic_api_key: str = ""
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    jwt_secret: str = "change-me-in-production"
+    jwt_expiry_hours: int = 168  # 7 days
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()
+
+if settings.jwt_secret == "change-me-in-production":
+    import sys
+    print(
+        "\n"
+        "  ⚠️  JWT_SECRET is using the default value.\n"
+        "  This is fine for local development but MUST be changed in production.\n"
+        "\n"
+        "  Set JWT_SECRET in backend/.env or as an environment variable.\n",
+        file=sys.stderr,
+    )
 
 if not settings.anthropic_api_key:
     import sys

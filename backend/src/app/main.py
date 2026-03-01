@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.services.catalog import load_catalog
+from app.auth.router import router as auth_router
 from app.routers import health, courses, activities, assessments, catalog, profile
 
 
@@ -28,6 +29,7 @@ if settings.cors_origins:
         allow_headers=["*"],
     )
 
+app.include_router(auth_router)
 app.include_router(health.router)
 app.include_router(courses.router)
 app.include_router(activities.router)

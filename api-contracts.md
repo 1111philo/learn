@@ -6,14 +6,14 @@ The 1111 School backend is a FastAPI application that powers an AI-driven person
 
 **Base URL:** `http://localhost:8000`
 
-**Auth:** All authenticated endpoints use a `get_current_user` FastAPI dependency. Currently stubbed to return a hard-coded dev user (`id: "dev-user-001"`, `email: "dev@1111.school"`). This will be replaced with real authentication (e.g., JWT/session-based) in a future iteration.
+**Auth:** All authenticated endpoints require a JWT token via `Authorization: Bearer <token>` header. For SSE endpoints, the token can alternatively be passed as a `?token=<jwt>` query parameter (since `EventSource` cannot send custom headers). Tokens are obtained via the register or login endpoints. Protected endpoints return `401 Unauthorized` if the token is missing, invalid, or expired.
 
 ---
 
 ## Conventions
 
 - All endpoints return JSON (except the SSE stream endpoint).
-- Auth: `get_current_user` dependency injected via `Depends`. Stubbed as dev user for now.
+- Auth: `get_current_user` dependency injected via `Depends`. Extracts JWT from `Authorization: Bearer` header or `?token=` query param.
 - Errors: FastAPI standard format `{"detail": "..."}` with appropriate HTTP status codes.
 - UUIDs: String format, 36 characters with dashes (e.g., `"a1b2c3d4-e5f6-7890-abcd-ef1234567890"`).
 - Timestamps: ISO 8601 with timezone (stored as `DateTime(timezone=True)` in PostgreSQL).
@@ -50,6 +50,123 @@ Valid transitions and their guard conditions:
 ---
 
 ## Endpoints
+
+---
+
+### 0. Authentication
+
+#### `POST /api/auth/register`
+
+Register a new user account.
+
+**Auth:** None
+
+**Request body:**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword"
+}
+```
+
+| Field      | Type   | Required | Constraints                  |
+|------------|--------|----------|------------------------------|
+| `email`    | string | Yes      | Valid email address          |
+| `password` | string | Yes      | Minimum 8 characters         |
+
+**Response:** `200 OK`
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "email": "user@example.com"
+  }
+}
+```
+
+| Field        | Type   | Description                    |
+|--------------|--------|--------------------------------|
+| `token`      | string | JWT access token               |
+| `user.id`    | string | UUID of the new user           |
+| `user.email` | string | The registered email           |
+
+**Error responses:**
+- `409 Conflict` -- `{"detail": "Email already registered"}`
+- `422 Unprocessable Entity` -- Validation error (invalid email, short password).
+
+---
+
+#### `POST /api/auth/login`
+
+Authenticate with email and password.
+
+**Auth:** None
+
+**Request body:**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword"
+}
+```
+
+| Field      | Type   | Required | Description      |
+|------------|--------|----------|------------------|
+| `email`    | string | Yes      | Email address    |
+| `password` | string | Yes      | Password         |
+
+**Response:** `200 OK`
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "email": "user@example.com"
+  }
+}
+```
+
+| Field        | Type   | Description                    |
+|--------------|--------|--------------------------------|
+| `token`      | string | JWT access token               |
+| `user.id`    | string | UUID of the user               |
+| `user.email` | string | The user's email               |
+
+**Side effects:**
+- Updates `last_login_at` on the user record.
+
+**Error responses:**
+- `401 Unauthorized` -- `{"detail": "Invalid email or password"}`
+
+---
+
+#### `GET /api/auth/me`
+
+Get the currently authenticated user's info. Used to validate a stored token on page load.
+
+**Auth:** Required
+
+**Response:** `200 OK`
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "email": "user@example.com"
+}
+```
+
+| Field   | Type   | Description           |
+|---------|--------|-----------------------|
+| `id`    | string | UUID of the user      |
+| `email` | string | The user's email      |
+
+**Error responses:**
+- `401 Unauthorized` -- Missing, invalid, or expired token.
 
 ---
 
@@ -956,6 +1073,8 @@ For validation errors (422), the format includes field-level details:
 |------|--------------------------|---------------------------------------------------|
 | 200  | OK                       | Successful request                                |
 | 400  | Bad Request              | Invalid state transition, business logic error    |
+| 401  | Unauthorized             | Missing, invalid, or expired JWT token            |
 | 404  | Not Found                | Resource not found or not owned by current user   |
+| 409  | Conflict                 | Duplicate resource (e.g., email already registered) |
 | 422  | Unprocessable Entity     | Request body validation failure                   |
 | 500  | Internal Server Error    | Unhandled server error                            |

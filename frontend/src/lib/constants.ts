@@ -1,5 +1,7 @@
 import type { CourseStatus } from '@/api/types';
 
+export const AUTH_TOKEN_KEY = 'auth_token';
+
 export const STATUS_LABELS: Record<CourseStatus, string> = {
   draft: 'Draft',
   generating: 'Generating',

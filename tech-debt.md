@@ -53,6 +53,43 @@ Activity submissions default to `[]` (empty list). Assessment submissions defaul
 
 ---
 
+## Authentication — Future Improvements
+
+### Refresh token rotation
+Short-lived access tokens (15 min) + single-use rotating refresh tokens (30 days) for seamless
+long-lived sessions. Current 7-day JWT with re-login is sufficient for POC.
+
+### OAuth / social login
+Google, GitHub sign-in. Additive; `password_hash` is already nullable to support passwordless
+OAuth users.
+
+### Password reset
+Email-based reset flow. Requires email service (SES, Resend, etc).
+
+### Rate limiting
+On login/register to prevent brute force. Can use `slowapi` or similar.
+
+### Email verification
+Confirm email ownership before account activation.
+
+### SSE reconnect storm on expired token
+The browser `EventSource` API auto-reconnects on error but does not expose HTTP status codes.
+When a JWT expires, SSE endpoints return 401, `EventSource` treats it as a retryable error, and
+reconnects in a loop every ~3 seconds. The `onerror` handler cannot distinguish auth failure from
+a transient network issue.
+
+**Current mitigation:** The 7-day token makes mid-session expiry unlikely, and the next REST
+API call (page navigation, polling) triggers the 401 redirect to `/login`, which tears down the
+page and closes the `EventSource`.
+
+**Fix:** Replace `EventSource` with `fetch()` + `ReadableStream` for SSE connections. This gives
+access to `Response.status` before reading the stream, allowing the client to detect 401 and
+close cleanly instead of retrying. Downside: loses `EventSource`'s built-in reconnection for
+legitimate transient failures (would need manual reconnect logic). Becomes necessary when access
+tokens are short-lived (refresh token rotation).
+
+---
+
 ## Infrastructure Gaps
 
 ### No startup sweep for stuck `generating` courses
