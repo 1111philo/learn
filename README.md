@@ -95,6 +95,6 @@ api-contracts.md   Full API request/response contracts
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `DATABASE_URL` | No | `postgresql+asyncpg://learn:learn@localhost:5432/learn` | PostgreSQL connection string |
 | `ANTHROPIC_API_KEY` | Yes | — | Your Anthropic API key |
 | `DEFAULT_MODEL` | No | `anthropic:claude-sonnet-4-6` | LLM model identifier |
