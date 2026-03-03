@@ -7,9 +7,9 @@ class LessonPlanOutput(BaseModel):
     lesson_title: str
     learning_objective: str
     key_concepts: list[str] = Field(min_length=2, max_length=8)
-    lesson_outline: list[str] = Field(min_length=3, max_length=10)
-    suggested_activity: "ActivitySeed"
     mastery_criteria: list[str] = Field(min_length=2, max_length=6)
+    suggested_activity: "ActivitySeed"
+    lesson_outline: list[str] = Field(min_length=3, max_length=10)
 
 
 class ActivitySeed(BaseModel):

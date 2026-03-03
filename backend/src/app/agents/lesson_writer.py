@@ -17,7 +17,12 @@ lesson_writer = Agent(
         "- End with a brief recap that ties back to the objective\n"
         "- Use Markdown headings (##, ###), lists, and code blocks where appropriate\n"
         "- Write in a clear, engaging voice — teach, don't lecture\n"
-        "- Minimum 200 characters for the lesson body\n\n"
+        "- Minimum 200 characters for the lesson body\n"
+        "- The lesson plan includes a suggested_activity and mastery_criteria. By the end of "
+        "the lesson, the learner should have everything they need to attempt the activity and "
+        "plausibly meet each mastery criterion. Make this explicit: use worked examples that "
+        "mirror the skill demands of the activity, and close with a note signalling what the "
+        "learner is now ready to do (e.g., 'You're now ready to try [activity type]').\n\n"
         "Also provide 3-6 concise key takeaways.\n\n"
         "Tailor tone, examples, and difficulty to the learner's profile if provided."
     ),
