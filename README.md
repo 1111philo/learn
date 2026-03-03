@@ -27,7 +27,7 @@ The full learning loop works end-to-end:
 - **Learner profiles & customization** — The profile form exists but doesn't meaningfully shape generated content yet
 - **Asset generation** — No images, diagrams, or visual aids in lessons (text-only)
 - **Model support** — Currently hardcoded to Claude (Sonnet). No model selection or provider switching.
-- **Productionization** — No rate limiting, no cloud deployment yet.
+- **Productionization** — No rate limiting.
 
 ## Prerequisites
 
@@ -89,6 +89,64 @@ frontend/          TypeScript (React 19 + Vite + Tailwind + shadcn/ui)
 architecture.md    Technical architecture decisions
 product-vision.md  Product vision and screen specs
 api-contracts.md   Full API request/response contracts
+```
+
+## Deploying to AWS
+
+The `infra/` directory contains Terraform to deploy the app on AWS App Runner with an RDS PostgreSQL database.
+
+### What it creates
+
+- **ECR repository** — hosts the Docker image
+- **App Runner service** — runs the container (no VPC attachment, so it has direct internet access for Anthropic API calls)
+- **RDS PostgreSQL 16** — publicly accessible database (password-protected)
+- **VPC + subnets** — required by RDS, with an internet gateway for public access
+- **IAM role** — lets App Runner pull images from ECR
+
+### Prerequisites
+
+- [Terraform](https://developer.hashicorp.com/terraform/install) (v1.5+)
+- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+
+### Setup
+
+1. Authenticate with AWS:
+   ```bash
+   aws login
+   ```
+
+2. If using `aws login` (session-based auth), Terraform can't read login sessions directly. Add a `credential_process` bridge profile to `~/.aws/config`:
+   ```ini
+   [profile terraform]
+   credential_process = aws configure export-credentials --profile default --format process
+   region = us-east-1
+   ```
+   If using access keys (`aws configure`), you can skip this step.
+
+3. Create `infra/terraform.tfvars` with your secrets (this file is gitignored):
+   ```hcl
+   anthropic_api_key = "sk-ant-..."
+   jwt_secret        = "some-random-secret"
+   db_password       = "some-db-password"
+   aws_profile       = "terraform"   # omit if using access keys
+   ```
+
+4. Initialize and apply (this builds and pushes the Docker image automatically):
+   ```bash
+   cd infra
+   terraform init
+   terraform apply
+   ```
+
+### Redeploying
+
+After code changes, run `./infra/deploy.sh` from the repo root. It builds a new image, pushes to ECR, and triggers an App Runner deployment.
+
+### Tearing down
+
+```bash
+cd infra
+terraform destroy
 ```
 
 ## Environment Variables

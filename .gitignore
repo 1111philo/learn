@@ -7,3 +7,10 @@ node_modules/
 dist/
 .DS_Store
 CLAUDE.local.md
+
+# Terraform
+*.tfvars
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
