@@ -1,6 +1,7 @@
 from pydantic_ai import Agent
 
 from app.agents.logging import AgentContext, run_agent
+from app.config import settings
 from app.schemas.activity import ActivityReviewOutput
 
 activity_reviewer = Agent(
@@ -41,4 +42,4 @@ async def run_activity_reviewer(
         + f"\n\nLearner's submission:\n{submission_text}\n"
     )
 
-    return await run_agent(ctx, activity_reviewer, "activity_reviewer", prompt)
+    return await run_agent(ctx, activity_reviewer, "activity_reviewer", prompt, model=settings.fast_model)

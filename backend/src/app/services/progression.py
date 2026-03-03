@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import CourseInstance, Lesson
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidTransitionError(Exception):
@@ -62,23 +66,61 @@ async def transition_course(
             f"'{course.status}' → '{target_status}'"
         )
 
+    prev = course.status
     course.status = target_status
     await db.flush()
+    logger.info("course [%s] %s → %s", course.id[:8], prev, target_status)
     return course
 
 
-async def unlock_next_lesson(db: AsyncSession, course_id: str) -> Lesson | None:
-    """Find the next locked lesson and unlock it."""
+async def unlock_next_lesson(
+    db: AsyncSession, course_id: str, completed_index: int
+) -> Lesson | None:
+    """Unlock or create the next lesson after completed_index.
+
+    With on-demand generation, lesson rows are created here rather than upfront.
+    Returns the unlocked/created lesson, or None if completed_index is the last objective.
+    """
+    next_index = completed_index + 1
+
+    # Bounds check against total objectives
     result = await db.execute(
-        select(Lesson)
-        .where(Lesson.course_instance_id == course_id, Lesson.status == "locked")
-        .order_by(Lesson.objective_index)
-        .limit(1)
+        select(CourseInstance).where(CourseInstance.id == course_id)
+    )
+    course = result.scalar_one()
+    if next_index >= len(course.input_objectives):
+        logger.info(
+            "course [%s] obj[%d] is the last lesson — no next lesson to unlock",
+            course_id[:8], completed_index,
+        )
+        return None
+
+    # Try to find an existing row for the next index
+    result = await db.execute(
+        select(Lesson).where(
+            Lesson.course_instance_id == course_id,
+            Lesson.objective_index == next_index,
+        )
     )
     lesson = result.scalar_one_or_none()
+
     if lesson:
-        lesson.status = "unlocked"
+        if lesson.status == "locked":
+            lesson.status = "unlocked"
+            await db.flush()
+            logger.info("course [%s] unlocked existing lesson obj[%d]", course_id[:8], next_index)
+    else:
+        # Create the row on demand
+        lesson = Lesson(
+            course_instance_id=course_id,
+            objective_index=next_index,
+            lesson_content=None,
+            status="unlocked",
+        )
+        db.add(lesson)
         await db.flush()
+        logger.info("course [%s] created on-demand lesson row obj[%d]", course_id[:8], next_index)
+
     return lesson
 
 

@@ -1,6 +1,7 @@
 from pydantic_ai import Agent
 
 from app.agents.logging import AgentContext, run_agent
+from app.config import settings
 from app.schemas.assessment import AssessmentSpecOutput, AssessmentReviewOutput
 
 assessment_creator = Agent(
@@ -58,7 +59,7 @@ async def run_assessment_creator(
     if learner_profile:
         prompt += f"\nLearner profile: {learner_profile}\n"
 
-    return await run_agent(ctx, assessment_creator, "assessment_creator", prompt)
+    return await run_agent(ctx, assessment_creator, "assessment_creator", prompt, model=settings.fast_model)
 
 
 async def run_assessment_reviewer(
@@ -71,4 +72,4 @@ async def run_assessment_reviewer(
         f"Learner's submissions:\n{submissions}\n"
     )
 
-    return await run_agent(ctx, assessment_reviewer, "assessment_reviewer", prompt)
+    return await run_agent(ctx, assessment_reviewer, "assessment_reviewer", prompt, model=settings.fast_model)

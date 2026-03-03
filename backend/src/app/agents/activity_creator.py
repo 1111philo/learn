@@ -1,6 +1,7 @@
 from pydantic_ai import Agent
 
 from app.agents.logging import AgentContext, run_agent
+from app.config import settings
 from app.schemas.activity import ActivitySpecOutput
 from app.schemas.lesson import ActivitySeed
 
@@ -45,4 +46,4 @@ async def run_activity_creator(
     if learner_profile:
         prompt += f"\nLearner profile: {learner_profile}\n"
 
-    return await run_agent(ctx, activity_creator, "activity_creator", prompt)
+    return await run_agent(ctx, activity_creator, "activity_creator", prompt, model=settings.fast_model)
