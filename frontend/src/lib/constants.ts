@@ -4,6 +4,7 @@ export const AUTH_TOKEN_KEY = 'auth_token';
 
 export const STATUS_LABELS: Record<CourseStatus, string> = {
   draft: 'Draft',
+  awaiting_diagnostic: 'Awaiting Diagnostic',
   generating: 'Generating',
   active: 'Ready',
   in_progress: 'In Progress',
@@ -16,6 +17,7 @@ export const STATUS_LABELS: Record<CourseStatus, string> = {
 
 export const STATUS_COLORS: Record<CourseStatus, string> = {
   draft: 'bg-gray-100 text-gray-700',
+  awaiting_diagnostic: 'bg-yellow-100 text-yellow-700',
   generating: 'bg-yellow-100 text-yellow-700',
   active: 'bg-blue-100 text-blue-700',
   in_progress: 'bg-blue-100 text-blue-700',

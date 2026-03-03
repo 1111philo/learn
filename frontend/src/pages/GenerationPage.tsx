@@ -27,10 +27,21 @@ export function GenerationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
+  // If the course still needs a diagnostic, redirect there instead of showing this page.
+  useEffect(() => {
+    if (!loading && courseStatus === 'awaiting_diagnostic' && courseId) {
+      navigate(`/courses/${courseId}/diagnostic`, { replace: true });
+    }
+  }, [loading, courseStatus, courseId, navigate]);
+
   // Determine if the generation finished but produced nothing (zombie state).
   // This happens when the backend process crashed or the server restarted
   // while the course was in "generating" status.
-  const isZombie = complete && progress.size === 0 && objectives.length > 0;
+  const isZombie =
+    complete &&
+    progress.size === 0 &&
+    objectives.length > 0 &&
+    courseStatus !== 'awaiting_diagnostic';
 
   // Has at least some lessons been successfully generated?
   const hasLessons = progress.size > 0;
@@ -39,7 +50,7 @@ export function GenerationPage() {
   // (status is past "generating", e.g. active, in_progress, completed)
   const alreadyGenerated =
     courseStatus != null &&
-    !['draft', 'generating', 'generation_failed'].includes(courseStatus);
+    !['draft', 'awaiting_diagnostic', 'generating', 'generation_failed'].includes(courseStatus);
 
   const [retrying, setRetrying] = useState(false);
 
@@ -52,7 +63,11 @@ export function GenerationPage() {
       if (courseStatus === 'generating') {
         await transitionCourse(courseId, 'generation_failed');
       }
-      await triggerGeneration(courseId);
+      const result = await triggerGeneration(courseId);
+      if (result.status === 'awaiting_diagnostic') {
+        navigate(`/courses/${courseId}/diagnostic`);
+        return;
+      }
       await init(courseId);
     } catch {
       // If transitions fail, just refresh to show current state

@@ -20,6 +20,7 @@ class CourseResponse(BaseModel):
     input_objectives: list
     generated_description: str | None
     status: str
+    diagnostic_spec: dict | None = None
     lessons: list["LessonResponse"] = []
     assessments: list["AssessmentSummary"] = []
 
@@ -29,6 +30,9 @@ class CourseResponse(BaseModel):
 class LessonResponse(BaseModel):
     id: str
     objective_index: int
+    sub_lesson_index: int = 0
+    lesson_role: str = "capstone"  # "focused" | "capstone"
+    lesson_title: str | None = None
     lesson_content: str | None
     status: str
     activity: "ActivitySummary | None" = None

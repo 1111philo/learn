@@ -15,7 +15,8 @@ class InvalidTransitionError(Exception):
 
 # Valid transitions and their guard conditions
 TRANSITIONS: dict[tuple[str, str], str] = {
-    ("draft", "generating"): "has_objectives",
+    ("draft", "awaiting_diagnostic"): "has_objectives",
+    ("awaiting_diagnostic", "generating"): "always",
     ("generating", "active"): "all_content_generated",
     ("active", "in_progress"): "always",
     ("in_progress", "awaiting_assessment"): "all_lessons_completed",
@@ -26,7 +27,7 @@ TRANSITIONS: dict[tuple[str, str], str] = {
     ("assessment_ready", "generating_assessment"): "always",  # retry
     ("assessment_ready", "completed"): "assessment_passed",
     ("generating", "generation_failed"): "always",
-    ("generation_failed", "generating"): "always",
+    ("generation_failed", "awaiting_diagnostic"): "always",  # retry goes back to diagnostic
 }
 
 
@@ -73,55 +74,100 @@ async def transition_course(
     return course
 
 
-async def unlock_next_lesson(
-    db: AsyncSession, course_id: str, completed_index: int
+async def unlock_next_sub_lesson(
+    db: AsyncSession,
+    course_id: str,
+    completed_lesson: Lesson,
 ) -> Lesson | None:
-    """Unlock or create the next lesson after completed_index.
+    """Unlock the next sub-lesson based on the completed lesson's role.
 
-    With on-demand generation, lesson rows are created here rather than upfront.
-    Returns the unlocked/created lesson, or None if completed_index is the last objective.
+    - If lesson_role == "focused": unlock the next sub-lesson in the same objective
+      (sub_lesson_index + 1).
+    - If lesson_role == "capstone": unlock sub_lesson_index=0 of the next objective.
+
+    Returns the unlocked lesson, or None if there is no next lesson.
     """
-    next_index = completed_index + 1
+    lesson_role = completed_lesson.lesson_role or "capstone"  # null = legacy capstone
 
-    # Bounds check against total objectives
-    result = await db.execute(
-        select(CourseInstance).where(CourseInstance.id == course_id)
-    )
-    course = result.scalar_one()
-    if next_index >= len(course.input_objectives):
-        logger.info(
-            "course [%s] obj[%d] is the last lesson — no next lesson to unlock",
-            course_id[:8], completed_index,
+    if lesson_role == "focused":
+        # Unlock next sub-lesson within the same objective
+        next_sub_idx = completed_lesson.sub_lesson_index + 1
+        result = await db.execute(
+            select(Lesson).where(
+                Lesson.course_instance_id == course_id,
+                Lesson.objective_index == completed_lesson.objective_index,
+                Lesson.sub_lesson_index == next_sub_idx,
+            )
+        )
+        next_lesson = result.scalar_one_or_none()
+        if next_lesson:
+            if next_lesson.status == "locked":
+                next_lesson.status = "unlocked"
+                await db.flush()
+                logger.info(
+                    "course [%s] unlocked obj[%d]/sub[%d]",
+                    course_id[:8], completed_lesson.objective_index, next_sub_idx,
+                )
+            return next_lesson
+        # No next sub-lesson found (shouldn't happen for focused lessons)
+        logger.warning(
+            "course [%s] focused lesson completed but no next sub-lesson found at obj[%d]/sub[%d]",
+            course_id[:8], completed_lesson.objective_index, next_sub_idx,
         )
         return None
 
-    # Try to find an existing row for the next index
-    result = await db.execute(
-        select(Lesson).where(
-            Lesson.course_instance_id == course_id,
-            Lesson.objective_index == next_index,
-        )
-    )
-    lesson = result.scalar_one_or_none()
-
-    if lesson:
-        if lesson.status == "locked":
-            lesson.status = "unlocked"
-            await db.flush()
-            logger.info("course [%s] unlocked existing lesson obj[%d]", course_id[:8], next_index)
     else:
-        # Create the row on demand
-        lesson = Lesson(
-            course_instance_id=course_id,
-            objective_index=next_index,
-            lesson_content=None,
-            status="unlocked",
-        )
-        db.add(lesson)
-        await db.flush()
-        logger.info("course [%s] created on-demand lesson row obj[%d]", course_id[:8], next_index)
+        # Capstone completed — unlock first sub-lesson of next objective
+        next_obj_idx = completed_lesson.objective_index + 1
 
-    return lesson
+        # Bounds check
+        result = await db.execute(
+            select(CourseInstance).where(CourseInstance.id == course_id)
+        )
+        course = result.scalar_one()
+        if next_obj_idx >= len(course.input_objectives):
+            logger.info(
+                "course [%s] capstone obj[%d] is last objective — course complete",
+                course_id[:8], completed_lesson.objective_index,
+            )
+            return None
+
+        # Try to find existing first sub-lesson of next objective
+        result = await db.execute(
+            select(Lesson).where(
+                Lesson.course_instance_id == course_id,
+                Lesson.objective_index == next_obj_idx,
+                Lesson.sub_lesson_index == 0,
+            )
+        )
+        next_lesson = result.scalar_one_or_none()
+
+        if next_lesson:
+            if next_lesson.status == "locked":
+                next_lesson.status = "unlocked"
+                await db.flush()
+                logger.info(
+                    "course [%s] unlocked obj[%d]/sub[0] (next objective)",
+                    course_id[:8], next_obj_idx,
+                )
+        else:
+            # Lesson rows for next objective not yet created — create placeholder
+            next_lesson = Lesson(
+                course_instance_id=course_id,
+                objective_index=next_obj_idx,
+                sub_lesson_index=0,
+                lesson_role="focused",
+                lesson_content=None,
+                status="unlocked",
+            )
+            db.add(next_lesson)
+            await db.flush()
+            logger.info(
+                "course [%s] created placeholder lesson row for obj[%d]/sub[0]",
+                course_id[:8], next_obj_idx,
+            )
+
+        return next_lesson
 
 
 async def check_all_lessons_completed(db: AsyncSession, course_id: str) -> bool:

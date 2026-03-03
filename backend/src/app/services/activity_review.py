@@ -9,12 +9,12 @@ from app.agents.activity_reviewer import run_activity_reviewer
 from app.agents.logging import AgentContext
 from app.db.models import Activity, CourseInstance, Lesson
 from app.db.session import get_background_session
-from app.services.generation import generate_lesson_on_demand
+from app.services.generation import generate_objective_on_demand
 from app.services.generation_tracker import broadcast, is_running, start_generation
 from app.services.progression import (
     check_all_lessons_completed,
     transition_course,
-    unlock_next_lesson,
+    unlock_next_sub_lesson,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,18 @@ async def review_activity_background(
     activity_prompt: str,
     scoring_rubric: list[str],
     course_id: str,
+    is_capstone: bool = True,
 ) -> None:
-    """Background task that reviews an activity submission via LLM."""
+    """Background task that reviews an activity submission via LLM.
+
+    Args:
+        is_capstone: If True, mastery gate applies (≥70 required to advance).
+                     If False (focused sub-lesson), any attempt marks lesson complete.
+    """
     key = review_key(activity_id)
 
     # Capture generation data before entering the DB session
-    next_lesson_to_generate: tuple[int, list[str], str] | None = None
+    next_objective_to_generate: tuple[int, list[str], str, dict | None] | None = None
 
     try:
         async with get_background_session() as db:
@@ -74,21 +80,34 @@ async def review_activity_background(
             activity.mastery_decision = review.mastery_decision
             activity.attempt_count += 1
 
-            # Mark lesson as completed and unlock next (only if mastery met)
-            if lesson.status != "completed" and review.mastery_decision in ("meets", "exceeds"):
-                completed_index = lesson.objective_index
-                lesson.status = "completed"
-                next_lesson = await unlock_next_lesson(db, course.id, completed_index)
+            # Determine gate: focused = attempt-gated, capstone = mastery-gated
+            lesson_role = lesson.lesson_role or "capstone"  # null = legacy capstone
+            advance = False
 
-                # If the unlocked lesson has no content yet, schedule on-demand generation
-                if next_lesson and next_lesson.lesson_content is None:
-                    next_lesson_to_generate = (
+            if lesson_role == "focused":
+                # Any reviewed attempt marks the focused lesson as complete
+                if lesson.status != "completed":
+                    advance = True
+            else:
+                # Capstone: require meets or exceeds
+                if lesson.status != "completed" and review.mastery_decision in ("meets", "exceeds"):
+                    advance = True
+
+            if advance:
+                lesson.status = "completed"
+                next_lesson = await unlock_next_sub_lesson(db, course_id, lesson)
+
+                # For capstone completions only: check if the next objective needs generation
+                if lesson_role != "focused" and next_lesson and next_lesson.lesson_content is None:
+                    next_objective_to_generate = (
                         next_lesson.objective_index,
                         list(course.input_objectives),
                         course.generated_description or course.input_description or "",
+                        course.diagnostic_analysis,
                     )
 
-                if await check_all_lessons_completed(db, course.id):
+                # Check if ALL lessons across the whole course are now completed
+                if lesson_role != "focused" and await check_all_lessons_completed(db, course.id):
                     result = await db.execute(
                         select(CourseInstance)
                         .where(CourseInstance.id == course.id)
@@ -106,21 +125,22 @@ async def review_activity_background(
             await db.flush()
             await db.commit()
 
-        # Kick off on-demand generation after the session has committed
-        if next_lesson_to_generate:
-            next_index, objectives, description = next_lesson_to_generate
-            gen_key = f"lesson-gen-{course_id}-{next_index}"
+        # Kick off on-demand generation for next objective after the session has committed
+        if next_objective_to_generate:
+            next_index, objectives, description, diagnostic_analysis = next_objective_to_generate
+            gen_key = f"objective-gen-{course_id}-{next_index}"
             if not is_running(gen_key):
                 logger.info(
                     "Scheduling on-demand generation for course [%s] obj[%d]",
                     course_id[:8], next_index,
                 )
-                start_generation(gen_key, generate_lesson_on_demand(
+                start_generation(gen_key, generate_objective_on_demand(
                     course_id=course_id,
                     user_id=user_id,
                     objective_index=next_index,
                     objectives=objectives,
                     description=description,
+                    diagnostic_analysis=diagnostic_analysis,
                 ))
 
         # Broadcast review result AFTER commit

@@ -124,7 +124,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
           case 'lesson_planned': {
             const e = existing(event.data.objective_index);
             progress.set(event.data.objective_index, {
-              ...e, planned: true, planTitle: event.data.lesson_title,
+              ...e, planned: true, planTitle: event.data.objective_title ?? null,
             });
             return { ...state, progress };
           }

@@ -13,6 +13,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { AgentLogsPage } from '@/pages/AgentLogsPage';
+import { DiagnosticPage } from '@/pages/DiagnosticPage';
 import { useAuthStore } from '@/stores/auth-store';
 import { Loader2 } from 'lucide-react';
 
@@ -52,6 +53,10 @@ export default function App() {
             <Route index element={<Navigate to="/catalog" replace />} />
             <Route path="catalog" element={<CatalogPage />} />
             <Route path="courses/new" element={<CreateCoursePage />} />
+            <Route
+              path="courses/:courseId/diagnostic"
+              element={<DiagnosticPage />}
+            />
             <Route
               path="courses/:courseId/generate"
               element={<GenerationPage />}

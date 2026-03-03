@@ -23,6 +23,16 @@ export interface CourseListItem {
   lessons_completed: number;
 }
 
+// ---- Diagnostic ----
+export interface DiagnosticQuestion {
+  question: string;
+  rationale: string;
+}
+
+export interface DiagnosticSpec {
+  questions: DiagnosticQuestion[];
+}
+
 export interface CourseResponse {
   id: string;
   source_type: 'custom' | 'predefined';
@@ -30,12 +40,14 @@ export interface CourseResponse {
   input_objectives: string[];
   generated_description: string | null;
   status: CourseStatus;
+  diagnostic_spec: DiagnosticSpec | null;
   lessons: LessonResponse[];
   assessments: AssessmentSummary[];
 }
 
 export type CourseStatus =
   | 'draft'
+  | 'awaiting_diagnostic'
   | 'generating'
   | 'active'
   | 'in_progress'
@@ -49,6 +61,9 @@ export type CourseStatus =
 export interface LessonResponse {
   id: string;
   objective_index: number;
+  sub_lesson_index: number;
+  lesson_role: 'focused' | 'capstone';
+  lesson_title: string | null;
   lesson_content: string | null;
   status: 'locked' | 'unlocked' | 'completed';
   activity: ActivitySummary | null;
@@ -150,18 +165,22 @@ export interface AgentLog {
 // ---- SSE Events ----
 export interface LessonPlannedEvent {
   objective_index: number;
-  lesson_title: string;
+  objective_title?: string;
+  sub_lesson_count?: number;
   skipped?: boolean;
 }
 
 export interface LessonWrittenEvent {
   objective_index: number;
+  sub_lesson_index?: number;
   skipped?: boolean;
 }
 
 export interface ActivityCreatedEvent {
   objective_index: number;
+  sub_lesson_index?: number;
   activity_id: string;
+  lesson_role?: 'focused' | 'capstone';
   skipped?: boolean;
 }
 

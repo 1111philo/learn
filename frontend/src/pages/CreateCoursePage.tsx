@@ -46,8 +46,12 @@ export function CreateCoursePage() {
         description: description.trim(),
         objectives: trimmed,
       });
-      await triggerGeneration(id);
-      navigate(`/courses/${id}/generate`);
+      const result = await triggerGeneration(id);
+      if (result.status === 'awaiting_diagnostic') {
+        navigate(`/courses/${id}/diagnostic`);
+      } else {
+        navigate(`/courses/${id}/generate`);
+      }
     } catch (e) {
       setError((e as Error).message);
       setSubmitting(false);

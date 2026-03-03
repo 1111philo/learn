@@ -10,22 +10,28 @@ activity_creator = Agent(
     retries=2,
     system_prompt=(
         "You are an expert activity designer for educational courses. Given an activity seed "
-        "(type, prompt, expected evidence) and the lesson's mastery criteria, create a complete "
-        "practice activity.\n\n"
-        "Requirements:\n"
-        "- instructions: Clear, actionable instructions (min 50 chars) telling the learner "
-        "exactly what to do, including constraints (length, format, required components)\n"
-        "- prompt: The specific question or task (min 20 chars)\n"
-        "- scoring_rubric: 3-6 specific, gradeable criteria that map to the mastery criteria. "
-        "Each should be checkable (e.g., 'Includes at least 3 examples with explanations')\n"
-        "- hints: 2-5 scaffolding hints that guide without giving the answer\n\n"
-        "The activity should directly test the learning objective. Make it challenging but "
-        "achievable. Tailor to the learner's profile if provided.\n\n"
-        "IMPORTANT — Domain transfer: The activity seed shows the TOPIC and SKILL to test, "
-        "but you MUST set the activity in a DIFFERENT real-world domain/scenario than the one "
-        "in the seed. For example, if the seed uses a 'user profile' scenario, use something "
-        "unrelated like a 'weather tracker' or 'recipe book'. This forces learners to transfer "
-        "knowledge rather than copy the worked example from the lesson."
+        "(type, prompt, expected evidence), mastery criteria, and context about the activity's "
+        "role and difficulty, create a complete practice activity.\n\n"
+        "You will be given a ROLE (focused or capstone) and a DIFFICULTY LEVEL (1-3).\n\n"
+        "FOCUSED activities (difficulty 1-3):\n"
+        "  Level 1 — Introductory: Basic recognition or definition. "
+        "1-2 sentence prompt. Rubric: 1-2 criteria. Hints: 2 generous hints. "
+        "Activity type: short-answer or definition.\n"
+        "  Level 2 — Applied: Demonstrate understanding in context. "
+        "Rubric: 2-3 criteria. Hints: 1-2. Activity type: example or brief explanation.\n"
+        "  Level 3 — Pre-mastery: Synthesis and analysis. "
+        "Rubric: 3-4 criteria. Hints: 1-2. Requires more complete response.\n\n"
+        "CAPSTONE activities (always the hardest):\n"
+        "  Integrative — apply ALL mastery criteria in a realistic scenario. "
+        "Rubric: 3-6 criteria mapping to mastery criteria. Hints: 2-4. "
+        "Prompt must require concrete, multi-part evidence.\n\n"
+        "General requirements:\n"
+        "- instructions: Clear, actionable instructions telling the learner exactly what to do\n"
+        "- prompt: The specific question or task\n"
+        "- scoring_rubric: Specific, gradeable criteria (e.g., 'Includes 2+ concrete examples')\n"
+        "- hints: Scaffolding hints that guide without giving the answer\n\n"
+        "IMPORTANT — Domain transfer: Set the activity in a DIFFERENT real-world scenario than "
+        "the lesson's worked example. This forces knowledge transfer, not copying."
     ),
 )
 
@@ -36,14 +42,26 @@ async def run_activity_creator(
     objective: str,
     mastery_criteria: list[str],
     learner_profile: dict | None = None,
+    difficulty_level: int = 3,
+    lesson_role: str = "capstone",
+    concept_focus: str | None = None,
 ) -> ActivitySpecOutput:
     prompt = (
         f"Learning objective: {objective}\n\n"
-        f"Mastery criteria:\n"
+        f"Activity role: {lesson_role.upper()}\n"
+        f"Difficulty level: {difficulty_level} (1=intro, 2=applied, 3=pre-mastery / capstone)\n"
+    )
+    if concept_focus:
+        prompt += f"Concept this activity focuses on: {concept_focus}\n"
+
+    prompt += (
+        f"\nMastery criteria:\n"
         + "\n".join(f"- {c}" for c in mastery_criteria)
         + f"\n\nActivity seed:\n{activity_seed.model_dump_json(indent=2)}\n"
     )
     if learner_profile:
         prompt += f"\nLearner profile: {learner_profile}\n"
 
-    return await run_agent(ctx, activity_creator, "activity_creator", prompt, model=settings.fast_model)
+    return await run_agent(
+        ctx, activity_creator, "activity_creator", prompt, model=settings.fast_model
+    )

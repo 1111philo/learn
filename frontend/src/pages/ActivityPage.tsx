@@ -21,6 +21,7 @@ export function ActivityPage() {
 
   const lesson = course?.lessons[lessonIndex];
   const activity = lesson?.activity;
+  const isFocused = lesson?.lesson_role === 'focused';
 
   // On mount, check if a review is in-flight via the REST endpoint
   useEffect(() => {
@@ -45,7 +46,7 @@ export function ActivityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity?.id]);
 
-  if (!course) return null;
+  if (!course || !lesson) return null;
 
   if (!activity?.activity_spec) {
     return <p className="text-muted-foreground">No activity for this lesson.</p>;
@@ -66,13 +67,18 @@ export function ActivityPage() {
         } as ActivityReviewResult
       : null);
 
-  const passed =
-    feedback?.mastery_decision === 'meets' ||
-    feedback?.mastery_decision === 'exceeds' ||
-    activity.mastery_decision === 'meets' ||
-    activity.mastery_decision === 'exceeds';
+  // Focused: attempt-gated — any feedback = can continue.
+  // Capstone/legacy: mastery-gated — requires meets or exceeds.
+  const masteryDecision = feedback?.mastery_decision ?? activity.mastery_decision;
+  const passed = isFocused
+    ? masteryDecision != null
+    : masteryDecision === 'meets' || masteryDecision === 'exceeds';
 
   const isLast = lessonIndex === course.lessons.length - 1;
+
+  const activityTitle = isFocused
+    ? `Practice Activity${lesson.lesson_title ? ` — ${lesson.lesson_title}` : ''}`
+    : `Capstone Activity${lesson.lesson_title ? ` — ${lesson.lesson_title}` : ''}`;
 
   function connectSSE(activityId: string) {
     cleanupRef.current?.();
@@ -119,9 +125,7 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold">
-        Lesson {lessonIndex + 1} Activity
-      </h2>
+      <h2 className="text-lg font-semibold">{activityTitle}</h2>
 
       <ActivityPanel spec={activity.activity_spec} />
 

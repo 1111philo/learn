@@ -13,7 +13,7 @@ export function createCourse(
 
 export function triggerGeneration(
   courseId: string,
-): Promise<{ id: string; status: string }> {
+): Promise<{ id: string; status: string; diagnostic_spec?: unknown }> {
   return post(`/api/courses/${courseId}/generate`);
 }
 

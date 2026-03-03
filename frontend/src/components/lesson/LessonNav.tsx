@@ -11,9 +11,15 @@ export function LessonNav({ course, currentIndex }: LessonNavProps) {
   const navigate = useNavigate();
   const lesson = course.lessons[currentIndex];
   const hasActivity = lesson?.activity?.activity_spec != null;
+
+  // Focused lessons are attempt-gated: any mastery_decision (including not_yet) = done.
+  // Capstone/legacy lessons are mastery-gated: requires meets or exceeds.
   const activityDone =
-    lesson?.activity?.mastery_decision === 'meets' ||
-    lesson?.activity?.mastery_decision === 'exceeds';
+    lesson?.lesson_role === 'focused'
+      ? lesson?.activity?.mastery_decision != null
+      : lesson?.activity?.mastery_decision === 'meets' ||
+        lesson?.activity?.mastery_decision === 'exceeds';
+
   const isLast = currentIndex === course.lessons.length - 1;
 
   function goNext() {

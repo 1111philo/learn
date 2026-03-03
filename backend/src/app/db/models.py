@@ -93,6 +93,9 @@ class CourseInstance(Base):
     input_objectives: Mapped[list] = mapped_column(JSONB, default=list)
     generated_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="draft")
+    diagnostic_spec: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    diagnostic_responses: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    diagnostic_analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -102,7 +105,7 @@ class CourseInstance(Base):
     lessons: Mapped[list["Lesson"]] = relationship(
         back_populates="course_instance",
         cascade="all, delete-orphan",
-        order_by="Lesson.objective_index",
+        order_by="Lesson.objective_index, Lesson.sub_lesson_index",
     )
     assessments: Mapped[list["Assessment"]] = relationship(
         back_populates="course_instance", cascade="all, delete-orphan"
@@ -120,6 +123,9 @@ class Lesson(Base):
         String(36), ForeignKey("course_instances.id", ondelete="CASCADE"), nullable=False
     )
     objective_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    sub_lesson_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lesson_role: Mapped[str] = mapped_column(String(20), nullable=False, default="capstone")
+    lesson_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     lesson_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="locked")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

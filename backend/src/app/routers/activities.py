@@ -116,6 +116,8 @@ async def submit_activity(
     await db.flush()
     await db.commit()
 
+    is_capstone = lesson.lesson_role in ("capstone", None)  # null = legacy capstone
+
     kickoff_background_task(
         key,
         review_activity_background(
@@ -126,6 +128,7 @@ async def submit_activity(
             activity_prompt=spec.get("prompt", ""),
             scoring_rubric=spec.get("scoring_rubric", []),
             course_id=course.id,
+            is_capstone=is_capstone,
         ),
         conflict_detail="Review already in progress",
     )

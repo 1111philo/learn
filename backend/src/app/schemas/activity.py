@@ -7,8 +7,8 @@ class ActivitySpecOutput(BaseModel):
     activity_type: str
     instructions: str = Field(min_length=50)
     prompt: str = Field(min_length=20)
-    scoring_rubric: list[str] = Field(min_length=3, max_length=6)
-    hints: list[str] = Field(min_length=2, max_length=5)
+    scoring_rubric: list[str] = Field(min_length=1, max_length=6)
+    hints: list[str] = Field(min_length=1, max_length=5)
 
 
 class ActivitySubmitRequest(BaseModel):
