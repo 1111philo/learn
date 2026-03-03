@@ -9,7 +9,8 @@ from app.agents.activity_reviewer import run_activity_reviewer
 from app.agents.logging import AgentContext
 from app.db.models import Activity, CourseInstance, Lesson
 from app.db.session import get_background_session
-from app.services.generation_tracker import broadcast
+from app.services.generation import generate_lesson_on_demand
+from app.services.generation_tracker import broadcast, is_running, start_generation
 from app.services.progression import (
     check_all_lessons_completed,
     transition_course,
@@ -34,6 +35,9 @@ async def review_activity_background(
 ) -> None:
     """Background task that reviews an activity submission via LLM."""
     key = review_key(activity_id)
+
+    # Capture generation data before entering the DB session
+    next_lesson_to_generate: tuple[int, list[str], str] | None = None
 
     try:
         async with get_background_session() as db:
@@ -72,8 +76,17 @@ async def review_activity_background(
 
             # Mark lesson as completed and unlock next (only if mastery met)
             if lesson.status != "completed" and review.mastery_decision in ("meets", "exceeds"):
+                completed_index = lesson.objective_index
                 lesson.status = "completed"
-                await unlock_next_lesson(db, course.id)
+                next_lesson = await unlock_next_lesson(db, course.id, completed_index)
+
+                # If the unlocked lesson has no content yet, schedule on-demand generation
+                if next_lesson and next_lesson.lesson_content is None:
+                    next_lesson_to_generate = (
+                        next_lesson.objective_index,
+                        list(course.input_objectives),
+                        course.generated_description or course.input_description or "",
+                    )
 
                 if await check_all_lessons_completed(db, course.id):
                     result = await db.execute(
@@ -93,7 +106,24 @@ async def review_activity_background(
             await db.flush()
             await db.commit()
 
-        # Broadcast AFTER commit
+        # Kick off on-demand generation after the session has committed
+        if next_lesson_to_generate:
+            next_index, objectives, description = next_lesson_to_generate
+            gen_key = f"lesson-gen-{course_id}-{next_index}"
+            if not is_running(gen_key):
+                logger.info(
+                    "Scheduling on-demand generation for course [%s] obj[%d]",
+                    course_id[:8], next_index,
+                )
+                start_generation(gen_key, generate_lesson_on_demand(
+                    course_id=course_id,
+                    user_id=user_id,
+                    objective_index=next_index,
+                    objectives=objectives,
+                    description=description,
+                ))
+
+        # Broadcast review result AFTER commit
         await broadcast(key, "review_complete", {
             "score": review.score,
             "mastery_decision": review.mastery_decision,

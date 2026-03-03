@@ -97,7 +97,7 @@ async def _generate_single_objective(
                 len(plan.key_concepts), len(plan.lesson_outline),
             )
 
-            # Create the lesson row so REST fetches see the planned state
+            # Create or reuse the lesson row
             if not existing:
                 lesson = Lesson(
                     course_instance_id=course_id,
@@ -197,38 +197,32 @@ async def generate_course_background(
     description: str,
     learner_profile: dict | None = None,
 ) -> None:
-    """Background wrapper that runs objective generation concurrently.
+    """Background task that generates only the first lesson (lesson 0).
 
-    This is intended to be spawned as an asyncio.Task via the generation tracker.
-    All arguments are plain data (no ORM objects) so the task is decoupled from
-    the request session.
+    Subsequent lessons are generated on demand via generate_lesson_on_demand
+    as the learner progresses through the course.
     """
     course_id_short = course_id[:8]
-    lessons_created = 0
 
     logger.info(
-        "[%s] GENERATION START | %d objectives | model: %s",
+        "[%s] GENERATION START | generating lesson 0 of %d | model: %s",
         course_id_short, len(objectives),
         __import__("app.config", fromlist=["settings"]).settings.default_model,
     )
-    for i, obj in enumerate(objectives):
-        logger.info("[%s]   obj[%d]: %s", course_id_short, i, obj[:80])
+    logger.info("[%s]   obj[0]: %s", course_id_short, objectives[0][:80])
+
+    lessons_created = 0
 
     try:
-        # Run all objectives concurrently, gated by semaphore
-        semaphore = asyncio.Semaphore(3)
-        results = await asyncio.gather(*(
-            _generate_single_objective(
-                course_id, user_id, i, obj, description,
-                objectives, learner_profile, semaphore,
-            )
-            for i, obj in enumerate(objectives)
-        ))
-        lessons_created = sum(1 for r in results if r)
+        success = await _generate_single_objective(
+            course_id, user_id, 0, objectives[0], description,
+            objectives, learner_profile, asyncio.Semaphore(1),
+        )
+        lessons_created = 1 if success else 0
 
         logger.info(
-            "[%s] All objectives processed | %d/%d succeeded",
-            course_id_short, lessons_created, len(objectives),
+            "[%s] Initial generation %s",
+            course_id_short, "succeeded — lesson 0 ready" if success else "failed",
         )
 
         # Finalize course status
@@ -247,17 +241,15 @@ async def generate_course_background(
             else:
                 await transition_course(db, course, "generation_failed")
 
-        # Broadcast AFTER the session commits (async-with exit) so that
-        # any SSE subscriber re-querying the DB sees committed data.
+        # Broadcast AFTER the session commits so SSE subscribers see committed data.
         await broadcast(course_id, "generation_complete", {
             "course_id": course_id,
             "lesson_count": lessons_created,
         })
-        logger.info("[%s] GENERATION COMPLETE | %d lessons ready", course_id_short, lessons_created)
+        logger.info("[%s] GENERATION COMPLETE | lesson 0 ready", course_id_short)
 
     except Exception:
         logger.exception("[%s] FATAL error in background generation", course_id_short)
-        # Try to mark the course as failed
         try:
             async with get_background_session() as db:
                 result = await db.execute(
@@ -277,3 +269,26 @@ async def generate_course_background(
             "course_id": course_id,
             "lesson_count": lessons_created,
         })
+
+
+async def generate_lesson_on_demand(
+    course_id: str,
+    user_id: str,
+    objective_index: int,
+    objectives: list[str],
+    description: str,
+    learner_profile: dict | None = None,
+) -> None:
+    """Generate a single lesson on demand when the learner unlocks it.
+
+    The lesson row already exists (created by unlock_next_lesson) with no content.
+    """
+    course_id_short = course_id[:8]
+    logger.info(
+        "[%s] ON-DEMAND generation starting for obj[%d]",
+        course_id_short, objective_index,
+    )
+    await _generate_single_objective(
+        course_id, user_id, objective_index, objectives[objective_index],
+        description, objectives, learner_profile, asyncio.Semaphore(1),
+    )

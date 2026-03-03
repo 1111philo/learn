@@ -30,6 +30,28 @@ function StepIcon({ done, active }: { done: boolean; active: boolean }) {
 export function StepperItem({ index, objectiveLabel, progress, inferActive }: StepperItemProps) {
   const p = progress ?? { planned: false, planTitle: null, written: false, activityCreated: false, activityId: null, error: null };
 
+  const anyStarted = p.planned || p.written || p.activityCreated;
+
+  // On-demand: not yet started and not the currently active objective
+  if (!anyStarted && !inferActive) {
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center">
+          <StepIcon done={false} active={false} />
+          <div className="w-px flex-1 bg-border" />
+        </div>
+        <div className="pb-6">
+          <p className="text-sm font-medium text-muted-foreground">
+            Objective {index + 1}: {objectiveLabel}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground/50 italic">
+            Generates when you reach this lesson
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const steps = [
     { label: p.planTitle ? `Planned: ${p.planTitle}` : (p.planned ? 'Lesson planned' : 'Planning lesson'), done: p.planned },
     { label: 'Writing content', done: p.written },
@@ -37,7 +59,6 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
   ];
 
   const allDone = p.planned && p.written && p.activityCreated;
-  const anyStarted = p.planned || p.written || p.activityCreated;
   // Consider this objective active if it has explicit progress OR we inferred it
   const isActive = anyStarted || !!inferActive;
 
