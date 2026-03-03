@@ -132,6 +132,21 @@ export interface AssessmentSubmitRequest {
   responses: { objective: string; text: string }[];
 }
 
+// ---- Agent Logs ----
+export interface AgentLog {
+  id: string;
+  course_instance_id: string;
+  agent_name: string;
+  prompt: string;
+  output: string | null;
+  status: 'success' | 'error';
+  duration_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  model_name: string | null;
+  created_at: string;
+}
+
 // ---- SSE Events ----
 export interface LessonPlannedEvent {
   objective_index: number;

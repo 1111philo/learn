@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.services.catalog import load_catalog
 from app.auth.router import router as auth_router
-from app.routers import health, courses, activities, assessments, catalog, profile
+from app.routers import health, courses, activities, assessments, catalog, profile, agent_logs
 
 
 @asynccontextmanager
@@ -60,6 +60,7 @@ app.include_router(activities.router)
 app.include_router(assessments.router)
 app.include_router(catalog.router)
 app.include_router(profile.router)
+app.include_router(agent_logs.router)
 
 # Serve pre-built frontend in production. In dev, Vite serves the frontend
 # and proxies /api to this server — so these routes are never hit.

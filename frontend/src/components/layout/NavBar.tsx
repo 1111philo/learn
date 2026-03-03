@@ -6,6 +6,7 @@ import { LogOut, Settings } from 'lucide-react';
 const NAV_ITEMS = [
   { to: '/catalog', label: 'Catalog' },
   { to: '/my-courses', label: 'My Courses' },
+  { to: '/agent-logs', label: 'Agent Logs' },
 ];
 
 export function NavBar() {

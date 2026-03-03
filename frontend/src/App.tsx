@@ -12,6 +12,7 @@ import { MyCoursesPage } from '@/pages/MyCoursesPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { AgentLogsPage } from '@/pages/AgentLogsPage';
 import { useAuthStore } from '@/stores/auth-store';
 import { Loader2 } from 'lucide-react';
 
@@ -68,6 +69,7 @@ export default function App() {
             />
             <Route path="my-courses" element={<MyCoursesPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="agent-logs" element={<AgentLogsPage />} />
           </Route>
         </Route>
       </Routes>
