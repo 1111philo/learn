@@ -149,6 +149,10 @@ cd infra
 terraform destroy
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch and pull request workflow.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
