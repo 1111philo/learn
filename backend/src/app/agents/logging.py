@@ -72,8 +72,10 @@ async def run_agent(
     agent: Agent[None, T],
     agent_name: str,
     prompt: str,
+    model: str | None = None,
 ) -> T:
     """Run a PydanticAI agent with timing and logging. Reduces per-agent boilerplate."""
+    resolved_model = model or settings.default_model
     course_id_short = ctx.course_instance_id[:8]
     logger.info(
         "[%s] → %s | prompt length: %d chars",
@@ -81,7 +83,7 @@ async def run_agent(
     )
     with AgentTimer() as timer:
         try:
-            result = await agent.run(prompt, model=settings.default_model)
+            result = await agent.run(prompt, model=resolved_model)
             output = result.output
             usage = result.usage()
             await log_agent_call(
@@ -93,7 +95,7 @@ async def run_agent(
                 duration_ms=timer.duration_ms,
                 input_tokens=usage.input_tokens,
                 output_tokens=usage.output_tokens,
-                model_name=settings.default_model,
+                model_name=resolved_model,
             )
             logger.info(
                 "[%s] ✓ %s | %dms | in=%s out=%s tokens",
@@ -109,7 +111,7 @@ async def run_agent(
                 output=str(e),
                 status="error",
                 duration_ms=timer.duration_ms,
-                model_name=settings.default_model,
+                model_name=resolved_model,
             )
             logger.error(
                 "[%s] ✗ %s | %dms | error: %s",

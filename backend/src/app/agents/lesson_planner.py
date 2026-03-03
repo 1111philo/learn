@@ -1,6 +1,7 @@
 from pydantic_ai import Agent
 
 from app.agents.logging import AgentContext, run_agent
+from app.config import settings
 from app.schemas.lesson import LessonPlanOutput
 
 lesson_planner = Agent(
@@ -54,4 +55,4 @@ async def run_lesson_planner(
     if learner_profile:
         prompt += f"\nLearner profile: {learner_profile}\n"
 
-    return await run_agent(ctx, lesson_planner, "lesson_planner", prompt)
+    return await run_agent(ctx, lesson_planner, "lesson_planner", prompt, model=settings.fast_model)
