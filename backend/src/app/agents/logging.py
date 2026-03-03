@@ -1,3 +1,4 @@
+import logging
 import time
 from dataclasses import dataclass
 from typing import TypeVar
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.models import AgentLog
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -71,6 +74,11 @@ async def run_agent(
     prompt: str,
 ) -> T:
     """Run a PydanticAI agent with timing and logging. Reduces per-agent boilerplate."""
+    course_id_short = ctx.course_instance_id[:8]
+    logger.info(
+        "[%s] → %s | prompt length: %d chars",
+        course_id_short, agent_name, len(prompt),
+    )
     with AgentTimer() as timer:
         try:
             result = await agent.run(prompt, model=settings.default_model)
@@ -87,6 +95,11 @@ async def run_agent(
                 output_tokens=usage.output_tokens,
                 model_name=settings.default_model,
             )
+            logger.info(
+                "[%s] ✓ %s | %dms | in=%s out=%s tokens",
+                course_id_short, agent_name, timer.duration_ms,
+                usage.input_tokens, usage.output_tokens,
+            )
             return output
         except Exception as e:
             await log_agent_call(
@@ -97,5 +110,9 @@ async def run_agent(
                 status="error",
                 duration_ms=timer.duration_ms,
                 model_name=settings.default_model,
+            )
+            logger.error(
+                "[%s] ✗ %s | %dms | error: %s",
+                course_id_short, agent_name, timer.duration_ms, e,
             )
             raise

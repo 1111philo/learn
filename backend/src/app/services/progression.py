@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import CourseInstance, Lesson
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidTransitionError(Exception):
@@ -62,8 +66,10 @@ async def transition_course(
             f"'{course.status}' → '{target_status}'"
         )
 
+    prev = course.status
     course.status = target_status
     await db.flush()
+    logger.info("course [%s] %s → %s", course.id[:8], prev, target_status)
     return course
 
 
