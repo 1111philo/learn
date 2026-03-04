@@ -103,7 +103,12 @@ async def test_lesson_content_stored(
     mock_db.execute = AsyncMock(return_value=_no_lesson_result())
 
     added_objects = []
-    mock_db.add.side_effect = lambda obj: added_objects.append(obj)
+
+    def _collect(obj):
+        _auto_id_add(obj)
+        added_objects.append(obj)
+
+    mock_db.add.side_effect = _collect
 
     p1, p2, p3 = _agent_patches(sample_plan, sample_content, sample_activity_spec)
     with p1, p2, p3:
@@ -127,7 +132,12 @@ async def test_activity_spec_stored_as_dict(
     mock_db.execute = AsyncMock(return_value=_no_lesson_result())
 
     added_objects = []
-    mock_db.add.side_effect = lambda obj: added_objects.append(obj)
+
+    def _collect(obj):
+        _auto_id_add(obj)
+        added_objects.append(obj)
+
+    mock_db.add.side_effect = _collect
 
     p1, p2, p3 = _agent_patches(sample_plan, sample_content, sample_activity_spec)
     with p1, p2, p3:
@@ -156,7 +166,12 @@ async def test_objective_0_status_is_unlocked(
     mock_db.execute = AsyncMock(return_value=_no_lesson_result())
 
     added_objects = []
-    mock_db.add.side_effect = lambda obj: added_objects.append(obj)
+
+    def _collect(obj):
+        _auto_id_add(obj)
+        added_objects.append(obj)
+
+    mock_db.add.side_effect = _collect
 
     p1, p2, p3 = _agent_patches(sample_plan, sample_content, sample_activity_spec)
     with p1, p2, p3:
@@ -179,7 +194,12 @@ async def test_objective_1_status_is_locked(
     mock_db.execute = AsyncMock(return_value=_no_lesson_result())
 
     added_objects = []
-    mock_db.add.side_effect = lambda obj: added_objects.append(obj)
+
+    def _collect(obj):
+        _auto_id_add(obj)
+        added_objects.append(obj)
+
+    mock_db.add.side_effect = _collect
 
     p1, p2, p3 = _agent_patches(sample_plan, sample_content, sample_activity_spec)
     with p1, p2, p3:

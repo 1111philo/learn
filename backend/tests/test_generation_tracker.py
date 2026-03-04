@@ -118,8 +118,11 @@ async def test_start_generation_raises_if_already_running():
 
     task = start_generation("task-2", long_running())
 
+    # Close the coroutine explicitly to avoid "coroutine never awaited" warning
+    coro = long_running()
     with pytest.raises(RuntimeError, match="already running"):
-        start_generation("task-2", long_running())
+        start_generation("task-2", coro)
+    coro.close()
 
     event.set()
     await task
