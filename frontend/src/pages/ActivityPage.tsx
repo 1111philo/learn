@@ -72,7 +72,7 @@ export function ActivityPage() {
     activity.mastery_decision === 'meets' ||
     activity.mastery_decision === 'exceeds';
 
-  const isLast = lessonIndex === course.lessons.length - 1;
+  const isLast = lessonIndex === course.input_objectives.length - 1;
 
   function connectSSE(activityId: string) {
     cleanupRef.current?.();

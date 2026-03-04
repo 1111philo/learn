@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.agents.activity_reviewer import run_activity_reviewer
 from app.agents.logging import AgentContext
-from app.db.models import Activity, CourseInstance, Lesson
+from app.db.models import Activity, CourseInstance, Lesson, User
 from app.db.session import get_background_session
 from app.services.generation import generate_lesson_on_demand
 from app.services.generation_tracker import broadcast, is_running, start_generation
@@ -37,7 +37,7 @@ async def review_activity_background(
     key = review_key(activity_id)
 
     # Capture generation data before entering the DB session
-    next_lesson_to_generate: tuple[int, list[str], str] | None = None
+    next_lesson_to_generate: tuple[int, list[str], str, dict | None] | None = None
 
     try:
         async with get_background_session() as db:
@@ -82,10 +82,23 @@ async def review_activity_background(
 
                 # If the unlocked lesson has no content yet, schedule on-demand generation
                 if next_lesson and next_lesson.lesson_content is None:
+                    # Load learner profile for personalized generation
+                    profile_result = await db.execute(
+                        select(User)
+                        .where(User.id == user_id)
+                        .options(selectinload(User.learner_profile))
+                    )
+                    user_obj = profile_result.scalar_one_or_none()
+                    learner_profile = (
+                        user_obj.learner_profile.to_agent_dict()
+                        if user_obj and user_obj.learner_profile
+                        else None
+                    )
                     next_lesson_to_generate = (
                         next_lesson.objective_index,
                         list(course.input_objectives),
                         course.generated_description or course.input_description or "",
+                        learner_profile,
                     )
 
                 if await check_all_lessons_completed(db, course.id):
@@ -108,7 +121,7 @@ async def review_activity_background(
 
         # Kick off on-demand generation after the session has committed
         if next_lesson_to_generate:
-            next_index, objectives, description = next_lesson_to_generate
+            next_index, objectives, description, learner_profile = next_lesson_to_generate
             gen_key = f"lesson-gen-{course_id}-{next_index}"
             if not is_running(gen_key):
                 logger.info(
@@ -121,6 +134,7 @@ async def review_activity_background(
                     objective_index=next_index,
                     objectives=objectives,
                     description=description,
+                    learner_profile=learner_profile,
                 ))
 
         # Broadcast review result AFTER commit
