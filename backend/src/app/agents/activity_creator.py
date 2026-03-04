@@ -21,11 +21,12 @@ activity_creator = Agent(
         "- hints: 2-5 scaffolding hints that guide without giving the answer\n\n"
         "The activity should directly test the learning objective. Make it challenging but "
         "achievable. Tailor to the learner's profile if provided.\n\n"
-        "IMPORTANT — Domain transfer: The activity seed shows the TOPIC and SKILL to test, "
-        "but you MUST set the activity in a DIFFERENT real-world domain/scenario than the one "
-        "in the seed. For example, if the seed uses a 'user profile' scenario, use something "
-        "unrelated like a 'weather tracker' or 'recipe book'. This forces learners to transfer "
-        "knowledge rather than copy the worked example from the lesson."
+        "IMPORTANT — Personal application: The activity seed shows the TOPIC and SKILL to test. "
+        "You MUST anchor the activity in the learner's REAL personal work, projects, or career "
+        "goals as described in their learner profile. Ask the learner to apply the skill directly "
+        "to something they are actually building, doing, or pursuing. If no profile is available, "
+        "use the course description's goals as context and frame the activity around the learner's "
+        "own real-world situation — not a hypothetical or prefabricated example."
     ),
 )
 
