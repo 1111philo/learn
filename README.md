@@ -91,6 +91,18 @@ product-vision.md  Product vision and screen specs
 api-contracts.md   Full API request/response contracts
 ```
 
+## Testing
+
+The backend has a suite of tests covering the generation pipeline, state machine, SSE tracker, and agent schemas. No real API key or database required — all external calls are mocked.
+
+```bash
+cd backend
+uv sync --extra dev          # install dev dependencies (one-time)
+PYTHONPATH=src ANTHROPIC_API_KEY=test-key uv run pytest tests/ -v
+```
+
+Tests live in `backend/tests/`. Each file has a comment at the top explaining what to update when the corresponding source code changes.
+
 ## Deploying to AWS
 
 The `infra/` directory contains Terraform to deploy the app on AWS App Runner with an RDS PostgreSQL database.
@@ -140,7 +152,9 @@ The `infra/` directory contains Terraform to deploy the app on AWS App Runner wi
 
 ### Redeploying
 
-After code changes, run `./infra/deploy.sh` from the repo root. It builds a new image, pushes to ECR, and triggers an App Runner deployment.
+**Automated (recommended):** Merge to `main` — GitHub Actions runs tests, builds the Docker image, pushes to ECR, and triggers App Runner automatically.
+
+**Manual:** Run `./infra/deploy.sh` from the repo root. Builds a new image, pushes to ECR, and triggers an App Runner deployment.
 
 ### Tearing down
 
