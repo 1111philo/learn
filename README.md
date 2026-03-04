@@ -143,18 +143,21 @@ The `infra/` directory contains Terraform to deploy the app on AWS App Runner wi
    aws_profile       = "terraform"   # omit if using access keys
    ```
 
-4. Initialize and apply (this builds and pushes the Docker image automatically):
+4. Initialize and apply:
    ```bash
    cd infra
    terraform init
    terraform apply
    ```
+   This provisions the ECR repo, App Runner service, and RDS database.
+
+5. Configure GitHub Actions secrets using the Terraform outputs — see [CI/CD in CONTRIBUTING.md](CONTRIBUTING.md#cicd).
 
 ### Redeploying
 
-**Automated (recommended):** Merge to `main` — GitHub Actions runs tests, builds the Docker image, pushes to ECR, and triggers App Runner automatically.
+Merging to `main` deploys automatically via GitHub Actions. See [CI/CD in CONTRIBUTING.md](CONTRIBUTING.md#cicd) for setup and details.
 
-**Manual:** Run `./infra/deploy.sh` from the repo root. Builds a new image, pushes to ECR, and triggers an App Runner deployment.
+**Manual fallback:** Run `./infra/deploy.sh` from the repo root.
 
 ### Tearing down
 
