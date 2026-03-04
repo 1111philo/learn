@@ -87,11 +87,41 @@ PRs require at least one review before merging. Address feedback, push updates t
 
 ## CI/CD
 
-Every PR to `main` automatically runs the test suite (`CI / Run tests`). This is a **required status check** — PRs cannot be merged until it passes.
+### Workflows
 
-Every merge to `main` triggers an automatic deployment to AWS: tests run again, the Docker image is built and pushed to ECR, and App Runner deploys it.
+Two GitHub Actions workflows run automatically:
 
-You don't need to run `infra/deploy.sh` manually — just merge a reviewed, passing PR.
+**CI** (`.github/workflows/ci.yml`) — triggers on every PR to `main`:
+- Runs the backend test suite
+- Required status check — PRs cannot be merged until it passes
+
+**Deploy** (`.github/workflows/deploy.yml`) — triggers on every push to `main` (and can be triggered manually via the GitHub Actions tab):
+1. Runs the test suite
+2. Builds the Docker image (`linux/amd64`)
+3. Pushes to ECR (tagged with commit SHA and `latest`)
+4. Triggers an App Runner redeployment
+
+### GitHub secrets setup
+
+After running `terraform apply`, configure these secrets in your GitHub repo under **Settings → Secrets and variables → Actions**:
+
+| Secret | How to get it |
+|--------|---------------|
+| `AWS_ACCESS_KEY_ID` | Your AWS IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | Your AWS IAM secret key |
+| `AWS_REGION` | Your AWS region (e.g. `us-east-1`) |
+| `ECR_REGISTRY` | `terraform -chdir=infra output -raw ecr_repository_url` |
+| `APPRUNNER_SERVICE_ARN` | `terraform -chdir=infra output -raw apprunner_service_arn` |
+
+### First deploy
+
+Terraform creates the infrastructure but doesn't push an image. After setting secrets, trigger the first deploy:
+
+```bash
+./infra/deploy.sh
+```
+
+Or trigger the deploy workflow manually from the GitHub Actions tab. From then on, every merge to `main` deploys automatically.
 
 ## Local Dev Setup
 
