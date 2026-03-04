@@ -12,5 +12,6 @@ CLAUDE.local.md
 *.tfvars
 .terraform/
 *.tfstate
+*.tfstate.*
 *.tfstate.backup
 .terraform.lock.hcl
