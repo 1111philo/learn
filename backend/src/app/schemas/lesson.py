@@ -24,5 +24,5 @@ class LessonContentOutput(BaseModel):
     """Output from the lesson_writer agent."""
 
     lesson_title: str
-    lesson_body: str = Field(min_length=200)
     key_takeaways: list[str] = Field(min_length=3, max_length=6)
+    lesson_body: str = Field(min_length=200)
