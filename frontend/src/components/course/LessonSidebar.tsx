@@ -18,12 +18,14 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
     <aside className="w-64 shrink-0 space-y-4">
       <ProgressBar completed={completed} total={course.lessons.length} />
 
-      <nav className="space-y-1">
+      <nav aria-label="Course lessons" className="space-y-1">
         {course.lessons.map((lesson, i) => (
           <NavLink
             key={lesson.id}
             to={`/courses/${course.id}/lessons/${i}`}
             onClick={() => onNavigate?.()}
+            aria-disabled={lesson.status === 'locked' ? 'true' : undefined}
+            aria-label={`Lesson ${i + 1}${lesson.status === 'completed' ? ', completed' : lesson.status === 'locked' ? ', locked' : ''}`}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
@@ -34,7 +36,7 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
               )
             }
           >
-            <span className="text-xs">
+            <span aria-hidden="true" className="text-xs">
               {lesson.status === 'completed'
                 ? '✓'
                 : lesson.status === 'locked'

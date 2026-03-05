@@ -205,11 +205,11 @@ export function AssessmentPage() {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="text-xl sm:text-2xl font-bold">Assessment</h1>
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <div role="status" aria-live="polite" className="flex items-center gap-3 text-muted-foreground">
+          <div aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           Reviewing your assessment...
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
     );
   }
@@ -223,7 +223,7 @@ export function AssessmentPage() {
           spec={assessment.assessment_spec}
           onSubmit={handleSubmit}
         />
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
     );
   }
@@ -238,8 +238,8 @@ export function AssessmentPage() {
           : 'Ready to test your knowledge?'}
       </p>
       {generating && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="animate-spin">&#9696;</span>
+        <div role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span aria-hidden="true" className="animate-spin">&#9696;</span>
           <span>This may take a few seconds</span>
         </div>
       )}
@@ -247,7 +247,7 @@ export function AssessmentPage() {
         <Button onClick={handleGenerate}>Generate Assessment</Button>
       )}
       {error && (
-        <div className="space-y-2">
+        <div role="alert" className="space-y-2">
           <p className="text-sm text-destructive">{error}</p>
           <Button variant="outline" onClick={handleGenerate}>
             Retry

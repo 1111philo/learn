@@ -12,18 +12,18 @@ interface StepperItemProps {
 function StepIcon({ done, active }: { done: boolean; active: boolean }) {
   if (done)
     return (
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs text-white">
+      <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs text-white">
         &#10003;
       </span>
     );
   if (active)
     return (
-      <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary">
+      <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary">
         <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
       </span>
     );
   return (
-    <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-muted-foreground/30" />
+    <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-muted-foreground/30" />
   );
 }
 
@@ -35,7 +35,7 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
   // On-demand: not yet started and not the currently active objective
   if (!anyStarted && !inferActive) {
     return (
-      <div className="flex gap-3">
+      <li className="flex gap-3 list-none">
         <div className="flex flex-col items-center">
           <StepIcon done={false} active={false} />
           <div className="w-px flex-1 bg-border" />
@@ -48,7 +48,7 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
             Generates when you reach this lesson
           </p>
         </div>
-      </div>
+      </li>
     );
   }
 
@@ -63,7 +63,7 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
   const isActive = anyStarted || !!inferActive;
 
   return (
-    <div className="flex gap-3">
+    <li className="flex gap-3 list-none">
       <div className="flex flex-col items-center">
         <StepIcon done={allDone} active={isActive && !allDone} />
         <div className="w-px flex-1 bg-border" />
@@ -71,27 +71,29 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
       <div className="pb-6">
         <p className={cn('text-sm font-medium', allDone && 'text-green-700')}>
           Objective {index + 1}: {objectiveLabel}
+          {allDone && <span className="sr-only"> (complete)</span>}
+          {isActive && !allDone && <span className="sr-only"> (in progress)</span>}
         </p>
         {p.error && (
-          <p className="mt-1 text-xs text-destructive">{p.error}</p>
+          <p role="alert" className="mt-1 text-xs text-destructive">{p.error}</p>
         )}
         <div className="mt-2 space-y-1">
           {steps.map((step, i) => (
             <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
               {step.done ? (
-                <span className="text-green-600">&#10003;</span>
+                <span aria-hidden="true" className="text-green-600">&#10003;</span>
               ) : isActive && !steps.slice(0, i).every((s) => s.done) ? (
-                <span className="text-muted-foreground/40">&#9675;</span>
+                <span aria-hidden="true" className="text-muted-foreground/40">&#9675;</span>
               ) : isActive ? (
-                <span className="animate-spin text-primary">&#9696;</span>
+                <span aria-hidden="true" className="animate-spin text-primary">&#9696;</span>
               ) : (
-                <span className="text-muted-foreground/40">&#9675;</span>
+                <span aria-hidden="true" className="text-muted-foreground/40">&#9675;</span>
               )}
-              <span>{step.label}</span>
+              <span>{step.label}{step.done && <span className="sr-only"> done</span>}</span>
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </li>
   );
 }

@@ -38,8 +38,8 @@ export function LessonPage() {
       {lesson.lesson_content ? (
         <MarkdownRenderer content={lesson.lesson_content} />
       ) : (
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <div role="status" aria-live="polite" className="flex items-center gap-3 text-muted-foreground">
+          <div aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           Generating lesson content...
         </div>
       )}

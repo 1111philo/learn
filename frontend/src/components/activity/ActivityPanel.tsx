@@ -26,13 +26,15 @@ export function ActivityPanel({ spec }: ActivityPanelProps) {
         <div>
           <button
             type="button"
+            aria-expanded={showHints}
+            aria-controls="hints-list"
             onClick={() => setShowHints(!showHints)}
             className="text-sm font-medium text-primary hover:underline"
           >
             {showHints ? 'Hide Hints' : 'Show Hints'}
           </button>
           {showHints && (
-            <ul className="mt-2 ml-4 list-disc text-sm text-muted-foreground">
+            <ul id="hints-list" className="mt-2 ml-4 list-disc text-sm text-muted-foreground">
               {spec.hints.map((h, i) => (
                 <li key={i}>{h}</li>
               ))}

@@ -32,7 +32,7 @@ export function GenerationStepper({ objectives, progress, generating }: Generati
   }
 
   return (
-    <div className="space-y-0">
+    <ol aria-label="Generation progress" className="space-y-0">
       {indices.map((i) => (
         <StepperItem
           key={i}
@@ -42,6 +42,6 @@ export function GenerationStepper({ objectives, progress, generating }: Generati
           inferActive={i === inferredActiveIndex}
         />
       ))}
-    </div>
+    </ol>
   );
 }
