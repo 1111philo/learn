@@ -51,13 +51,13 @@ function AgentLogRow({ log, courseLabel }: { log: AgentLog; courseLabel: string 
     <div className="border rounded-lg overflow-hidden">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+        className="w-full flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-muted/40 transition-colors"
       >
         <span className="text-muted-foreground shrink-0">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </span>
 
-        <span className="font-mono text-sm font-medium w-44 shrink-0">{log.agent_name}</span>
+        <span className="font-mono text-sm font-medium w-32 sm:w-44 shrink-0 truncate">{log.agent_name}</span>
 
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -70,23 +70,23 @@ function AgentLogRow({ log, courseLabel }: { log: AgentLog; courseLabel: string 
         <span className="text-sm text-muted-foreground shrink-0 hidden sm:block">{timestamp}</span>
 
         {log.duration_ms != null && (
-          <span className="text-sm text-muted-foreground shrink-0">
+          <span className="text-sm text-muted-foreground shrink-0 hidden sm:block">
             {log.duration_ms >= 1000 ? `${(log.duration_ms / 1000).toFixed(1)}s` : `${log.duration_ms}ms`}
           </span>
         )}
 
         {(log.input_tokens != null || log.output_tokens != null) && (
-          <span className="text-sm text-muted-foreground shrink-0">
+          <span className="text-sm text-muted-foreground shrink-0 hidden md:block">
             in={log.input_tokens ?? '—'} out={log.output_tokens ?? '—'}
           </span>
         )}
 
-        <span className="text-xs text-muted-foreground shrink-0 truncate max-w-[160px]">
+        <span className="text-xs text-muted-foreground shrink-0 truncate max-w-[160px] hidden md:block">
           {courseLabel}
         </span>
 
         {cost != null && (
-          <span className="text-sm text-muted-foreground shrink-0 ml-auto">
+          <span className="text-sm text-muted-foreground shrink-0 ml-auto hidden sm:block">
             ${cost.toFixed(4)}
           </span>
         )}
@@ -211,7 +211,7 @@ export function AgentLogsPage() {
       {/* Header */}
       <div className="flex items-baseline justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Agent Logs</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Agent Logs</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isFiltered ? `${filtered.length} of ${logs.length}` : logs.length} calls
           </p>

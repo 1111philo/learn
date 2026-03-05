@@ -23,7 +23,7 @@ export function CatalogSearch({ allTags }: CatalogSearchProps) {
         placeholder="Search courses..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
+        className="w-full sm:max-w-sm"
       />
       {allTags.length > 0 && (
         <div className="flex flex-wrap gap-2">

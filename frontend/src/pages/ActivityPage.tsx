@@ -140,7 +140,7 @@ export function ActivityPage() {
             improvements={displayFeedback.improvements}
             tips={displayFeedback.tips}
           />
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             {passed ? (
               <Button onClick={handleContinue}>
                 {isLast ? 'Take Assessment' : 'Continue'}

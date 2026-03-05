@@ -6,9 +6,10 @@ import type { CourseResponse } from '@/api/types';
 
 interface LessonSidebarProps {
   course: CourseResponse;
+  onNavigate?: () => void;
 }
 
-export function LessonSidebar({ course }: LessonSidebarProps) {
+export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
   const navigate = useNavigate();
   const completed = course.lessons.filter((l) => l.status === 'completed').length;
   const allCompleted = completed === course.lessons.length && course.lessons.length > 0;
@@ -22,6 +23,7 @@ export function LessonSidebar({ course }: LessonSidebarProps) {
           <NavLink
             key={lesson.id}
             to={`/courses/${course.id}/lessons/${i}`}
+            onClick={() => onNavigate?.()}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
@@ -48,7 +50,10 @@ export function LessonSidebar({ course }: LessonSidebarProps) {
         <Button
           variant="outline"
           className="w-full"
-          onClick={() => navigate(`/courses/${course.id}/assessment`)}
+          onClick={() => {
+            onNavigate?.();
+            navigate(`/courses/${course.id}/assessment`);
+          }}
         >
           Take Assessment
         </Button>

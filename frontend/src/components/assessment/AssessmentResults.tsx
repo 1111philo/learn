@@ -15,8 +15,8 @@ export function AssessmentResults({ assessment }: AssessmentResultsProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <span className={`text-4xl font-bold ${scoreColor}`}>
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+        <span className={`text-2xl sm:text-4xl font-bold ${scoreColor}`}>
           {Math.round(score)}
         </span>
         <span className="text-muted-foreground">/ 100</span>
