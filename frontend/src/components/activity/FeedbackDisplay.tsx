@@ -41,9 +41,6 @@ export function FeedbackDisplay({
 
   return (
     <div className="rounded-lg border bg-card p-4 sm:p-5 space-y-4">
-      {/* Heading */}
-      <h3 className="text-sm font-semibold text-foreground">Feedback</h3>
-
       {/* Score + mastery */}
       <div className="flex items-baseline gap-2">
         <span className={`text-3xl font-bold tabular-nums ${scoreColor}`}>{score}</span>
@@ -54,7 +51,10 @@ export function FeedbackDisplay({
       </div>
 
       {/* Rationale */}
-      <p className="text-sm leading-relaxed border-l-2 pl-3">{rationale}</p>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50 mb-1">Rationale</p>
+        <p className="text-sm leading-relaxed border-l-2 pl-3">{rationale}</p>
+      </div>
 
       {/* Detail buttons */}
       <div className="flex flex-wrap gap-2 border-t pt-3">
