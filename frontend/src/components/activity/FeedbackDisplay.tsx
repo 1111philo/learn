@@ -26,9 +26,9 @@ export function FeedbackDisplay({
         : 'text-red-600';
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
+    <div className="space-y-4 rounded-lg border p-3 sm:p-4">
       <div className="flex items-center gap-3">
-        <span className={`text-3xl font-bold ${scoreColor}`}>{score}</span>
+        <span className={`text-2xl sm:text-3xl font-bold ${scoreColor}`}>{score}</span>
         <span className="text-sm text-muted-foreground">/ 100</span>
         <Badge className={MASTERY_COLORS[mastery] ?? ''}>
           {MASTERY_LABELS[mastery] ?? mastery}

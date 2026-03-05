@@ -18,7 +18,7 @@ export function CatalogPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Course Catalog</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Course Catalog</h1>
         <p className="text-muted-foreground">
           Browse courses or create your own
         </p>

@@ -86,7 +86,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <h1 className="text-2xl font-bold">Profile Settings</h1>
+      <h1 className="text-xl sm:text-2xl font-bold">Profile Settings</h1>
 
       <form onSubmit={handleSave} className="space-y-4">
         <div className="space-y-1">

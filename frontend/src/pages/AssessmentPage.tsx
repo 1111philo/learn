@@ -185,9 +185,9 @@ export function AssessmentPage() {
   if (assessment?.status === 'reviewed') {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold">Assessment Results</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Assessment Results</h1>
         <AssessmentResults assessment={assessment} />
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {assessment.passed ? (
             <Button onClick={() => navigate('/my-courses')}>
               Back to My Courses
@@ -204,7 +204,7 @@ export function AssessmentPage() {
   if (reviewing) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold">Assessment</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Assessment</h1>
         <div className="flex items-center gap-3 text-muted-foreground">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           Reviewing your assessment...
@@ -218,7 +218,7 @@ export function AssessmentPage() {
   if (assessment?.assessment_spec && assessment.status === 'pending') {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold">Assessment</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Assessment</h1>
         <AssessmentForm
           spec={assessment.assessment_spec}
           onSubmit={handleSubmit}

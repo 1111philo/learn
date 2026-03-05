@@ -13,7 +13,7 @@ export function MyCoursesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">My Courses</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">My Courses</h1>
         <p className="text-muted-foreground">
           Track your learning progress
         </p>
