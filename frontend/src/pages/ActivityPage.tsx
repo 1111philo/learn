@@ -126,8 +126,8 @@ export function ActivityPage() {
       <ActivityPanel spec={activity.activity_spec} />
 
       {reviewing ? (
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <div role="status" aria-live="polite" className="flex items-center gap-3 text-muted-foreground">
+          <div aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           Reviewing your submission...
         </div>
       ) : displayFeedback ? (
@@ -161,7 +161,7 @@ export function ActivityPage() {
       ) : (
         <>
           <SubmissionForm onSubmit={handleSubmit} />
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </>
       )}
     </div>

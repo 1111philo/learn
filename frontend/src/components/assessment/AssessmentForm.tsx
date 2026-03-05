@@ -41,22 +41,24 @@ export function AssessmentForm({ spec, onSubmit }: AssessmentFormProps) {
       <h2 className="text-lg font-semibold">{spec.assessment_title}</h2>
       {spec.items.map((item, i) => (
         <div key={i} className="space-y-2">
-          <p className="text-sm font-medium">
+          <label htmlFor={`assessment-answer-${i}`} className="text-sm font-medium">
             {i + 1}. {item.objective}
-          </p>
+          </label>
           <div className="rounded-md bg-muted p-3">
             <p className="text-sm">{item.prompt}</p>
           </div>
           <Textarea
+            id={`assessment-answer-${i}`}
             placeholder="Your answer..."
             value={answers[i] ?? ''}
             onChange={(e) => update(i, e.target.value)}
             rows={4}
             disabled={submitting}
+            aria-label={`Answer for: ${item.objective}`}
           />
         </div>
       ))}
-      <Button type="submit" disabled={submitting || !allFilled} className="w-full">
+      <Button type="submit" disabled={submitting || !allFilled} aria-busy={submitting} className="w-full">
         {submitting ? 'Submitting...' : 'Submit Assessment'}
       </Button>
     </form>

@@ -67,7 +67,7 @@ export function GenerationPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Generating Your Course</h1>
-          <p className="text-muted-foreground">Loading course details...</p>
+          <p role="status" aria-live="polite" className="text-muted-foreground">Loading course details...</p>
         </div>
       </div>
     );
@@ -98,7 +98,7 @@ export function GenerationPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{heading}</h1>
-        <p className="text-muted-foreground">{subtitle}</p>
+        <p aria-live="polite" className="text-muted-foreground">{subtitle}</p>
       </div>
 
       {(objectives.length > 0 || progress.size > 0) && !isZombie && (
@@ -112,7 +112,7 @@ export function GenerationPage() {
             generating the course or go back to your courses.
           </p>
           <div className="mt-3 flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleRetry} disabled={retrying}>
+            <Button variant="outline" size="sm" onClick={handleRetry} disabled={retrying} aria-busy={retrying}>
               {retrying ? 'Retrying...' : 'Retry Generation'}
             </Button>
             <Button
