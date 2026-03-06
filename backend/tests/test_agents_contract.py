@@ -241,3 +241,74 @@ def test_agent_context_dataclass():
     assert ctx.db is db
     assert ctx.user_id == "u-123"
     assert ctx.course_instance_id == "c-456"
+
+
+# ---------------------------------------------------------------------------
+# CourseDescriptionOutput / LessonPreview constraints
+# ---------------------------------------------------------------------------
+
+
+def test_course_description_output_validates(sample_course_description):
+    """conftest sample_course_description is schema-valid and round-trips."""
+    from app.schemas.course_description import CourseDescriptionOutput
+
+    dumped = sample_course_description.model_dump()
+    reparsed = CourseDescriptionOutput(**dumped)
+    assert len(reparsed.narrative_description) >= 100
+    assert len(reparsed.lessons) >= 1
+
+
+def test_course_description_rejects_short_narrative():
+    """narrative_description must be at least 100 characters."""
+    from pydantic import ValidationError
+
+    from app.schemas.course_description import CourseDescriptionOutput, LessonPreview
+
+    with pytest.raises(ValidationError):
+        CourseDescriptionOutput(
+            narrative_description="too short",
+            lessons=[
+                LessonPreview(
+                    lesson_title="Intro",
+                    lesson_summary="S" * 30,
+                )
+            ],
+        )
+
+
+def test_course_description_rejects_empty_lessons():
+    """lessons must have at least 1 entry."""
+    from pydantic import ValidationError
+
+    from app.schemas.course_description import CourseDescriptionOutput
+
+    with pytest.raises(ValidationError):
+        CourseDescriptionOutput(
+            narrative_description="A" * 100,
+            lessons=[],
+        )
+
+
+def test_lesson_preview_rejects_short_summary():
+    """lesson_summary must be at least 30 characters."""
+    from pydantic import ValidationError
+
+    from app.schemas.course_description import LessonPreview
+
+    with pytest.raises(ValidationError):
+        LessonPreview(
+            lesson_title="Intro",
+            lesson_summary="too short",
+        )
+
+
+def test_lesson_preview_validates():
+    """Valid LessonPreview passes validation."""
+    from app.schemas.course_description import LessonPreview
+
+    lp = LessonPreview(
+        lesson_title="Introduction to Variables",
+        lesson_summary="Learn how Python stores and reuses values in memory.",
+    )
+    assert lp.lesson_title == "Introduction to Variables"
+    assert len(lp.lesson_summary) >= 30

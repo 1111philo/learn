@@ -1,5 +1,6 @@
 import { sseUrl } from './sse-auth';
 import type {
+  CourseDescribedEvent,
   LessonPlannedEvent,
   LessonWrittenEvent,
   ActivityCreatedEvent,
@@ -8,6 +9,7 @@ import type {
 } from './types';
 
 export type GenerationEvent =
+  | { type: 'course_described'; data: CourseDescribedEvent }
   | { type: 'lesson_planned'; data: LessonPlannedEvent }
   | { type: 'lesson_written'; data: LessonWrittenEvent }
   | { type: 'activity_created'; data: ActivityCreatedEvent }
@@ -15,6 +17,7 @@ export type GenerationEvent =
   | { type: 'generation_error'; data: GenerationErrorEvent };
 
 const EVENT_TYPES = [
+  'course_described',
   'lesson_planned',
   'lesson_written',
   'activity_created',

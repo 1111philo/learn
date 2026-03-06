@@ -12,8 +12,16 @@ export interface ObjectiveProgress {
   error: string | null;
 }
 
+export interface LessonPreview {
+  index: number;
+  title: string;
+  summary: string;
+}
+
 interface GenerationState {
   objectives: string[];
+  lessonPreviews: LessonPreview[];
+  courseDescribed: boolean;
   progress: Map<number, ObjectiveProgress>;
   /** The backend course status, kept in sync with REST fetches */
   courseStatus: CourseStatus | null;
@@ -48,6 +56,8 @@ function deriveProgress(course: CourseResponse): Map<number, ObjectiveProgress> 
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   objectives: [],
+  lessonPreviews: [],
+  courseDescribed: false,
   progress: new Map(),
   courseStatus: null,
   complete: false,
@@ -78,9 +88,15 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const progress = deriveProgress(course);
     const stillGenerating = STILL_GENERATING.includes(course.status);
     const complete = !stillGenerating;
+    const courseDescribed = (course.lesson_titles?.length ?? 0) > 0;
+    const lessonPreviews: LessonPreview[] = courseDescribed
+      ? course.lesson_titles!.map((lt, i) => ({ index: i, title: lt.lesson_title, summary: lt.lesson_summary }))
+      : [];
 
     set({
       objectives: course.input_objectives,
+      lessonPreviews,
+      courseDescribed,
       progress,
       courseStatus: course.status,
       complete,
@@ -121,6 +137,13 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         };
 
         switch (event.type) {
+          case 'course_described': {
+            return {
+              ...state,
+              courseDescribed: true,
+              lessonPreviews: event.data.lesson_previews,
+            };
+          }
           case 'lesson_planned': {
             const e = existing(event.data.objective_index);
             progress.set(event.data.objective_index, {
@@ -175,6 +198,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     get()._disconnect?.();
     set({
       objectives: [],
+      lessonPreviews: [],
+      courseDescribed: false,
       progress: new Map(),
       courseStatus: null,
       complete: false,

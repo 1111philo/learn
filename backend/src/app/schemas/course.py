@@ -19,6 +19,7 @@ class CourseResponse(BaseModel):
     input_description: str | None
     input_objectives: list
     generated_description: str | None
+    lesson_titles: list[dict] | None = None
     status: str
     lessons: list["LessonResponse"] = []
     assessments: list["AssessmentSummary"] = []

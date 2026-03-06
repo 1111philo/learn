@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.agents.logging import AgentContext
+from app.agents.course_describer import run_course_describer
 from app.agents.lesson_planner import run_lesson_planner
 from app.agents.lesson_writer import run_lesson_writer
 from app.agents.activity_creator import run_activity_creator
@@ -25,6 +26,7 @@ async def _generate_single_objective(
     all_objectives: list[str],
     learner_profile: dict | None,
     semaphore: asyncio.Semaphore,
+    preset_title: str | None = None,
 ) -> bool:
     """Generate a single objective's lesson and activity.
 
@@ -89,7 +91,7 @@ async def _generate_single_objective(
             async with semaphore:
                 logger.info("[%s] %s running lesson_planner…", course_id_short, obj_label)
                 plan = await run_lesson_planner(
-                    ctx, objective, description, all_objectives, learner_profile,
+                    ctx, objective, description, all_objectives, learner_profile, preset_title,
                 )
             logger.info(
                 "[%s] %s lesson_planner done → title: %r | concepts: %d | outline steps: %d",
@@ -213,10 +215,41 @@ async def generate_course_background(
 
     lessons_created = 0
 
+    # Phase 0: Describe the course — establish narrative thread and lesson titles
+    logger.info("[%s] Phase 0: running course_describer…", course_id_short)
+    async with get_background_session() as db:
+        result = await db.execute(
+            select(CourseInstance).where(CourseInstance.id == course_id)
+        )
+        course = result.scalar_one()
+        ctx = AgentContext(db=db, user_id=user_id, course_instance_id=course_id)
+        description_output = await run_course_describer(ctx, description, objectives, learner_profile)
+        course.generated_description = description_output.narrative_description
+        course.lesson_titles = [lt.model_dump() for lt in description_output.lessons]
+        await db.flush()
+        await db.commit()
+
+    narrative = description_output.narrative_description
+    lesson_titles_list = [lt.model_dump() for lt in description_output.lessons]
+    preset_title_0 = lesson_titles_list[0]["lesson_title"] if lesson_titles_list else None
+
+    await broadcast(course_id, "course_described", {
+        "lesson_previews": [
+            {"index": i, "title": lt["lesson_title"], "summary": lt["lesson_summary"]}
+            for i, lt in enumerate(lesson_titles_list)
+        ],
+        "narrative_description": narrative,
+    })
+    logger.info(
+        "[%s] Phase 0 complete — narrative set, %d lesson titles defined",
+        course_id_short, len(lesson_titles_list),
+    )
+
     try:
         success = await _generate_single_objective(
-            course_id, user_id, 0, objectives[0], description,
+            course_id, user_id, 0, objectives[0], narrative,
             objectives, learner_profile, asyncio.Semaphore(1),
+            preset_title=preset_title_0,
         )
         lessons_created = 1 if success else 0
 
@@ -233,7 +266,6 @@ async def generate_course_background(
                 .options(selectinload(CourseInstance.lessons))
             )
             course = result.scalar_one()
-            course.generated_description = description
 
             if lessons_created > 0:
                 await transition_course(db, course, "active")
@@ -278,6 +310,7 @@ async def generate_lesson_on_demand(
     objectives: list[str],
     description: str,
     learner_profile: dict | None = None,
+    preset_title: str | None = None,
 ) -> None:
     """Generate a single lesson on demand when the learner unlocks it.
 
@@ -291,4 +324,5 @@ async def generate_lesson_on_demand(
     await _generate_single_objective(
         course_id, user_id, objective_index, objectives[objective_index],
         description, objectives, learner_profile, asyncio.Semaphore(1),
+        preset_title=preset_title,
     )

@@ -110,9 +110,29 @@ def sample_course():
     c.input_objectives = ["Understand variables", "Understand loops"]
     c.input_description = "Intro to Python"
     c.generated_description = None
+    c.lesson_titles = None
     c.lessons = []
     c.assessments = []
     return c
+
+
+@pytest.fixture
+def sample_course_description():
+    from app.schemas.course_description import CourseDescriptionOutput, LessonPreview
+
+    return CourseDescriptionOutput(
+        narrative_description="A" * 100,
+        lessons=[
+            LessonPreview(
+                lesson_title="Introduction to Variables",
+                lesson_summary="Understand how Python stores and reuses values in memory.",
+            ),
+            LessonPreview(
+                lesson_title="Mastering Loops",
+                lesson_summary="Build repetition logic that handles real-world data.",
+            ),
+        ],
+    )
 
 
 @pytest.fixture

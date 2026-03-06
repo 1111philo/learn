@@ -168,7 +168,8 @@ User
 | source_course_id | String(100) | nullable, for predefined |
 | input_description | Text | nullable |
 | input_objectives | JSONB | list of strings |
-| generated_description | Text | nullable |
+| generated_description | Text | nullable; set by course_describer agent (narrative arc, not a copy of input) |
+| lesson_titles | JSONB | nullable; `[{"lesson_title": str, "lesson_summary": str}, ...]` one per objective, index-aligned |
 | status | String(30) | see state machine below |
 | created_at | DateTime(tz) | |
 | updated_at | DateTime(tz) | |
@@ -282,11 +283,12 @@ HTTP request.** The pattern:
 
 1. `POST /api/courses/{id}/generate` validates the request, transitions the course to `generating`,
    spawns a background task, and **returns immediately** with `{"id": ..., "status": "generating"}`.
-2. The background task runs the generation pipeline (plan → write → create activity per objective),
-   writing each lesson to the DB as it completes.
+2. The background task runs the generation pipeline in two phases:
+   - **Phase 0** — The `course_describer` agent runs once, sets `generated_description` and `lesson_titles` on the course, and broadcasts a `course_described` SSE event.
+   - **Phase 1+** — Lesson 0 is generated immediately (plan → write → create activity); remaining lessons are generated on demand when the learner completes each activity.
 3. The client tracks progress via one of two mechanisms:
    - **SSE stream** — `GET /api/courses/{id}/generation-stream` pushes events as each step
-     completes (`lesson_planned`, `lesson_written`, `activity_created`, `generation_complete`,
+     completes (`course_described`, `lesson_planned`, `lesson_written`, `activity_created`, `generation_complete`,
      `generation_error`).
    - **Polling** — `GET /api/courses/{id}` returns the current course state including any lessons
      generated so far. The client polls until `status` leaves `generating`.
@@ -330,6 +332,9 @@ Background tasks run outside the HTTP request lifecycle and need their own infra
 #### SSE Event Format
 
 ```
+event: course_described
+data: {"lesson_previews": [{"index": 0, "title": "...", "summary": "..."}, ...], "narrative_description": "..."}
+
 event: lesson_planned
 data: {"objective_index": 0, "lesson_title": "..."}
 
@@ -346,16 +351,15 @@ event: generation_error
 data: {"objective_index": 2, "error": "LLM call failed after retries"}
 ```
 
+`course_described` is always the first event. It carries pre-computed lesson titles and a one-sentence summary per objective (used to populate the generation stepper before any lessons are written) plus the full narrative description stored in the DB.
+
 **Client pattern — REST first, SSE second:** The frontend fetches `GET /api/courses/{id}` on page
 load to get the full committed state and renders immediately. SSE is only connected if the course
 is still in `generating` status. This means already-completed courses render instantly with no SSE
 overhead, and mid-generation reconnects show all committed progress before subscribing to live
 updates.
 
-**Reconnection / catchup:** When a client connects to the SSE stream, the server sends catchup
-events for all three stages (`lesson_planned`, `lesson_written`, `activity_created`) for lessons
-already in the DB, then streams live events. If generation is already complete, the server sends
-catchup + `generation_complete` and closes the stream.
+**Reconnection / catchup:** When a client connects to the SSE stream, the server first sends a `course_described` catchup event if `lesson_titles` is already set on the course, then sends catchup events for all three lesson stages (`lesson_planned`, `lesson_written`, `activity_created`) for lessons already in the DB, then streams live events. If generation is already complete, the server sends catchup + `generation_complete` and closes the stream.
 
 **Keepalive:** The SSE stream sends a comment-based keepalive every 5 seconds to prevent
 proxy/load balancer timeouts. The keepalive also checks whether the generation task has finished
@@ -408,17 +412,24 @@ state) stays identical. The only change is where the work executes.
 
 ## LLM Agents
 
-Six PydanticAI agents replacing nine from the original PRDs (course_describer folded into
-lesson_planner):
+Seven PydanticAI agents:
 
-| Agent | Input | Output | When Called |
-|---|---|---|---|
-| `lesson_planner` | objective, course description, profile | lesson plan (structure, key concepts, activity seed) | During generation, per objective |
-| `lesson_writer` | lesson plan, profile | Markdown content + key takeaways | During generation, per objective |
-| `activity_creator` | activity seed, objective, mastery criteria | full activity spec (instructions, prompt, rubric, hints) | During generation, per objective |
-| `activity_reviewer` | submission text, rubric, objective | score, feedback, mastery decision | On activity submission |
-| `assessment_creator` | all objectives, activity scores, profile | assessment items covering all objectives | When all lessons completed |
-| `assessment_reviewer` | submissions, assessment spec, objectives | per-objective scores, pass/fail, feedback | On assessment submission |
+| Agent | Input | Output | When Called | Model |
+|---|---|---|---|---|
+| `course_describer` | description, objectives, profile | narrative description + lesson title/summary per objective | Phase 0 of generation (once per course) | `fast_model` |
+| `lesson_planner` | objective, narrative description, all objectives, profile, optional preset title | lesson plan (structure, key concepts, activity seed) | During generation, per objective | `default_model` |
+| `lesson_writer` | lesson plan, profile | Markdown content + key takeaways | During generation, per objective | `default_model` |
+| `activity_creator` | activity seed, objective, mastery criteria | full activity spec (instructions, prompt, rubric, hints) | During generation, per objective | `default_model` |
+| `activity_reviewer` | submission text, rubric, objective | score, second-person feedback, mastery decision | On activity submission | `default_model` |
+| `assessment_creator` | all objectives, activity scores, profile | assessment items covering all objectives | When all lessons completed | `default_model` |
+| `assessment_reviewer` | submissions, assessment spec, objectives | per-objective scores, pass/fail, feedback | On assessment submission | `default_model` |
+
+The `course_describer` runs first in Phase 0 before any lesson is generated. Its output:
+- Sets `course.generated_description` (a narrative description weaving all objectives into a coherent arc)
+- Sets `course.lesson_titles` (one `{lesson_title, lesson_summary}` per objective, index-aligned)
+- Broadcasts a `course_described` SSE event so the frontend can show lesson titles in the stepper immediately
+- Passes the narrative description to every subsequent `lesson_planner` call so all lessons share a common thread
+- Passes each objective's preset title to its `lesson_planner` call so lesson titles are consistent end-to-end
 
 Each agent:
 - Is a `pydantic_ai.Agent` instance with a typed `output_type` (Pydantic model)
@@ -440,18 +451,20 @@ backend/
       session.py           # Engine, session factory, get_db_session, get_background_session
       migrations/          # Alembic
     agents/
-      lesson_planner.py    # PydanticAI Agent + runner function
+      course_describer.py  # Phase 0 agent: narrative description + lesson titles/summaries
+      lesson_planner.py    # PydanticAI Agent + runner function (accepts optional preset_title)
       lesson_writer.py
       activity_creator.py
       activity_reviewer.py
       assessment.py        # creator + reviewer agents
       logging.py           # AgentContext, AgentTimer, run_agent helper, log_agent_call
     schemas/               # Pydantic I/O models
+      course_description.py  # CourseDescriptionOutput, LessonPreview
       lesson.py
       activity.py
       assessment.py
       profile.py
-      course.py
+      course.py            # CourseResponse includes lesson_titles field
     services/
       generation.py        # Generation pipeline (sync + background variants)
       generation_tracker.py # In-process task registry + SSE pub/sub

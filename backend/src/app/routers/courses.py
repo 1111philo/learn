@@ -102,6 +102,20 @@ async def generation_stream(
     # Build catchup events from lessons already in DB
     existing_lessons = sorted(course.lessons, key=lambda l: l.objective_index)
     catchup_events: list[dict] = []
+
+    # Replay course_described if Phase 0 already completed
+    if course.lesson_titles:
+        catchup_events.append({
+            "event": "course_described",
+            "data": {
+                "lesson_previews": [
+                    {"index": i, "title": lt["lesson_title"], "summary": lt["lesson_summary"]}
+                    for i, lt in enumerate(course.lesson_titles)
+                ],
+                "narrative_description": course.generated_description or course.input_description or "",
+            },
+        })
+
     for lesson in existing_lessons:
         idx = lesson.objective_index
         catchup_events.append({
@@ -210,6 +224,7 @@ async def get_course(
         input_description=course.input_description,
         input_objectives=course.input_objectives,
         generated_description=course.generated_description,
+        lesson_titles=course.lesson_titles,
         status=course.status,
         lessons=[
             LessonResponse(
