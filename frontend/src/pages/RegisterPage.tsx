@@ -36,8 +36,8 @@ export function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">1111 School</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Create a new account</p>
+          <img src="/logo.svg" alt="1111 School" className="mx-auto h-20 w-20 rounded-lg" />
+          <p className="mt-3 text-sm text-muted-foreground">Create a new account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
