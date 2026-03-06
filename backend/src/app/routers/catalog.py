@@ -22,41 +22,55 @@ async def _completed_source_ids(db: AsyncSession, user_id: str) -> set[str]:
     return {row[0] for row in result.all() if row[0]}
 
 
+async def _instance_by_source(db: AsyncSession, user_id: str) -> dict[str, tuple[str, str]]:
+    """Return {source_course_id: (instance_id, status)} for user's predefined courses."""
+    result = await db.execute(
+        select(
+            CourseInstance.source_course_id,
+            CourseInstance.id,
+            CourseInstance.status,
+        ).where(
+            CourseInstance.user_id == user_id,
+            CourseInstance.source_type == "predefined",
+        )
+    )
+    mapping: dict[str, tuple[str, str]] = {}
+    for row in result.all():
+        if row[0]:
+            mapping[row[0]] = (str(row[1]), row[2])
+    return mapping
+
+
 @router.get("")
 async def list_catalog(
-    search: str | None = None,
-    tag: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     catalog = get_catalog()
     courses = list(catalog.values())
 
-    if search:
-        search_lower = search.lower()
-        courses = [
-            c
-            for c in courses
-            if search_lower in c.name.lower() or search_lower in c.description.lower()
-        ]
-
-    if tag:
-        courses = [c for c in courses if tag in c.tags]
-
     completed = await _completed_source_ids(db, user.id)
+    instances = await _instance_by_source(db, user.id)
 
     all_catalog = get_catalog()
     all_completed = all(cid in completed for cid in all_catalog)
 
+    items = []
+    for c in courses:
+        entry = {
+            **c.model_dump(),
+            "locked": c.depends_on is not None and c.depends_on not in completed,
+            "completed": c.course_id in completed,
+            "instance_id": None,
+            "instance_status": None,
+        }
+        if c.course_id in instances:
+            entry["instance_id"] = instances[c.course_id][0]
+            entry["instance_status"] = instances[c.course_id][1]
+        items.append(entry)
+
     return {
-        "courses": [
-            {
-                **c.model_dump(),
-                "locked": c.depends_on is not None and c.depends_on not in completed,
-                "completed": c.course_id in completed,
-            }
-            for c in courses
-        ],
+        "courses": items,
         "all_completed": all_completed,
     }
 
@@ -81,6 +95,18 @@ async def start_predefined_course(
                 status_code=400,
                 detail=f"Complete \"{dep_name}\" first",
             )
+
+    # Return existing instance if user already started this course
+    existing = await db.execute(
+        select(CourseInstance).where(
+            CourseInstance.user_id == user.id,
+            CourseInstance.source_type == "predefined",
+            CourseInstance.source_course_id == course_id,
+        )
+    )
+    instance = existing.scalar_one_or_none()
+    if instance:
+        return {"id": instance.id, "status": instance.status}
 
     course = CourseInstance(
         user_id=user.id,

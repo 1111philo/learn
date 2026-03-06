@@ -9,6 +9,8 @@ export interface CatalogCourse {
   depends_on: string | null;
   locked: boolean;
   completed: boolean;
+  instance_id: string | null;
+  instance_status: CourseStatus | null;
 }
 
 export interface CatalogResponse {

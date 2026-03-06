@@ -7,8 +7,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Logo } from '@/components/layout/Logo';
 
 const NAV_ITEMS = [
-  { to: '/catalog', label: 'Catalog' },
-  { to: '/my-courses', label: 'My Courses' },
+  { to: '/courses', label: 'Courses' },
   { to: '/portfolio', label: 'Portfolio' },
 ];
 
@@ -20,7 +19,7 @@ export function NavBar() {
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-        <Link to="/catalog" aria-label="1111 home">
+        <Link to="/courses" aria-label="1111 home">
           <Logo className="h-7 w-7" />
         </Link>
 

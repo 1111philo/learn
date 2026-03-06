@@ -8,7 +8,6 @@ import { CoursePage } from '@/pages/CoursePage';
 import { LessonPage } from '@/pages/LessonPage';
 import { ActivityPage } from '@/pages/ActivityPage';
 import { AssessmentPage } from '@/pages/AssessmentPage';
-import { MyCoursesPage } from '@/pages/MyCoursesPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -49,8 +48,8 @@ export default function App() {
         {/* Authenticated routes */}
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
-            <Route index element={<Navigate to="/catalog" replace />} />
-            <Route path="catalog" element={<CatalogPage />} />
+            <Route index element={<Navigate to="/courses" replace />} />
+            <Route path="courses" element={<CatalogPage />} />
             <Route path="courses/new" element={<CreateCoursePage />} />
             <Route
               path="courses/:courseId/generate"
@@ -67,7 +66,6 @@ export default function App() {
               path="courses/:courseId/assessment"
               element={<AssessmentPage />}
             />
-            <Route path="my-courses" element={<MyCoursesPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="portfolio" element={<PortfolioPage />} />
           </Route>

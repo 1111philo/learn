@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCatalogStore } from '@/stores/catalog-store';
 import { CatalogCard } from '@/components/catalog/CatalogCard';
@@ -6,8 +6,10 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/ca
 import { Lock } from 'lucide-react';
 
 export function CatalogPage() {
-  const { courses, allCompleted, loading, error } = useCatalogStore();
+  const { courses, allCompleted, loading, error, load } = useCatalogStore();
   const navigate = useNavigate();
+
+  useEffect(() => { load(); }, [load]);
 
   const nameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -25,7 +27,7 @@ export function CatalogPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold">Course Catalog</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Courses</h1>
         <p className="text-muted-foreground">
           Browse courses or create your own
         </p>

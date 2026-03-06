@@ -18,7 +18,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate('/catalog', { replace: true });
+      navigate('/courses', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Login failed');
     } finally {

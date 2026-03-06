@@ -25,7 +25,7 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await register(email, password);
-      navigate('/catalog', { replace: true });
+      navigate('/courses', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Registration failed');
     } finally {
