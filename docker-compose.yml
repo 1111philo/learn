@@ -17,6 +17,7 @@ services:
 
   app:
     build: .
+    platform: linux/amd64
     ports:
       - "8001:8000"
     env_file:

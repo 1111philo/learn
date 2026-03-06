@@ -9,6 +9,9 @@ export interface ProfileData {
   tone_preference: string | null;
   skill_signals: { strengths: string[]; gaps: string[] };
   version: number;
+  career_interests: string[];
+  target_roles: string[];
+  portfolio_goals: string[];
 }
 
 export interface ProfileUpdateData {
@@ -18,6 +21,9 @@ export interface ProfileUpdateData {
   interests?: string[];
   learning_style?: string | null;
   tone_preference?: string | null;
+  career_interests?: string[];
+  target_roles?: string[];
+  portfolio_goals?: string[];
 }
 
 export function getProfile(): Promise<ProfileData> {

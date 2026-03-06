@@ -10,7 +10,7 @@ export function CoursePage() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { course, courseLoading: loading, loadCourse } = useCourseStore();
+  const { course, loadCourse } = useCourseStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function CoursePage() {
     navigate(`/courses/${courseId}/lessons/${idx}`, { replace: true });
   }, [course, courseId, location.pathname, navigate]);
 
-  if (loading || !course) {
+  if (!course) {
     return <p className="text-muted-foreground">Loading course...</p>;
   }
 

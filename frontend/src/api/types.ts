@@ -31,6 +31,10 @@ export interface CourseResponse {
   generated_description: string | null;
   lesson_titles: { lesson_title: string; lesson_summary: string }[] | null;
   status: CourseStatus;
+  professional_role: string | null;
+  career_context: string | null;
+  final_portfolio_outcome: string | null;
+  portfolio_artifact_id: string | null;
   lessons: LessonResponse[];
   assessments: AssessmentSummary[];
 }
@@ -62,6 +66,11 @@ export interface ActivitySpec {
   prompt: string;
   scoring_rubric: string[];
   hints: string[];
+  artifact_type?: string;
+  employer_skill_signals?: string[];
+  portfolio_eligible?: boolean;
+  revision_required?: boolean;
+  professional_quality_checklist?: string[];
 }
 
 export interface ActivityFeedback {
@@ -79,6 +88,9 @@ export interface ActivitySummary {
   latest_feedback: ActivityFeedback | null;
   mastery_decision: 'not_yet' | 'meets' | 'exceeds' | null;
   attempt_count: number;
+  portfolio_readiness: string | null;
+  revision_count: number;
+  portfolio_artifact_id: string | null;
 }
 
 /** Full activity from GET /activities/{id} (includes submissions + reviewing). */
@@ -99,6 +111,11 @@ export interface ActivityReviewResult {
   strengths: string[];
   improvements: string[];
   tips: string[];
+  portfolio_readiness?: string;
+  employer_relevance_notes?: string;
+  revision_priority?: string;
+  resume_bullet_seed?: string;
+  revision_encouraged?: boolean;
 }
 
 // ---- Assessment ----
@@ -194,4 +211,27 @@ export interface AssessmentReviewCompleteEvent {
 
 export interface AssessmentReviewErrorEvent {
   error: string;
+}
+
+// ---- Portfolio ----
+export interface PortfolioArtifact {
+  id: string;
+  course_instance_id: string;
+  lesson_id: string | null;
+  artifact_type: string;
+  title: string;
+  content_pointer: string | null;
+  status: 'draft' | 'revised' | 'portfolio_ready' | 'tool_ready';
+  skills: string[];
+  audience: string | null;
+  employer_use_case: string | null;
+  resume_bullet_seed: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioSummary {
+  artifacts: PortfolioArtifact[];
+  total: number;
+  by_status: Record<string, number>;
 }

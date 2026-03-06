@@ -10,6 +10,12 @@ class LessonPlanOutput(BaseModel):
     mastery_criteria: list[str] = Field(min_length=2, max_length=6)
     suggested_activity: "ActivitySeed"
     lesson_outline: list[str] = Field(min_length=3, max_length=10)
+    work_product: str | None = None
+    intended_audience: str | None = None
+    professional_scenario: str | None = None
+    challenge_level: str | None = None
+    scaffold_plan: str | None = None
+    portfolio_contribution: str | None = None
 
 
 class ActivitySeed(BaseModel):
@@ -18,6 +24,11 @@ class ActivitySeed(BaseModel):
     activity_type: str
     prompt: str
     expected_evidence: list[str] = Field(min_length=2, max_length=5)
+    artifact_type: str | None = None
+    employer_skill_signals: list[str] | None = None
+    portfolio_eligible: bool | None = None
+    revision_required: bool | None = None
+    professional_quality_checklist: list[str] | None = None
 
 
 class LessonContentOutput(BaseModel):

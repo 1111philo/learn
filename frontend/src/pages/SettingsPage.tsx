@@ -21,6 +21,9 @@ export function SettingsPage() {
   const [tonePreference, setTonePreference] = useState('');
   const [learningGoals, setLearningGoals] = useState('');
   const [interests, setInterests] = useState('');
+  const [careerInterests, setCareerInterests] = useState('');
+  const [targetRoles, setTargetRoles] = useState('');
+  const [portfolioGoals, setPortfolioGoals] = useState('');
 
   useEffect(() => {
     getProfile()
@@ -32,6 +35,9 @@ export function SettingsPage() {
         setTonePreference(p.tone_preference ?? '');
         setLearningGoals(p.learning_goals.join(', '));
         setInterests(p.interests.join(', '));
+        setCareerInterests((p.career_interests ?? []).join(', '));
+        setTargetRoles((p.target_roles ?? []).join(', '));
+        setPortfolioGoals((p.portfolio_goals ?? []).join(', '));
       })
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
@@ -53,6 +59,15 @@ export function SettingsPage() {
         : [],
       interests: interests
         ? interests.split(',').map((s) => s.trim()).filter(Boolean)
+        : [],
+      career_interests: careerInterests
+        ? careerInterests.split(',').map((s) => s.trim()).filter(Boolean)
+        : [],
+      target_roles: targetRoles
+        ? targetRoles.split(',').map((s) => s.trim()).filter(Boolean)
+        : [],
+      portfolio_goals: portfolioGoals
+        ? portfolioGoals.split(',').map((s) => s.trim()).filter(Boolean)
         : [],
     };
 
@@ -186,6 +201,53 @@ export function SettingsPage() {
             onChange={(e) => setInterests(e.target.value)}
             className={inputClass}
             placeholder="e.g., frontend, a11y, machine learning"
+          />
+          <p className="text-xs text-muted-foreground">Comma-separated</p>
+        </div>
+
+        <h2 className="text-lg font-semibold pt-4 border-t">Career & Portfolio</h2>
+
+        <div className="space-y-1">
+          <label htmlFor="career-interests" className="text-sm font-medium">
+            Career interests
+          </label>
+          <input
+            id="career-interests"
+            type="text"
+            value={careerInterests}
+            onChange={(e) => setCareerInterests(e.target.value)}
+            className={inputClass}
+            placeholder="e.g., data analysis, product management, UX design"
+          />
+          <p className="text-xs text-muted-foreground">Comma-separated</p>
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor="target-roles" className="text-sm font-medium">
+            Target roles
+          </label>
+          <input
+            id="target-roles"
+            type="text"
+            value={targetRoles}
+            onChange={(e) => setTargetRoles(e.target.value)}
+            className={inputClass}
+            placeholder="e.g., Junior Data Analyst, Content Strategist"
+          />
+          <p className="text-xs text-muted-foreground">Comma-separated</p>
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor="portfolio-goals" className="text-sm font-medium">
+            Portfolio goals
+          </label>
+          <input
+            id="portfolio-goals"
+            type="text"
+            value={portfolioGoals}
+            onChange={(e) => setPortfolioGoals(e.target.value)}
+            className={inputClass}
+            placeholder="e.g., Build 3 case studies, Create a prompt library"
           />
           <p className="text-xs text-muted-foreground">Comma-separated</p>
         </div>

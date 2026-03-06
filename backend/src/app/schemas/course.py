@@ -21,6 +21,10 @@ class CourseResponse(BaseModel):
     generated_description: str | None
     lesson_titles: list[dict] | None = None
     status: str
+    professional_role: str | None = None
+    career_context: str | None = None
+    final_portfolio_outcome: str | None = None
+    portfolio_artifact_id: str | None = None
     lessons: list["LessonResponse"] = []
     assessments: list["AssessmentSummary"] = []
 
@@ -44,6 +48,9 @@ class ActivitySummary(BaseModel):
     latest_feedback: dict | None
     mastery_decision: str | None
     attempt_count: int
+    portfolio_readiness: str | None = None
+    revision_count: int = 0
+    portfolio_artifact_id: str | None = None
 
     model_config = {"from_attributes": True}
 

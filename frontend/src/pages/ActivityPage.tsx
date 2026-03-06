@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCourseStore } from '@/stores/course-store';
 import { submitActivity, getActivity, connectReviewStream } from '@/api/activities';
+import { getArtifact } from '@/api/portfolio';
 import { ActivityPanel } from '@/components/activity/ActivityPanel';
 import { SubmissionForm } from '@/components/activity/SubmissionForm';
 import { FeedbackDisplay } from '@/components/activity/FeedbackDisplay';
@@ -17,9 +19,10 @@ export function ActivityPage() {
   const [feedback, setFeedback] = useState<ActivityReviewResult | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [portfolioContent, setPortfolioContent] = useState<string | undefined>(undefined);
   const cleanupRef = useRef<(() => void) | null>(null);
 
-  const lesson = course?.lessons[lessonIndex];
+  const lesson = course?.lessons.find((l) => l.objective_index === lessonIndex);
   const activity = lesson?.activity;
 
   // On mount, check if a review is in-flight via the REST endpoint
@@ -44,6 +47,21 @@ export function ActivityPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity?.id]);
+
+  // Load current portfolio content for the course (re-fetch on lesson change)
+  useEffect(() => {
+    if (!course?.portfolio_artifact_id) return;
+    let cancelled = false;
+    setPortfolioContent(undefined);
+    getArtifact(course.portfolio_artifact_id).then((artifact) => {
+      if (!cancelled) {
+        setPortfolioContent(artifact.content_pointer ?? undefined);
+      }
+    }).catch(() => {
+      // Portfolio not available — start with empty form
+    });
+    return () => { cancelled = true; };
+  }, [course?.portfolio_artifact_id, lessonIndex]);
 
   if (!course) return null;
 
@@ -117,10 +135,21 @@ export function ActivityPage() {
     }
   }
 
+  const lessonTitle = course?.lesson_titles?.[lessonIndex]?.lesson_title;
+
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold">Lesson {lessonIndex + 1} Activity</h2>
+        <button
+          onClick={() => navigate(`/courses/${courseId}/lessons/${lessonIndex}`)}
+          className="mb-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+          Back to lesson
+        </button>
+        <h2 className="text-lg font-semibold">
+          {lessonTitle ? `${lessonTitle} — Activity` : `Lesson ${lessonIndex + 1} Activity`}
+        </h2>
       </div>
 
       <section aria-labelledby="task-heading">
@@ -143,12 +172,28 @@ export function ActivityPage() {
             strengths={displayFeedback.strengths}
             improvements={displayFeedback.improvements}
             tips={displayFeedback.tips}
+            portfolioReadiness={displayFeedback.portfolio_readiness}
+            employerRelevanceNotes={displayFeedback.employer_relevance_notes}
+            resumeBulletSeed={displayFeedback.resume_bullet_seed}
           />
           <div className="flex flex-wrap gap-3 mt-4">
             {passed ? (
-              <Button onClick={handleContinue}>
-                {isLast ? 'Take Assessment' : 'Continue'}
-              </Button>
+              <>
+                <Button onClick={handleContinue}>
+                  {isLast ? 'Take Assessment' : 'Continue'}
+                </Button>
+                {displayFeedback.revision_encouraged && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setFeedback(null);
+                      setRetrying(true);
+                    }}
+                  >
+                    Revise for Portfolio Quality
+                  </Button>
+                )}
+              </>
             ) : (
               <Button
                 variant="outline"
@@ -165,7 +210,7 @@ export function ActivityPage() {
       ) : (
         <section aria-labelledby="response-heading">
           <h3 id="response-heading" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Your Response</h3>
-          <SubmissionForm onSubmit={handleSubmit} />
+          <SubmissionForm onSubmit={handleSubmit} initialValue={portfolioContent} />
           {error && <p role="alert" className="text-sm text-destructive mt-2">{error}</p>}
         </section>
       )}

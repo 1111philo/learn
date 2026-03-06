@@ -2,8 +2,9 @@ import { cn } from '@/lib/utils';
 import type { ObjectiveProgress } from '@/stores/generation-store';
 
 interface StepperItemProps {
-  index: number;
   objectiveLabel: string;
+  /** One-sentence lesson preview from the course describer, if available */
+  lessonSummary?: string;
   progress: ObjectiveProgress | undefined;
   /** True when we infer this objective is being worked on (sequential generation) */
   inferActive?: boolean;
@@ -27,7 +28,7 @@ function StepIcon({ done, active }: { done: boolean; active: boolean }) {
   );
 }
 
-export function StepperItem({ index, objectiveLabel, progress, inferActive }: StepperItemProps) {
+export function StepperItem({ objectiveLabel, lessonSummary, progress, inferActive }: StepperItemProps) {
   const p = progress ?? { planned: false, planTitle: null, written: false, activityCreated: false, activityId: null, error: null };
 
   const anyStarted = p.planned || p.written || p.activityCreated;
@@ -42,11 +43,15 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
         </div>
         <div className="pb-6">
           <p className="text-sm font-medium text-muted-foreground">
-            Objective {index + 1}: {objectiveLabel}
+            {objectiveLabel}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground/50 italic">
-            Generates when you reach this lesson
-          </p>
+          {lessonSummary ? (
+            <p className="mt-1 text-xs text-muted-foreground/70">{lessonSummary}</p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground/50 italic">
+              Generates when you reach this lesson
+            </p>
+          )}
         </div>
       </li>
     );
@@ -70,7 +75,7 @@ export function StepperItem({ index, objectiveLabel, progress, inferActive }: St
       </div>
       <div className="pb-6">
         <p className={cn('text-sm font-medium', allDone && 'text-green-700')}>
-          Objective {index + 1}: {objectiveLabel}
+          {objectiveLabel}
           {allDone && <span className="sr-only"> (complete)</span>}
           {isActive && !allDone && <span className="sr-only"> (in progress)</span>}
         </p>

@@ -36,6 +36,9 @@ class AssessmentReviewOutput(BaseModel):
     objective_scores: list[ObjectiveScore]
     pass_decision: str  # pass, fail
     next_steps: list[str] = Field(min_length=1)
+    portfolio_title: str | None = None
+    portfolio_description: str | None = None
+    portfolio_package_recommendation: list[str] | None = None
 
 
 class AssessmentResponse(BaseModel):

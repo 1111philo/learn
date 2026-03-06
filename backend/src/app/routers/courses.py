@@ -211,10 +211,15 @@ async def get_course(
         raise HTTPException(status_code=404, detail="Course not found")
 
     # Auto-heal zombie courses: stuck in "generating" with no active background task
+    # Only trigger if the course has been generating for more than 10 minutes to avoid
+    # false positives under slow environments (e.g. Rosetta emulation).
     if course.status == "generating" and not is_running(course_id):
-        course.status = "generation_failed"
-        await db.flush()
-        await db.commit()
+        from datetime import datetime, timezone, timedelta
+        age = datetime.now(timezone.utc) - (course.updated_at.replace(tzinfo=timezone.utc) if course.updated_at.tzinfo is None else course.updated_at)
+        if age > timedelta(minutes=10):
+            course.status = "generation_failed"
+            await db.flush()
+            await db.commit()
 
     from app.schemas.course import ActivitySummary, AssessmentSummary, CourseResponse, LessonResponse
 
@@ -226,6 +231,7 @@ async def get_course(
         generated_description=course.generated_description,
         lesson_titles=course.lesson_titles,
         status=course.status,
+        portfolio_artifact_id=course.portfolio_artifact_id,
         lessons=[
             LessonResponse(
                 id=l.id,

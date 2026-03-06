@@ -69,6 +69,10 @@ class LearnerProfile(Base):
 
     user: Mapped["User"] = relationship(back_populates="learner_profile")
 
+    career_interests: Mapped[list] = mapped_column(JSONB, default=list)
+    target_roles: Mapped[list] = mapped_column(JSONB, default=list)
+    portfolio_goals: Mapped[list] = mapped_column(JSONB, default=list)
+
     def to_agent_dict(self) -> dict:
         """Serialize profile fields for agent consumption."""
         return {
@@ -77,6 +81,9 @@ class LearnerProfile(Base):
             "interests": self.interests,
             "learning_style": self.learning_style,
             "tone_preference": self.tone_preference,
+            "career_interests": self.career_interests,
+            "target_roles": self.target_roles,
+            "portfolio_goals": self.portfolio_goals,
         }
 
 
@@ -108,8 +115,22 @@ class CourseInstance(Base):
     assessments: Mapped[list["Assessment"]] = relationship(
         back_populates="course_instance", cascade="all, delete-orphan"
     )
+    professional_role: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    career_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    final_portfolio_outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    portfolio_artifact_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("portfolio_artifacts.id", ondelete="SET NULL"), nullable=True
+    )
+
     agent_logs: Mapped[list["AgentLog"]] = relationship(
         back_populates="course_instance", cascade="all, delete-orphan"
+    )
+    portfolio_artifacts: Mapped[list["PortfolioArtifact"]] = relationship(
+        back_populates="course_instance", cascade="all, delete-orphan",
+        foreign_keys="PortfolioArtifact.course_instance_id",
+    )
+    portfolio_artifact: Mapped["PortfolioArtifact | None"] = relationship(
+        foreign_keys=[portfolio_artifact_id], post_update=True,
     )
 
 
@@ -144,8 +165,16 @@ class Activity(Base):
     latest_feedback: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     mastery_decision: Mapped[str | None] = mapped_column(String(20), nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    portfolio_artifact_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("portfolio_artifacts.id", ondelete="SET NULL"), nullable=True
+    )
+    portfolio_readiness: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    revision_count: Mapped[int] = mapped_column(Integer, default=0)
 
     lesson: Mapped["Lesson"] = relationship(back_populates="activities")
+    portfolio_artifact: Mapped["PortfolioArtifact | None"] = relationship(
+        back_populates="activity", foreign_keys=[portfolio_artifact_id]
+    )
 
 
 class Assessment(Base):
@@ -161,8 +190,53 @@ class Assessment(Base):
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     feedback: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    capstone_artifact_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("portfolio_artifacts.id", ondelete="SET NULL"), nullable=True
+    )
 
     course_instance: Mapped["CourseInstance"] = relationship(back_populates="assessments")
+    capstone_artifact: Mapped["PortfolioArtifact | None"] = relationship(
+        back_populates="assessment", foreign_keys=[capstone_artifact_id]
+    )
+
+
+class PortfolioArtifact(Base):
+    __tablename__ = "portfolio_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    course_instance_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("course_instances.id", ondelete="CASCADE"), nullable=False
+    )
+    lesson_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("lessons.id", ondelete="SET NULL"), nullable=True
+    )
+    artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_pointer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="draft")
+    skills: Mapped[list] = mapped_column(JSONB, default=list)
+    audience: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    employer_use_case: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resume_bullet_seed: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    user: Mapped["User"] = relationship()
+    course_instance: Mapped["CourseInstance"] = relationship(
+        back_populates="portfolio_artifacts", foreign_keys=[course_instance_id]
+    )
+    lesson: Mapped["Lesson | None"] = relationship()
+    activity: Mapped["Activity | None"] = relationship(
+        back_populates="portfolio_artifact", foreign_keys="Activity.portfolio_artifact_id"
+    )
+    assessment: Mapped["Assessment | None"] = relationship(
+        back_populates="capstone_artifact", foreign_keys="Assessment.capstone_artifact_id"
+    )
 
 
 class AgentLog(Base):

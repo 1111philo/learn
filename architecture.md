@@ -123,7 +123,7 @@ Any code that mutates a JSONB field must either reassign with a copy or call
 
 ---
 
-## Data Model (7 Entities)
+## Data Model (8 Entities)
 
 ```
 User
@@ -131,7 +131,9 @@ User
   ├── CourseInstance (one-to-many)
   │     ├── Lesson (one-to-many, ordered by objective_index)
   │     │     └── Activity (one-to-many)
-  │     └── Assessment (one-to-many)
+  │     ├── Assessment (one-to-many)
+  │     └── PortfolioArtifact (one-to-many)
+  ├── PortfolioArtifact (one-to-many, also FK to CourseInstance + Lesson)
   └── AgentLog (one-to-many)
 ```
 
@@ -156,6 +158,9 @@ User
 | learning_style | String | nullable |
 | tone_preference | String | nullable |
 | skill_signals | JSONB | `{strengths: [], gaps: []}` |
+| career_interests | JSONB | list of strings, default `[]` |
+| target_roles | JSONB | list of strings, default `[]` |
+| portfolio_goals | JSONB | list of strings, default `[]` |
 | version | Integer | default 1 |
 | updated_at | DateTime(tz) | auto-update |
 
@@ -171,6 +176,9 @@ User
 | generated_description | Text | nullable; set by course_describer agent (narrative arc, not a copy of input) |
 | lesson_titles | JSONB | nullable; `[{"lesson_title": str, "lesson_summary": str}, ...]` one per objective, index-aligned |
 | status | String(30) | see state machine below |
+| professional_role | String(255) | nullable; professional identity framing |
+| career_context | Text | nullable; career context for content |
+| final_portfolio_outcome | Text | nullable; description of final deliverable |
 | created_at | DateTime(tz) | |
 | updated_at | DateTime(tz) | |
 
@@ -195,6 +203,9 @@ User
 | latest_feedback | JSONB | nullable |
 | mastery_decision | String | nullable; `not_yet` / `meets` / `exceeds` |
 | attempt_count | Integer | default 0 |
+| portfolio_artifact_id | UUID FK → PortfolioArtifact | nullable |
+| portfolio_readiness | String(30) | nullable; `practice_only` / `emerging_portfolio_piece` / `portfolio_ready` |
+| revision_count | Integer | default 0 |
 
 ### Assessment
 | Field | Type | Notes |
@@ -207,6 +218,25 @@ User
 | passed | Boolean | nullable |
 | feedback | JSONB | nullable; per-objective scores and feedback |
 | status | String(20) | `pending` / `submitted` / `reviewed` |
+| capstone_artifact_id | UUID FK → PortfolioArtifact | nullable |
+
+### PortfolioArtifact
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| user_id | UUID FK → User | not null |
+| course_instance_id | UUID FK → CourseInstance | not null |
+| lesson_id | UUID FK → Lesson | nullable (null for capstone) |
+| artifact_type | String(50) | not null; type of portfolio artifact |
+| title | String(255) | not null |
+| content_pointer | Text | nullable; full artifact content |
+| status | String(30) | default `"draft"`; `draft` / `revised` / `portfolio_ready` / `tool_ready` |
+| skills | JSONB | list of strings, default `[]` |
+| audience | String(255) | nullable; intended audience |
+| employer_use_case | Text | nullable; employer relevance description |
+| resume_bullet_seed | Text | nullable; suggested resume bullet |
+| created_at | DateTime(tz) | |
+| updated_at | DateTime(tz) | auto-update |
 
 ### AgentLog
 | Field | Type | Notes |
@@ -272,8 +302,12 @@ Full request/response contracts for every endpoint are in **[api-contracts.md](a
 | POST | `/api/assessments/{id}/submit` | Submit assessment, get results |
 | GET | `/api/catalog` | List predefined courses |
 | POST | `/api/catalog/{id}/start` | Start a predefined course |
-| GET | `/api/profile` | Get learner profile |
-| PUT | `/api/profile` | Update learner profile |
+| GET | `/api/profile` | Get learner profile (incl. career fields) |
+| PUT | `/api/profile` | Update learner profile (incl. career fields) |
+| GET | `/api/portfolio` | List user's portfolio artifacts |
+| GET | `/api/portfolio/summary` | Portfolio stats and artifact list |
+| GET | `/api/portfolio/{id}` | Full artifact detail |
+| PATCH | `/api/portfolio/{id}` | Update artifact title or status |
 | GET | `/api/health` | Health check |
 
 ### Async Generation (Required)
@@ -416,13 +450,13 @@ Seven PydanticAI agents:
 
 | Agent | Input | Output | When Called | Model |
 |---|---|---|---|---|
-| `course_describer` | description, objectives, profile | narrative description + lesson title/summary per objective | Phase 0 of generation (once per course) | `fast_model` |
-| `lesson_planner` | objective, narrative description, all objectives, profile, optional preset title | lesson plan (structure, key concepts, activity seed) | During generation, per objective | `default_model` |
-| `lesson_writer` | lesson plan, profile | Markdown content + key takeaways | During generation, per objective | `default_model` |
-| `activity_creator` | activity seed, objective, mastery criteria | full activity spec (instructions, prompt, rubric, hints) | During generation, per objective | `default_model` |
-| `activity_reviewer` | submission text, rubric, objective | score, second-person feedback, mastery decision | On activity submission | `default_model` |
-| `assessment_creator` | all objectives, activity scores, profile | assessment items covering all objectives | When all lessons completed | `default_model` |
-| `assessment_reviewer` | submissions, assessment spec, objectives | per-objective scores, pass/fail, feedback | On assessment submission | `default_model` |
+| `course_describer` | description, objectives, profile | narrative description + lesson titles + professional_role, career_context, final_portfolio_outcome, objective_artifact_map | Phase 0 of generation (once per course) | `fast_model` |
+| `lesson_planner` | objective, narrative description, all objectives, profile, professional_role, career_context, artifact_type_hint, optional preset title | lesson plan (structure, key concepts, activity seed) + work_product, intended_audience, professional_scenario, challenge_level, scaffold_plan, portfolio_contribution | During generation, per objective | `default_model` |
+| `lesson_writer` | lesson plan, profile | Markdown content + key takeaways ("learn then apply" format with workplace examples) | During generation, per objective | `default_model` |
+| `activity_creator` | activity seed, objective, mastery criteria | full activity spec + artifact_type, employer_skill_signals, portfolio_eligible, professional_quality_checklist | During generation, per objective | `default_model` |
+| `activity_reviewer` | submission text, rubric, objective, professional_quality_checklist | score, feedback, mastery decision + portfolio_readiness, employer_relevance_notes, revision_priority, resume_bullet_seed | On activity submission | `default_model` |
+| `assessment_creator` | all objectives, activity scores, profile, final_portfolio_outcome, prior artifact summaries | capstone performance task covering all objectives | When all lessons completed | `default_model` |
+| `assessment_reviewer` | submissions, assessment spec, objectives | per-objective scores, pass/fail, feedback + portfolio_title, portfolio_description, portfolio_package_recommendation | On assessment submission | `default_model` |
 
 The `course_describer` runs first in Phase 0 before any lesson is generated. Its output:
 - Sets `course.generated_description` (a narrative description weaving all objectives into a coherent arc)
@@ -447,7 +481,7 @@ backend/
     main.py                # FastAPI app, lifespan, CORS, routers
     config.py              # Settings (pydantic-settings, reads .env)
     db/
-      models.py            # SQLAlchemy entities (7 tables)
+      models.py            # SQLAlchemy entities (8 tables, incl. PortfolioArtifact)
       session.py           # Engine, session factory, get_db_session, get_background_session
       migrations/          # Alembic
     agents/
@@ -459,23 +493,27 @@ backend/
       assessment.py        # creator + reviewer agents
       logging.py           # AgentContext, AgentTimer, run_agent helper, log_agent_call
     schemas/               # Pydantic I/O models
-      course_description.py  # CourseDescriptionOutput, LessonPreview
+      course_description.py  # CourseDescriptionOutput, LessonPreview, ObjectiveArtifactMapping
       lesson.py
       activity.py
       assessment.py
-      profile.py
-      course.py            # CourseResponse includes lesson_titles field
+      profile.py             # Includes career_interests, target_roles, portfolio_goals
+      course.py              # CourseResponse includes lesson_titles + professional role fields
+      portfolio.py           # PortfolioArtifactResponse, PortfolioSummary
     services/
-      generation.py        # Generation pipeline (sync + background variants)
+      generation.py        # Generation pipeline (threads professional context through agents)
       generation_tracker.py # In-process task registry + SSE pub/sub
       progression.py       # State machine + progress tracking
       catalog.py           # Predefined course loading
+      portfolio.py         # Portfolio artifact creation (from activity/assessment)
+      activity_review.py   # Activity review + revision loop + portfolio artifact creation
     routers/
       courses.py           # Includes SSE generation-stream endpoint
       activities.py
       assessments.py
       catalog.py
       profile.py
+      portfolio.py         # Portfolio CRUD endpoints
       health.py
     auth/
       dependencies.py      # get_current_user (JWT extraction, eagerly loads profile)

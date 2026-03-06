@@ -21,10 +21,20 @@ export function ActivityPanel({ spec }: ActivityPanelProps) {
 
   return (
     <div className="rounded-lg border bg-card p-4 sm:p-5 space-y-4">
-      {/* Activity type badge */}
-      <Badge variant="secondary" className="text-xs capitalize">
-        {spec.activity_type.replace(/_/g, ' ')}
-      </Badge>
+      {/* Activity type + portfolio badges */}
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="secondary" className="text-xs capitalize">
+          {spec.activity_type.replace(/_/g, ' ')}
+        </Badge>
+        {spec.portfolio_eligible && (
+          <Badge className="text-xs bg-green-100 text-green-700">Portfolio Eligible</Badge>
+        )}
+        {spec.artifact_type && (
+          <Badge variant="outline" className="text-xs capitalize">
+            {spec.artifact_type.replace(/_/g, ' ')}
+          </Badge>
+        )}
+      </div>
 
       {/* Prompt — hero */}
       <p className="text-base font-medium leading-snug">{spec.prompt}</p>
@@ -32,6 +42,30 @@ export function ActivityPanel({ spec }: ActivityPanelProps) {
       {/* Instructions — format/constraints, secondary */}
       {spec.instructions && (
         <p className="text-sm text-muted-foreground">{spec.instructions}</p>
+      )}
+
+      {/* Employer skill signals */}
+      {spec.employer_skill_signals && spec.employer_skill_signals.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <span className="text-xs text-muted-foreground mr-1">Workplace skills:</span>
+          {spec.employer_skill_signals.map((skill, i) => (
+            <Badge key={i} variant="outline" className="text-xs">
+              {skill}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Professional quality checklist */}
+      {spec.professional_quality_checklist && spec.professional_quality_checklist.length > 0 && (
+        <div className="rounded-md bg-muted px-3 py-2">
+          <p className="text-xs font-medium mb-1">For professional quality:</p>
+          <ul className="text-xs text-muted-foreground space-y-0.5">
+            {spec.professional_quality_checklist.map((item, i) => (
+              <li key={i}>• {item}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* Helper buttons */}

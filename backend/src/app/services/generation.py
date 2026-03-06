@@ -9,7 +9,7 @@ from app.agents.course_describer import run_course_describer
 from app.agents.lesson_planner import run_lesson_planner
 from app.agents.lesson_writer import run_lesson_writer
 from app.agents.activity_creator import run_activity_creator
-from app.db.models import CourseInstance, Lesson, Activity
+from app.db.models import CourseInstance, Lesson, Activity, PortfolioArtifact
 from app.db.session import get_background_session
 from app.services.generation_tracker import broadcast
 from app.services.progression import transition_course
@@ -27,6 +27,11 @@ async def _generate_single_objective(
     learner_profile: dict | None,
     semaphore: asyncio.Semaphore,
     preset_title: str | None = None,
+    lesson_summary: str | None = None,
+    professional_role: str | None = None,
+    career_context: str | None = None,
+    artifact_type_hint: str | None = None,
+    portfolio_content: str | None = None,
 ) -> bool:
     """Generate a single objective's lesson and activity.
 
@@ -91,7 +96,11 @@ async def _generate_single_objective(
             async with semaphore:
                 logger.info("[%s] %s running lesson_planner…", course_id_short, obj_label)
                 plan = await run_lesson_planner(
-                    ctx, objective, description, all_objectives, learner_profile, preset_title,
+                    ctx, objective, description, all_objectives, learner_profile,
+                    preset_title, lesson_summary, objective_index,
+                    professional_role=professional_role,
+                    career_context=career_context,
+                    artifact_type_hint=artifact_type_hint,
                 )
             logger.info(
                 "[%s] %s lesson_planner done → title: %r | concepts: %d | outline steps: %d",
@@ -153,6 +162,7 @@ async def _generate_single_objective(
                     activity_spec = await run_activity_creator(
                         ctx, plan.suggested_activity, objective,
                         plan.mastery_criteria, learner_profile,
+                        portfolio_content=portfolio_content,
                     )
                 activity = Activity(
                     lesson_id=lesson.id,
@@ -226,12 +236,41 @@ async def generate_course_background(
         description_output = await run_course_describer(ctx, description, objectives, learner_profile)
         course.generated_description = description_output.narrative_description
         course.lesson_titles = [lt.model_dump() for lt in description_output.lessons]
+        course.professional_role = description_output.professional_role
+        course.career_context = description_output.career_context
+        course.final_portfolio_outcome = description_output.final_portfolio_outcome
+
+        # Create the single portfolio artifact for this course
+        if description_output.final_portfolio_outcome:
+            artifact = PortfolioArtifact(
+                user_id=user_id,
+                course_instance_id=course_id,
+                lesson_id=None,
+                artifact_type="portfolio_outcome",
+                title=description_output.final_portfolio_outcome[:255],
+                content_pointer=None,
+                status="draft",
+                skills=[],
+            )
+            db.add(artifact)
+            await db.flush()
+            course.portfolio_artifact_id = artifact.id
+
         await db.flush()
         await db.commit()
 
     narrative = description_output.narrative_description
+    professional_role = description_output.professional_role
+    career_context = description_output.career_context
     lesson_titles_list = [lt.model_dump() for lt in description_output.lessons]
     preset_title_0 = lesson_titles_list[0]["lesson_title"] if lesson_titles_list else None
+    lesson_summary_0 = lesson_titles_list[0]["lesson_summary"] if lesson_titles_list else None
+
+    # Extract artifact type hint for lesson 0 from the objective-artifact map
+    artifact_map = description_output.objective_artifact_map or []
+    artifact_hint_0 = next(
+        (m.artifact_type for m in artifact_map if m.objective_index == 0), None
+    )
 
     await broadcast(course_id, "course_described", {
         "lesson_previews": [
@@ -250,6 +289,10 @@ async def generate_course_background(
             course_id, user_id, 0, objectives[0], narrative,
             objectives, learner_profile, asyncio.Semaphore(1),
             preset_title=preset_title_0,
+            lesson_summary=lesson_summary_0,
+            professional_role=professional_role,
+            career_context=career_context,
+            artifact_type_hint=artifact_hint_0,
         )
         lessons_created = 1 if success else 0
 
@@ -268,6 +311,9 @@ async def generate_course_background(
             course = result.scalar_one()
 
             if lessons_created > 0:
+                # If zombie-heal prematurely set generation_failed, recover
+                if course.status == "generation_failed":
+                    await transition_course(db, course, "generating")
                 await transition_course(db, course, "active")
                 await transition_course(db, course, "in_progress")
             else:
@@ -311,6 +357,11 @@ async def generate_lesson_on_demand(
     description: str,
     learner_profile: dict | None = None,
     preset_title: str | None = None,
+    lesson_summary: str | None = None,
+    professional_role: str | None = None,
+    career_context: str | None = None,
+    artifact_type_hint: str | None = None,
+    portfolio_content: str | None = None,
 ) -> None:
     """Generate a single lesson on demand when the learner unlocks it.
 
@@ -325,4 +376,9 @@ async def generate_lesson_on_demand(
         course_id, user_id, objective_index, objectives[objective_index],
         description, objectives, learner_profile, asyncio.Semaphore(1),
         preset_title=preset_title,
+        lesson_summary=lesson_summary,
+        professional_role=professional_role,
+        career_context=career_context,
+        artifact_type_hint=artifact_type_hint,
+        portfolio_content=portfolio_content,
     )

@@ -8,6 +8,9 @@ class ProfileUpdateRequest(BaseModel):
     interests: list[str] | None = None
     learning_style: str | None = None
     tone_preference: str | None = None
+    career_interests: list[str] | None = None
+    target_roles: list[str] | None = None
+    portfolio_goals: list[str] | None = None
 
 
 class ProfileResponse(BaseModel):
@@ -19,5 +22,8 @@ class ProfileResponse(BaseModel):
     tone_preference: str | None
     skill_signals: dict
     version: int
+    career_interests: list = []
+    target_roles: list = []
+    portfolio_goals: list = []
 
     model_config = {"from_attributes": True}

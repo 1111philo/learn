@@ -7,9 +7,10 @@ from sqlalchemy.orm import selectinload
 
 from app.agents.assessment import run_assessment_creator, run_assessment_reviewer
 from app.agents.logging import AgentContext
-from app.db.models import Assessment, CourseInstance, Lesson
+from app.db.models import Assessment, CourseInstance, Lesson, PortfolioArtifact
 from app.db.session import get_background_session
 from app.services.generation_tracker import broadcast
+from app.services.portfolio import create_capstone_artifact
 from app.services.progression import InvalidTransitionError, transition_course
 
 logger = logging.getLogger(__name__)
@@ -50,12 +51,30 @@ async def generate_assessment_background(
 
             await broadcast(key, "generating_assessment", {})
 
+            # Gather prior portfolio artifacts as context for the capstone
+            artifact_summaries = None
+            artifact_result = await db.execute(
+                select(PortfolioArtifact)
+                .where(
+                    PortfolioArtifact.course_instance_id == course_id,
+                    PortfolioArtifact.user_id == user_id,
+                )
+            )
+            artifacts = artifact_result.scalars().all()
+            if artifacts:
+                artifact_summaries = [
+                    {"title": a.title, "type": a.artifact_type, "status": a.status}
+                    for a in artifacts
+                ]
+
             spec = await run_assessment_creator(
                 ctx,
                 objectives=objectives,
                 course_description=description,
                 activity_scores=activity_scores,
                 learner_profile=learner_profile,
+                final_portfolio_outcome=course.final_portfolio_outcome,
+                artifact_summaries=artifact_summaries,
             )
 
             assessment = Assessment(
@@ -134,6 +153,9 @@ async def review_assessment_background(
                 "objective_scores": [s.model_dump() for s in review.objective_scores],
                 "pass_decision": review.pass_decision,
                 "next_steps": review.next_steps,
+                "portfolio_title": review.portfolio_title,
+                "portfolio_description": review.portfolio_description,
+                "portfolio_package_recommendation": review.portfolio_package_recommendation,
             }
             assessment.status = "reviewed"
             await db.flush()
@@ -152,6 +174,11 @@ async def review_assessment_background(
                     await transition_course(db, course, "completed")
                 except InvalidTransitionError:
                     pass
+
+                # Create capstone portfolio artifact
+                await create_capstone_artifact(
+                    db, user_id, assessment, review, course,
+                )
 
             await db.commit()
 

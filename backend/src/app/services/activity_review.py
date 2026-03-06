@@ -7,10 +7,11 @@ from sqlalchemy.orm import selectinload
 
 from app.agents.activity_reviewer import run_activity_reviewer
 from app.agents.logging import AgentContext
-from app.db.models import Activity, CourseInstance, Lesson, User
+from app.db.models import Activity, CourseInstance, Lesson, PortfolioArtifact, User
 from app.db.session import get_background_session
 from app.services.generation import generate_lesson_on_demand
 from app.services.generation_tracker import broadcast, is_running, start_generation
+from app.services.portfolio import update_course_artifact
 from app.services.progression import (
     check_all_lessons_completed,
     transition_course,
@@ -32,16 +33,32 @@ async def review_activity_background(
     activity_prompt: str,
     scoring_rubric: list[str],
     course_id: str,
+    professional_quality_checklist: list[str] | None = None,
 ) -> None:
     """Background task that reviews an activity submission via LLM."""
     key = review_key(activity_id)
 
     # Capture generation data before entering the DB session
-    next_lesson_to_generate: tuple[int, list[str], str, dict | None, str | None] | None = None
+    next_lesson_to_generate: tuple | None = None
 
     try:
         async with get_background_session() as db:
             ctx = AgentContext(db=db, user_id=user_id, course_instance_id=course_id)
+
+            # Fetch current portfolio content for context
+            portfolio_content_before: str | None = None
+            course_result = await db.execute(
+                select(CourseInstance).where(CourseInstance.id == course_id)
+            )
+            course_row = course_result.scalar_one()
+            if course_row.portfolio_artifact_id:
+                art_result = await db.execute(
+                    select(PortfolioArtifact)
+                    .where(PortfolioArtifact.id == course_row.portfolio_artifact_id)
+                )
+                art = art_result.scalar_one_or_none()
+                if art:
+                    portfolio_content_before = art.content_pointer
 
             review = await run_activity_reviewer(
                 ctx,
@@ -49,6 +66,8 @@ async def review_activity_background(
                 objective=objective,
                 activity_prompt=activity_prompt,
                 scoring_rubric=scoring_rubric,
+                professional_quality_checklist=professional_quality_checklist,
+                portfolio_content_before=portfolio_content_before,
             )
 
             # Load activity with lesson and course for updates
@@ -73,6 +92,13 @@ async def review_activity_background(
             }
             activity.mastery_decision = review.mastery_decision
             activity.attempt_count += 1
+
+            # Update portfolio readiness fields
+            activity.portfolio_readiness = review.portfolio_readiness
+            activity.revision_count += 1
+
+            # Update the course's single evolving portfolio artifact
+            await update_course_artifact(db, course, submission_text, review)
 
             # Mark lesson as completed and unlock next (only if mastery met)
             if lesson.status != "completed" and review.mastery_decision in ("meets", "exceeds"):
@@ -101,12 +127,21 @@ async def review_activity_background(
                         if next_idx < len(lt_list)
                         else None
                     )
+                    lesson_summary = (
+                        lt_list[next_idx]["lesson_summary"]
+                        if next_idx < len(lt_list)
+                        else None
+                    )
                     next_lesson_to_generate = (
                         next_lesson.objective_index,
                         list(course.input_objectives),
                         course.generated_description or course.input_description or "",
                         learner_profile,
                         preset_title,
+                        lesson_summary,
+                        course.professional_role,
+                        course.career_context,
+                        submission_text,  # latest portfolio content
                     )
 
                 if await check_all_lessons_completed(db, course.id):
@@ -129,7 +164,9 @@ async def review_activity_background(
 
         # Kick off on-demand generation after the session has committed
         if next_lesson_to_generate:
-            next_index, objectives, description, learner_profile, preset_title = next_lesson_to_generate
+            (next_index, objectives, description, learner_profile,
+             preset_title, lesson_summary, prof_role, career_ctx,
+             portfolio_cont) = next_lesson_to_generate
             gen_key = f"lesson-gen-{course_id}-{next_index}"
             if not is_running(gen_key):
                 logger.info(
@@ -144,7 +181,18 @@ async def review_activity_background(
                     description=description,
                     learner_profile=learner_profile,
                     preset_title=preset_title,
+                    lesson_summary=lesson_summary,
+                    professional_role=prof_role,
+                    career_context=career_ctx,
+                    portfolio_content=portfolio_cont,
                 ))
+
+        # Determine if revision should be encouraged
+        revision_encouraged = (
+            review.mastery_decision in ("meets", "exceeds")
+            and review.portfolio_readiness is not None
+            and review.portfolio_readiness != "portfolio_ready"
+        )
 
         # Broadcast review result AFTER commit
         await broadcast(key, "review_complete", {
@@ -154,6 +202,11 @@ async def review_activity_background(
             "strengths": review.strengths,
             "improvements": review.improvements,
             "tips": review.tips,
+            "portfolio_readiness": review.portfolio_readiness,
+            "employer_relevance_notes": review.employer_relevance_notes,
+            "revision_priority": review.revision_priority,
+            "resume_bullet_seed": review.resume_bullet_seed,
+            "revision_encouraged": revision_encouraged,
         })
 
     except Exception:

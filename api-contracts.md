@@ -480,6 +480,9 @@ Get full course details including all lessons (with activities) and assessments.
 | `generated_description`  | string or null| Narrative description set by course_describer agent (null before generation) |
 | `lesson_titles`          | array or null | Pre-computed `[{"lesson_title": str, "lesson_summary": str}]` one per objective, index-aligned; null before Phase 0 completes |
 | `status`                 | string        | Current course status                             |
+| `professional_role`      | string or null| Professional identity the learner practices (e.g., "Junior Web Developer") |
+| `career_context`         | string or null| Career framing for the course content            |
+| `final_portfolio_outcome`| string or null| Description of the final portfolio deliverable    |
 | `lessons`                | array         | List of LessonResponse objects (default `[]`)     |
 | `assessments`            | array         | List of AssessmentSummary objects (default `[]`)  |
 
@@ -497,31 +500,43 @@ Get full course details including all lessons (with activities) and assessments.
 
 | Field              | Type             | Description                                       |
 |--------------------|------------------|---------------------------------------------------|
-| `id`               | string           | UUID                                              |
-| `activity_spec`    | object or null   | AI-generated activity specification (see below)   |
-| `latest_score`     | number or null   | Most recent submission score (float, 0-100)       |
-| `latest_feedback`  | object or null   | Feedback object (see below)                       |
-| `mastery_decision` | string or null   | `"not_yet"`, `"meets"`, or `"exceeds"` (null if ungraded) |
-| `attempt_count`    | number (integer) | Number of submissions made                        |
+| `id`                    | string           | UUID                                              |
+| `activity_spec`         | object or null   | AI-generated activity specification (see below)   |
+| `latest_score`          | number or null   | Most recent submission score (float, 0-100)       |
+| `latest_feedback`       | object or null   | Feedback object (see below)                       |
+| `mastery_decision`      | string or null   | `"not_yet"`, `"meets"`, or `"exceeds"` (null if ungraded) |
+| `attempt_count`         | number (integer) | Number of submissions made                        |
+| `portfolio_readiness`   | string or null   | `"practice_only"`, `"emerging_portfolio_piece"`, or `"portfolio_ready"` |
+| `revision_count`        | number (integer) | Number of revision submissions (default 0)        |
+| `portfolio_artifact_id` | string or null   | UUID of the linked portfolio artifact (null if none) |
 
 **activity_spec shape** (when present):
 
 | Field             | Type     | Description                                   |
 |-------------------|----------|-----------------------------------------------|
-| `activity_type`   | string   | Type of activity (e.g., `"short_answer"`)     |
-| `instructions`    | string   | Detailed instructions (min 50 chars)          |
-| `prompt`          | string   | The question/task for the learner (min 20 chars) |
-| `scoring_rubric`  | string[] | 3-6 rubric criteria                           |
-| `hints`           | string[] | 2-5 hints for the learner                     |
+| `activity_type`                  | string        | Type of activity (e.g., `"short_answer"`)     |
+| `instructions`                   | string        | Detailed instructions (min 50 chars)          |
+| `prompt`                         | string        | The question/task for the learner (min 20 chars) |
+| `scoring_rubric`                 | string[]      | 3-6 rubric criteria                           |
+| `hints`                          | string[]      | 2-5 hints for the learner                     |
+| `artifact_type`                  | string or null| Type of portfolio artifact produced           |
+| `employer_skill_signals`         | string[] or null | Skills this activity demonstrates to employers |
+| `portfolio_eligible`             | boolean or null | Whether this activity can produce a portfolio artifact |
+| `revision_required`              | boolean or null | Whether revision is recommended for quality   |
+| `professional_quality_checklist` | string[] or null | Quality criteria for professional output      |
 
 **latest_feedback shape** (when present):
 
 | Field          | Type     | Description                    |
 |----------------|----------|--------------------------------|
-| `rationale`    | string   | Overall explanation of the score |
-| `strengths`    | string[] | What the learner did well      |
-| `improvements` | string[] | Areas for improvement          |
-| `tips`         | string[] | Actionable tips                |
+| `rationale`               | string          | Overall explanation of the score |
+| `strengths`               | string[]        | What the learner did well      |
+| `improvements`            | string[]        | Areas for improvement          |
+| `tips`                    | string[]        | Actionable tips                |
+| `portfolio_readiness`     | string or null  | `"practice_only"`, `"emerging_portfolio_piece"`, or `"portfolio_ready"` |
+| `employer_relevance_notes`| string or null  | How the work relates to employer expectations |
+| `revision_priority`       | string or null  | Priority level for revision    |
+| `resume_bullet_seed`      | string or null  | Suggested resume bullet point  |
 
 **AssessmentSummary fields:**
 
@@ -1000,7 +1015,10 @@ Get the authenticated user's learner profile. If no profile exists, one is creat
     "strengths": [],
     "gaps": []
   },
-  "version": 1
+  "version": 1,
+  "career_interests": [],
+  "target_roles": [],
+  "portfolio_goals": []
 }
 ```
 
@@ -1014,6 +1032,9 @@ Get the authenticated user's learner profile. If no profile exists, one is creat
 | `tone_preference`  | string or null | Preferred tone for content (max 50 chars)           |
 | `skill_signals`    | object         | AI-populated skill data (default `{"strengths": [], "gaps": []}`) |
 | `version`          | number (integer)| Profile version, incremented on each update         |
+| `career_interests` | array          | Career interest areas (default `[]`)                |
+| `target_roles`     | array          | Target job roles (default `[]`)                     |
+| `portfolio_goals`  | array          | Portfolio building goals (default `[]`)             |
 
 ---
 
@@ -1044,6 +1065,9 @@ Update the authenticated user's learner profile. Only fields included in the req
 | `interests`        | string[] or null    | No       | Interests list                       |
 | `learning_style`   | string or null      | No       | Preferred learning style             |
 | `tone_preference`  | string or null      | No       | Preferred content tone               |
+| `career_interests` | string[] or null    | No       | Career interest areas                |
+| `target_roles`     | string[] or null    | No       | Target job roles                     |
+| `portfolio_goals`  | string[] or null    | No       | Portfolio building goals             |
 
 **Response:** `200 OK` -- Same shape as `GET /api/profile` with updated values.
 
@@ -1059,12 +1083,164 @@ Update the authenticated user's learner profile. Only fields included in the req
     "strengths": [],
     "gaps": []
   },
-  "version": 2
+  "version": 2,
+  "career_interests": ["frontend development"],
+  "target_roles": ["Junior Web Developer"],
+  "portfolio_goals": ["Build accessible web apps"]
 }
 ```
 
 **Error responses:**
 - `422 Unprocessable Entity` -- Validation error.
+
+---
+
+### 7. Portfolio
+
+#### `GET /api/portfolio`
+
+List all portfolio artifacts for the authenticated user, ordered by most recently updated.
+
+**Auth:** Required
+
+**Response:** `200 OK` -- JSON array of portfolio artifacts.
+
+```json
+[
+  {
+    "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
+    "title": "WCAG Audit Checklist",
+    "artifact_type": "checklist",
+    "status": "portfolio_ready",
+    "skills": ["accessibility", "WCAG 2.1", "auditing"],
+    "course_instance_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+  }
+]
+```
+
+| Field                | Type     | Description                                      |
+|----------------------|----------|--------------------------------------------------|
+| `id`                 | string   | UUID                                             |
+| `title`              | string   | Artifact title                                   |
+| `artifact_type`      | string   | Type of artifact (e.g., checklist, draft, plan)  |
+| `status`             | string   | `"draft"`, `"revised"`, `"portfolio_ready"`, or `"tool_ready"` |
+| `skills`             | string[] | Skills demonstrated by this artifact             |
+| `course_instance_id` | string   | UUID of the course that produced this artifact   |
+
+---
+
+#### `GET /api/portfolio/summary`
+
+Get portfolio summary with aggregate stats.
+
+**Auth:** Required
+
+**Response:** `200 OK`
+
+```json
+{
+  "artifacts": [...],
+  "total": 5,
+  "by_status": {
+    "draft": 1,
+    "portfolio_ready": 3,
+    "tool_ready": 1
+  }
+}
+```
+
+| Field       | Type               | Description                              |
+|-------------|--------------------|------------------------------------------|
+| `artifacts` | array              | Same shape as `GET /api/portfolio`       |
+| `total`     | number (integer)   | Total number of artifacts                |
+| `by_status` | object             | Count of artifacts per status            |
+
+---
+
+#### `GET /api/portfolio/{artifact_id}`
+
+Get full details for a single portfolio artifact.
+
+**Auth:** Required
+
+**Path parameters:**
+
+| Param         | Type   | Description              |
+|---------------|--------|--------------------------|
+| `artifact_id` | string | UUID of the artifact     |
+
+**Response:** `200 OK`
+
+```json
+{
+  "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
+  "course_instance_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "lesson_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "artifact_type": "checklist",
+  "title": "WCAG Audit Checklist",
+  "content_pointer": "Full text of the artifact...",
+  "status": "portfolio_ready",
+  "skills": ["accessibility", "WCAG 2.1"],
+  "audience": "QA teams",
+  "employer_use_case": "Demonstrates ability to create practical audit tools",
+  "resume_bullet_seed": "Created a WCAG 2.1 audit checklist covering 15 criteria",
+  "created_at": "2026-03-06T10:00:00Z",
+  "updated_at": "2026-03-06T12:00:00Z"
+}
+```
+
+| Field                | Type            | Description                                      |
+|----------------------|-----------------|--------------------------------------------------|
+| `id`                 | string          | UUID                                             |
+| `course_instance_id` | string          | UUID of the parent course                        |
+| `lesson_id`          | string or null  | UUID of the lesson (null for capstone artifacts) |
+| `artifact_type`      | string          | Type of artifact                                 |
+| `title`              | string          | Artifact title                                   |
+| `content_pointer`    | string or null  | Full content text                                |
+| `status`             | string          | Current artifact status                          |
+| `skills`             | string[]        | Skills demonstrated                              |
+| `audience`           | string or null  | Intended audience                                |
+| `employer_use_case`  | string or null  | Employer relevance description                   |
+| `resume_bullet_seed` | string or null  | Suggested resume bullet point                    |
+| `created_at`         | string          | ISO 8601 timestamp                               |
+| `updated_at`         | string          | ISO 8601 timestamp                               |
+
+**Error responses:**
+- `404 Not Found` -- `{"detail": "Artifact not found"}`
+
+---
+
+#### `PATCH /api/portfolio/{artifact_id}`
+
+Update an artifact's title or status.
+
+**Auth:** Required
+
+**Path parameters:**
+
+| Param         | Type   | Description              |
+|---------------|--------|--------------------------|
+| `artifact_id` | string | UUID of the artifact     |
+
+**Request body** (all fields optional):
+
+```json
+{
+  "title": "Updated Title",
+  "status": "tool_ready"
+}
+```
+
+| Field    | Type           | Required | Description                                    |
+|----------|----------------|----------|------------------------------------------------|
+| `title`  | string or null | No       | New artifact title                             |
+| `status` | string or null | No       | New status (must be one of: draft, revised, portfolio_ready, tool_ready) |
+
+**Response:** `200 OK` -- Same shape as `GET /api/portfolio/{artifact_id}`.
+
+**Error responses:**
+- `404 Not Found` -- `{"detail": "Artifact not found"}`
+- `400 Bad Request` -- `{"detail": "Invalid status. Must be one of: {...}"}`
 
 ---
 

@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/catalog', label: 'Catalog' },
   { to: '/my-courses', label: 'My Courses' },
   { to: '/agent-logs', label: 'Agent Logs' },
+  { to: '/portfolio', label: 'Portfolio' },
 ];
 
 export function NavBar() {

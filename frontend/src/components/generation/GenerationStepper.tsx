@@ -80,12 +80,12 @@ export function GenerationStepper({ objectives, lessonPreviews, courseDescribed,
         {indices.map((i) => (
           <StepperItem
             key={i}
-            index={i}
             objectiveLabel={
               courseDescribed && lessonPreviews[i]
                 ? lessonPreviews[i].title
                 : (objectives[i] ?? `Objective ${i + 1}`)
             }
+            lessonSummary={courseDescribed && lessonPreviews[i] ? lessonPreviews[i].summary : undefined}
             progress={progress.get(i)}
             inferActive={i === inferredActiveIndex}
           />

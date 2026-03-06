@@ -12,9 +12,24 @@ interface FeedbackDisplayProps {
   strengths: string[];
   improvements: string[];
   tips: string[];
+  portfolioReadiness?: string;
+  employerRelevanceNotes?: string;
+  resumeBulletSeed?: string;
 }
 
 type ModalPanel = 'strengths' | 'improvements' | 'tips';
+
+const PORTFOLIO_LABELS: Record<string, string> = {
+  practice_only: 'Practice',
+  emerging_portfolio_piece: 'Emerging',
+  portfolio_ready: 'Portfolio Ready',
+};
+
+const PORTFOLIO_COLORS: Record<string, string> = {
+  practice_only: 'bg-gray-100 text-gray-700',
+  emerging_portfolio_piece: 'bg-yellow-100 text-yellow-700',
+  portfolio_ready: 'bg-green-100 text-green-700',
+};
 
 export function FeedbackDisplay({
   score,
@@ -23,6 +38,9 @@ export function FeedbackDisplay({
   strengths,
   improvements,
   tips,
+  portfolioReadiness,
+  employerRelevanceNotes,
+  resumeBulletSeed,
 }: FeedbackDisplayProps) {
   const [open, setOpen] = useState<ModalPanel | null>(null);
 
@@ -48,6 +66,11 @@ export function FeedbackDisplay({
         <Badge className={`ml-1 ${MASTERY_COLORS[mastery] ?? ''}`}>
           {MASTERY_LABELS[mastery] ?? mastery}
         </Badge>
+        {portfolioReadiness && (
+          <Badge className={`ml-1 ${PORTFOLIO_COLORS[portfolioReadiness] ?? ''}`}>
+            {PORTFOLIO_LABELS[portfolioReadiness] ?? portfolioReadiness}
+          </Badge>
+        )}
       </div>
 
       {/* Rationale */}
@@ -55,6 +78,22 @@ export function FeedbackDisplay({
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50 mb-1">Rationale</p>
         <p className="text-sm leading-relaxed border-l-2 pl-3">{rationale}</p>
       </div>
+
+      {/* Employer relevance */}
+      {employerRelevanceNotes && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50 mb-1">Employer Relevance</p>
+          <p className="text-sm leading-relaxed border-l-2 border-blue-200 pl-3">{employerRelevanceNotes}</p>
+        </div>
+      )}
+
+      {/* Resume bullet */}
+      {resumeBulletSeed && (
+        <div className="rounded-md bg-green-50 px-3 py-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-700 mb-1">Resume Bullet</p>
+          <p className="text-sm text-green-800">{resumeBulletSeed}</p>
+        </div>
+      )}
 
       {/* Detail buttons */}
       <div className="flex flex-wrap gap-2 border-t pt-3">

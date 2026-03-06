@@ -1,14 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 interface SubmissionFormProps {
   onSubmit: (text: string) => Promise<void>;
+  initialValue?: string;
 }
 
-export function SubmissionForm({ onSubmit }: SubmissionFormProps) {
-  const [text, setText] = useState('');
+export function SubmissionForm({ onSubmit, initialValue = '' }: SubmissionFormProps) {
+  const [text, setText] = useState(initialValue);
   const [submitting, setSubmitting] = useState(false);
+
+  // Sync when initialValue loads asynchronously (e.g., portfolio content fetch)
+  useEffect(() => {
+    setText(initialValue);
+  }, [initialValue]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,7 +37,7 @@ export function SubmissionForm({ onSubmit }: SubmissionFormProps) {
         placeholder="Type your response..."
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={6}
+        rows={12}
         disabled={submitting}
         aria-label="Your response"
       />

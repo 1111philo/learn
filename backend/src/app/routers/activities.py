@@ -68,6 +68,9 @@ async def get_activity(
         attempt_count=activity.attempt_count,
         submissions=activity.submissions or [],
         reviewing=is_running(key),
+        portfolio_readiness=activity.portfolio_readiness,
+        revision_count=activity.revision_count,
+        portfolio_artifact_id=activity.portfolio_artifact_id,
     )
 
 
@@ -126,6 +129,7 @@ async def submit_activity(
             activity_prompt=spec.get("prompt", ""),
             scoring_rubric=spec.get("scoring_rubric", []),
             course_id=course.id,
+            professional_quality_checklist=spec.get("professional_quality_checklist"),
         ),
         conflict_detail="Review already in progress",
     )
