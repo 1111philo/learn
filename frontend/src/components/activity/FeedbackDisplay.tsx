@@ -1,4 +1,8 @@
+import { useState } from 'react';
+import { Dialog } from 'radix-ui';
+import { XIcon, ThumbsUpIcon, TrendingUpIcon, SparklesIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { MASTERY_LABELS, MASTERY_COLORS } from '@/lib/constants';
 
 interface FeedbackDisplayProps {
@@ -10,6 +14,8 @@ interface FeedbackDisplayProps {
   tips: string[];
 }
 
+type ModalPanel = 'strengths' | 'improvements' | 'tips';
+
 export function FeedbackDisplay({
   score,
   mastery,
@@ -18,6 +24,8 @@ export function FeedbackDisplay({
   improvements,
   tips,
 }: FeedbackDisplayProps) {
+  const [open, setOpen] = useState<ModalPanel | null>(null);
+
   const scoreColor =
     score >= 80
       ? 'text-green-600'
@@ -25,50 +33,78 @@ export function FeedbackDisplay({
         ? 'text-yellow-600'
         : 'text-red-600';
 
+  const panels: Record<ModalPanel, { title: string; items: string[]; icon: string }> = {
+    strengths:    { title: 'Strengths',    items: strengths,    icon: '✓' },
+    improvements: { title: 'Improvements', items: improvements, icon: '△' },
+    tips:         { title: 'Tips',         items: tips,         icon: '→' },
+  };
+
   return (
-    <div className="space-y-4 rounded-lg border p-3 sm:p-4">
-      <div className="flex items-center gap-3">
-        <span className={`text-2xl sm:text-3xl font-bold ${scoreColor}`}>{score}</span>
-        <span className="text-sm text-muted-foreground">/ 100</span>
-        <Badge className={MASTERY_COLORS[mastery] ?? ''}>
+    <div className="rounded-lg border bg-card p-4 sm:p-5 space-y-4">
+      {/* Score + mastery */}
+      <div className="flex items-baseline gap-2">
+        <span className={`text-3xl font-bold tabular-nums ${scoreColor}`}>{score}</span>
+        <span className="text-sm text-foreground/50">/ 100</span>
+        <Badge className={`ml-1 ${MASTERY_COLORS[mastery] ?? ''}`}>
           {MASTERY_LABELS[mastery] ?? mastery}
         </Badge>
       </div>
 
-      <p className="text-sm">{rationale}</p>
+      {/* Rationale */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50 mb-1">Rationale</p>
+        <p className="text-sm leading-relaxed border-l-2 pl-3">{rationale}</p>
+      </div>
 
-      {strengths.length > 0 && (
-        <div>
-          <p className="text-sm font-medium text-green-700">Strengths</p>
-          <ul className="ml-4 list-disc text-sm">
-            {strengths.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Detail buttons */}
+      <div className="flex flex-wrap gap-2 border-t pt-3">
+        {strengths.length > 0 && (
+          <Button type="button" variant="outline" size="sm" className="cursor-pointer text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700" onClick={() => setOpen('strengths')}>
+            <ThumbsUpIcon />
+            Strengths
+          </Button>
+        )}
+        {improvements.length > 0 && (
+          <Button type="button" variant="outline" size="sm" className="cursor-pointer text-yellow-600 border-yellow-200 hover:bg-yellow-50 hover:text-yellow-700" onClick={() => setOpen('improvements')}>
+            <TrendingUpIcon />
+            Improvements
+          </Button>
+        )}
+        {tips.length > 0 && (
+          <Button type="button" variant="outline" size="sm" className="cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700" onClick={() => setOpen('tips')}>
+            <SparklesIcon />
+            Tips
+          </Button>
+        )}
+      </div>
 
-      {improvements.length > 0 && (
-        <div>
-          <p className="text-sm font-medium text-yellow-700">Improvements</p>
-          <ul className="ml-4 list-disc text-sm">
-            {improvements.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {tips.length > 0 && (
-        <div>
-          <p className="text-sm font-medium text-blue-700">Tips</p>
-          <ul className="ml-4 list-disc text-sm">
-            {tips.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Modal */}
+      <Dialog.Root open={open !== null} onOpenChange={(o) => { if (!o) setOpen(null); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <div className="flex items-center justify-between mb-4">
+              <Dialog.Title className="text-sm font-semibold">
+                {open ? panels[open].title : ''}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6 cursor-pointer">
+                  <XIcon className="h-3.5 w-3.5" />
+                  <span className="sr-only">Close</span>
+                </Button>
+              </Dialog.Close>
+            </div>
+            <ul className="space-y-2">
+              {open && panels[open].items.map((item, i) => (
+                <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                  <span className="mt-0.5 shrink-0 font-medium text-foreground/40">{panels[open].icon}</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

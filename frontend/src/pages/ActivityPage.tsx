@@ -118,12 +118,15 @@ export function ActivityPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">
-        Lesson {lessonIndex + 1} Activity
-      </h2>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-lg font-semibold">Lesson {lessonIndex + 1} Activity</h2>
+      </div>
 
-      <ActivityPanel spec={activity.activity_spec} />
+      <section aria-labelledby="task-heading">
+        <h3 id="task-heading" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Your Task</h3>
+        <ActivityPanel spec={activity.activity_spec} />
+      </section>
 
       {reviewing ? (
         <div role="status" aria-live="polite" className="flex items-center gap-3 text-muted-foreground">
@@ -131,7 +134,8 @@ export function ActivityPage() {
           Reviewing your submission...
         </div>
       ) : displayFeedback ? (
-        <>
+        <section aria-labelledby="feedback-heading">
+          <h3 id="feedback-heading" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Feedback</h3>
           <FeedbackDisplay
             score={displayFeedback.score}
             mastery={displayFeedback.mastery_decision}
@@ -140,7 +144,7 @@ export function ActivityPage() {
             improvements={displayFeedback.improvements}
             tips={displayFeedback.tips}
           />
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 mt-4">
             {passed ? (
               <Button onClick={handleContinue}>
                 {isLast ? 'Take Assessment' : 'Continue'}
@@ -157,12 +161,13 @@ export function ActivityPage() {
               </Button>
             )}
           </div>
-        </>
+        </section>
       ) : (
-        <>
+        <section aria-labelledby="response-heading">
+          <h3 id="response-heading" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Your Response</h3>
           <SubmissionForm onSubmit={handleSubmit} />
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        </>
+          {error && <p role="alert" className="text-sm text-destructive mt-2">{error}</p>}
+        </section>
       )}
     </div>
   );
