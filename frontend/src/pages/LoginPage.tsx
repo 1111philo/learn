@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/api/client';
+import logoSvg from '@/assets/logo.svg';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center">
-          <img src="/logo.svg" alt="1111 School" className="mx-auto h-20 w-20 rounded-lg" />
+          <img src={logoSvg} alt="1111 School" className="mx-auto h-20 w-20 rounded-lg" />
           <p className="mt-3 text-sm text-muted-foreground">Sign in to your account</p>
         </div>
 

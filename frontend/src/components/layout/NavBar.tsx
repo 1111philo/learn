@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import logoSvg from '@/assets/logo.svg';
 import { useAuthStore } from '@/stores/auth-store';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
@@ -20,7 +21,7 @@ export function NavBar() {
     <header className="border-b bg-white">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
         <Link to="/catalog" className="flex items-center gap-2">
-          <img src="/logo.svg" alt="1111 School" className="h-8 w-8 rounded" />
+          <img src={logoSvg} alt="1111 School" className="h-8 w-8 rounded" />
           <span className="text-lg font-bold tracking-tight">1111 School</span>
         </Link>
 
