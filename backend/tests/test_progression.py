@@ -109,8 +109,11 @@ async def test_guard_assessment_generated(db_session: AsyncSession):
 
 async def test_guard_assessment_passed(db_session: AsyncSession):
     user = await _make_user(db_session)
-    assessment = Assessment(status="reviewed", passed=True)
-    course = await _make_course(db_session, user.id, status="assessment_ready", assessments=[assessment])
+    course = await _make_course(db_session, user.id, status="assessment_ready", assessments=[])
+    assessment = Assessment(course_instance_id=course.id, status="reviewed", passed=True)
+    db_session.add(assessment)
+    await db_session.flush()
+    course.assessments.append(assessment)
     assert await check_guard(db_session, course, "assessment_passed") is True
 
     assessment.passed = False
@@ -135,8 +138,7 @@ async def test_invalid_transition_raises(db_session: AsyncSession):
 
 async def test_guard_failure_raises(db_session: AsyncSession):
     user = await _make_user(db_session)
-    course = await _make_course(db_session, user.id, status="generating", input_objectives=["Obj 1"])
-    course.lessons = []
+    course = await _make_course(db_session, user.id, status="generating", input_objectives=["Obj 1"], lessons=[])
     with pytest.raises(InvalidTransitionError, match="Guard"):
         await transition_course(db_session, course, "active")
 
