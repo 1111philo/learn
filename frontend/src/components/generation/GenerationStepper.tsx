@@ -55,7 +55,24 @@ export function GenerationStepper({ objectives, lessonPreviews, courseDescribed,
         <div className="pb-4">
           <p className={cn('text-sm font-medium', courseDescribed && 'text-green-700')}>
             {courseDescribed ? 'Course described' : 'Describing your course...'}
+            {courseDescribed && <span className="sr-only"> (complete)</span>}
           </p>
+          {!courseDescribed && generating && (
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span aria-hidden="true" className="animate-spin text-primary">&#9696;</span>
+                <span>Building narrative arc and lesson titles...</span>
+              </div>
+            </div>
+          )}
+          {courseDescribed && (
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span aria-hidden="true" className="text-green-600">&#10003;</span>
+                <span>Narrative arc and lesson titles ready</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
