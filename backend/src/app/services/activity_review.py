@@ -37,7 +37,7 @@ async def review_activity_background(
     key = review_key(activity_id)
 
     # Capture generation data before entering the DB session
-    next_lesson_to_generate: tuple[int, list[str], str, dict | None] | None = None
+    next_lesson_to_generate: tuple[int, list[str], str, dict | None, str | None] | None = None
 
     try:
         async with get_background_session() as db:
@@ -94,11 +94,19 @@ async def review_activity_background(
                         if user_obj and user_obj.learner_profile
                         else None
                     )
+                    lt_list = course.lesson_titles or []
+                    next_idx = next_lesson.objective_index
+                    preset_title = (
+                        lt_list[next_idx]["lesson_title"]
+                        if next_idx < len(lt_list)
+                        else None
+                    )
                     next_lesson_to_generate = (
                         next_lesson.objective_index,
                         list(course.input_objectives),
                         course.generated_description or course.input_description or "",
                         learner_profile,
+                        preset_title,
                     )
 
                 if await check_all_lessons_completed(db, course.id):
@@ -121,7 +129,7 @@ async def review_activity_background(
 
         # Kick off on-demand generation after the session has committed
         if next_lesson_to_generate:
-            next_index, objectives, description, learner_profile = next_lesson_to_generate
+            next_index, objectives, description, learner_profile, preset_title = next_lesson_to_generate
             gen_key = f"lesson-gen-{course_id}-{next_index}"
             if not is_running(gen_key):
                 logger.info(
@@ -135,6 +143,7 @@ async def review_activity_background(
                     objectives=objectives,
                     description=description,
                     learner_profile=learner_profile,
+                    preset_title=preset_title,
                 ))
 
         # Broadcast review result AFTER commit

@@ -29,6 +29,7 @@ export interface CourseResponse {
   input_description: string | null;
   input_objectives: string[];
   generated_description: string | null;
+  lesson_titles: { lesson_title: string; lesson_summary: string }[] | null;
   status: CourseStatus;
   lessons: LessonResponse[];
   assessments: AssessmentSummary[];
@@ -148,6 +149,11 @@ export interface AgentLog {
 }
 
 // ---- SSE Events ----
+export interface CourseDescribedEvent {
+  lesson_previews: { index: number; title: string; summary: string }[];
+  narrative_description: string;
+}
+
 export interface LessonPlannedEvent {
   objective_index: number;
   lesson_title: string;

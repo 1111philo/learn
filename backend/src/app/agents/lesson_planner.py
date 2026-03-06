@@ -46,11 +46,14 @@ async def run_lesson_planner(
     course_description: str,
     all_objectives: list[str] | None = None,
     learner_profile: dict | None = None,
+    preset_title: str | None = None,
 ) -> LessonPlanOutput:
     prompt = (
         f"Course description: {course_description}\n\n"
         f"Learning objective for THIS lesson: {objective}\n"
     )
+    if preset_title:
+        prompt += f"\nThis lesson must be titled exactly: {preset_title}\n"
     if all_objectives:
         other = [o for o in all_objectives if o != objective]
         if other:

@@ -356,7 +356,9 @@ broadcast via the SSE stream endpoint.
 
 **Behavior details:**
 - Validates course state, transitions to `generating`, commits, spawns background task, returns.
-- Background task runs lesson_planner -> lesson_writer -> activity_creator per objective.
+- Background task runs in two phases:
+  - **Phase 0** — `course_describer` agent runs first, sets `generated_description` (narrative arc) and `lesson_titles` (preset title + summary per objective) on the course, then broadcasts `course_described`.
+  - **Phase 1+** — `lesson_planner -> lesson_writer -> activity_creator` for lesson 0; remaining lessons are generated on demand as the learner completes activities.
 - Each lesson is committed as it completes (visible to `GET /courses/{id}` immediately).
 - If a single objective fails, the error is logged and the pipeline continues with remaining objectives.
 - On completion: transitions to `in_progress` if at least one lesson was created, otherwise `generation_failed`.
@@ -427,7 +429,12 @@ Get full course details including all lessons (with activities) and assessments.
     "Implement ARIA attributes correctly",
     "Test for accessibility with screen readers"
   ],
-  "generated_description": "A course on modern web accessibility practices",
+  "generated_description": "A narrative arc that weaves all objectives into a coherent learning journey...",
+  "lesson_titles": [
+    {"lesson_title": "Understanding WCAG 2.1", "lesson_summary": "Explore the four POUR principles that underpin all accessibility standards."},
+    {"lesson_title": "ARIA in Practice", "lesson_summary": "Apply semantic markup so assistive technologies can interpret your UI."},
+    {"lesson_title": "Testing with Screen Readers", "lesson_summary": "Validate your implementation by running NVDA and VoiceOver against real pages."}
+  ],
   "status": "in_progress",
   "lessons": [
     {
@@ -470,7 +477,8 @@ Get full course details including all lessons (with activities) and assessments.
 | `source_type`            | string        | `"custom"` or `"predefined"`                      |
 | `input_description`      | string or null| Description provided at creation                  |
 | `input_objectives`       | array         | List of objective strings (JSON array)             |
-| `generated_description`  | string or null| AI-generated or copied description (null before generation) |
+| `generated_description`  | string or null| Narrative description set by course_describer agent (null before generation) |
+| `lesson_titles`          | array or null | Pre-computed `[{"lesson_title": str, "lesson_summary": str}]` one per objective, index-aligned; null before Phase 0 completes |
 | `status`                 | string        | Current course status                             |
 | `lessons`                | array         | List of LessonResponse objects (default `[]`)     |
 | `assessments`            | array         | List of AssessmentSummary objects (default `[]`)  |
@@ -626,6 +634,25 @@ data: <json_payload>
 
 **Event types:**
 
+##### `course_described`
+
+Fired once, before any lesson events, when the course describer agent completes Phase 0. Carries the full list of lesson titles/summaries so the frontend can populate the generation stepper immediately.
+
+```
+event: course_described
+data: {"lesson_previews": [{"index": 0, "title": "Understanding WCAG 2.1", "summary": "Explore the four POUR principles..."}, ...], "narrative_description": "..."}
+```
+
+| Field                          | Type            | Description                                                                 |
+|--------------------------------|-----------------|-----------------------------------------------------------------------------|
+| `lesson_previews`              | array           | One entry per objective, in order                                           |
+| `lesson_previews[].index`      | number (integer)| Zero-based objective index                                                  |
+| `lesson_previews[].title`      | string          | Pre-set lesson title (used as the lesson's final title)                     |
+| `lesson_previews[].summary`    | string          | One-sentence preview shown in the generation stepper                        |
+| `narrative_description`        | string          | The full narrative description stored in `course.generated_description`     |
+
+Also sent as a **catchup event** when a client connects to the stream after Phase 0 has completed (i.e., `course.lesson_titles` is set in the DB).
+
 ##### `lesson_planned`
 
 Fired when a lesson plan is completed for an objective.
@@ -697,8 +724,8 @@ data: {"objective_index": 2, "error": "Failed to generate lesson for objective 2
 | `error`           | string          | Human-readable error message           |
 
 **Reconnection behavior:**
-- If the client connects after generation is already complete, the server sends all events as catchup followed by a `generation_complete` event, then closes the stream.
-- If the client connects while generation is in-flight, the server sends catchup events for already-completed steps, then streams live events as they occur.
+- If the client connects after generation is already complete, the server sends all events as catchup (starting with `course_described` if Phase 0 finished) followed by a `generation_complete` event, then closes the stream.
+- If the client connects while generation is in-flight, the server sends `course_described` first (if Phase 0 finished), then catchup events for already-completed lesson steps, then streams live events as they occur.
 - Standard SSE reconnection: the client should reconnect automatically on disconnect; the server replays relevant events.
 
 ---

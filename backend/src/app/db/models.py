@@ -92,6 +92,7 @@ class CourseInstance(Base):
     input_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     input_objectives: Mapped[list] = mapped_column(JSONB, default=list)
     generated_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lesson_titles: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

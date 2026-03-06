@@ -10,6 +10,8 @@ export function GenerationPage() {
   const navigate = useNavigate();
   const {
     objectives,
+    lessonPreviews,
+    courseDescribed,
     progress,
     courseStatus,
     complete,
@@ -75,7 +77,10 @@ export function GenerationPage() {
 
   // Pick the right heading and subtitle based on actual state
   let heading = 'Generating Your Course';
-  let subtitle = 'Creating personalized lessons for each objective...';
+  const isDescribing = !complete && !courseDescribed && courseStatus === 'generating';
+  let subtitle = isDescribing
+    ? 'Crafting a narrative for your course...'
+    : 'Creating personalized lessons for each objective...';
 
   if (isZombie) {
     heading = 'Generation Interrupted';
@@ -102,7 +107,13 @@ export function GenerationPage() {
       </div>
 
       {(objectives.length > 0 || progress.size > 0) && !isZombie && (
-        <GenerationStepper objectives={objectives} progress={progress} generating={!complete} />
+        <GenerationStepper
+          objectives={objectives}
+          lessonPreviews={lessonPreviews}
+          courseDescribed={courseDescribed}
+          progress={progress}
+          generating={!complete}
+        />
       )}
 
       {isZombie && (
