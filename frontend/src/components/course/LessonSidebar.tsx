@@ -17,12 +17,10 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
   const location = useLocation();
   const { sections, currentPage, setCurrentPage } = useLessonNavStore();
 
-  // Parse current route state from URL
   const lessonMatch = location.pathname.match(/\/lessons\/(\d+)/);
   const activeLessonIdx = lessonMatch ? Number(lessonMatch[1]) : -1;
-  const onActivityPage = location.pathname.endsWith('/activity');
+  const onActivityPage = /\/activity\/\d+/.test(location.pathname);
 
-  // Lesson data
   const totalLessons = course.lesson_titles?.length ?? course.lessons.length;
   const lessonMap = new Map(
     course.lessons.map((l) => [l.objective_index, l]),
@@ -57,26 +55,19 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
             const isCompleted = status === 'completed';
             const isCurrent = activeLessonIdx === i;
 
-            const activity = lesson?.activity;
-            const hasActivity = activity?.activity_spec != null;
-            const activityPassed =
-              activity?.mastery_decision === 'meets' ||
-              activity?.mastery_decision === 'exceeds';
-            const activityAttempted =
-              (activity?.attempt_count ?? 0) > 0 && !activityPassed;
+            const activities = lesson?.activities ?? [];
+            const completedActivities = lesson?.completed_activities ?? 0;
+            const totalActivities = lesson?.total_activities ?? 0;
 
             const title =
               course.lesson_titles?.[i]?.lesson_title ?? `Lesson ${i + 1}`;
 
-            // Show section sub-nav only when viewing this lesson's content (not activity)
             const showSections =
               isCurrent && !onActivityPage && sections.length > 1;
-            // Show activity link for any accessible lesson that has one
-            const showActivity = hasActivity && !isLocked;
+            const showActivities = activities.length > 0 && !isLocked;
 
             return (
               <li key={i}>
-                {/* ── Lesson link ── */}
                 <NavLink
                   to={`/courses/${course.id}/lessons/${i}`}
                   end
@@ -85,7 +76,6 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
                   className={({ isActive }) =>
                     cn(
                       'flex items-center gap-2 px-3 py-2 text-sm transition-colors',
-                      // Highlight when on the lesson page OR its activity page
                       isActive || (isCurrent && onActivityPage)
                         ? 'bg-accent font-medium text-accent-foreground'
                         : 'hover:bg-muted',
@@ -100,15 +90,19 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
                   ) : (
                     <Circle className="h-3.5 w-3.5 shrink-0" />
                   )}
-                  <span className="truncate">{title}</span>
+                  <span className="truncate flex-1">{title}</span>
+                  {totalActivities > 0 && !isLocked && (
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {completedActivities}/{totalActivities}
+                    </span>
+                  )}
                 </NavLink>
 
-                {/* ── Sub-items: sections + activity ── */}
-                {(showSections || showActivity) && (
+                {(showSections || (showActivities && isCurrent)) && (
                   <ol className="mb-1" role="list">
                     {showSections &&
                       sections.map((section, si) => (
-                        <li key={si}>
+                        <li key={`s-${si}`}>
                           <button
                             type="button"
                             onClick={() => {
@@ -116,11 +110,11 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
                               onNavigate?.();
                             }}
                             aria-current={
-                              currentPage === si ? 'true' : undefined
+                              currentPage === si && !onActivityPage ? 'true' : undefined
                             }
                             className={cn(
                               'ml-5 flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-                              currentPage === si
+                              currentPage === si && !onActivityPage
                                 ? 'font-medium text-foreground'
                                 : 'text-muted-foreground hover:text-foreground',
                             )}
@@ -128,7 +122,7 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
                             <ChevronRight
                               className={cn(
                                 'h-3 w-3 shrink-0',
-                                currentPage === si && 'text-primary',
+                                currentPage === si && !onActivityPage && 'text-primary',
                               )}
                             />
                             <span className="truncate">
@@ -138,10 +132,10 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
                         </li>
                       ))}
 
-                    {showActivity && (
-                      <li>
+                    {showActivities && isCurrent && activities.map((act) => (
+                      <li key={`a-${act.activity_index}`}>
                         <NavLink
-                          to={`/courses/${course.id}/lessons/${i}/activity`}
+                          to={`/courses/${course.id}/lessons/${i}/activity/${act.activity_index}`}
                           onClick={() => onNavigate?.()}
                           className={({ isActive }) =>
                             cn(
@@ -149,25 +143,21 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
                               isActive
                                 ? 'font-medium text-foreground'
                                 : 'text-muted-foreground hover:text-foreground',
+                              act.activity_status === 'pending' && 'opacity-50 pointer-events-none',
                             )
                           }
                         >
-                          {activityPassed ? (
+                          {act.activity_status === 'completed' ? (
                             <CheckCircle2 className="h-3 w-3 shrink-0 text-green-600" />
+                          ) : act.activity_status === 'active' ? (
+                            <Circle className="h-3 w-3 shrink-0 text-primary" />
                           ) : (
-                            <ChevronRight className="h-3 w-3 shrink-0" />
+                            <Circle className="h-3 w-3 shrink-0 text-muted-foreground/40" />
                           )}
-                          <span>
-                            Activity
-                            {activityAttempted && (
-                              <span className="ml-1 font-medium text-yellow-600">
-                                · retry
-                              </span>
-                            )}
-                          </span>
+                          <span>Activity {act.activity_index + 1}</span>
                         </NavLink>
                       </li>
-                    )}
+                    ))}
                   </ol>
                 )}
               </li>

@@ -17,3 +17,8 @@ provider "aws" {
   region  = var.aws_region
   profile = var.aws_profile
 }
+
+locals {
+  prefix    = "${var.app_name}-${var.environment}"
+  db_prefix = "${var.app_name}_${var.environment}"
+}

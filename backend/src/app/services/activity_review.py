@@ -25,6 +25,17 @@ def review_key(activity_id: str) -> str:
     return f"activity-review-{activity_id}"
 
 
+async def _get_next_activity(db, lesson_id: str, current_index: int) -> Activity | None:
+    """Get the next activity in the same lesson."""
+    result = await db.execute(
+        select(Activity).where(
+            Activity.lesson_id == lesson_id,
+            Activity.activity_index == current_index + 1,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def review_activity_background(
     activity_id: str,
     user_id: str,
@@ -92,72 +103,82 @@ async def review_activity_background(
             }
             activity.mastery_decision = review.mastery_decision
             activity.attempt_count += 1
-
-            # Update portfolio readiness fields
             activity.portfolio_readiness = review.portfolio_readiness
             activity.revision_count += 1
 
             # Update the course's single evolving portfolio artifact
             await update_course_artifact(db, course, submission_text, review)
 
-            # Mark lesson as completed and unlock next (only if mastery met)
-            if lesson.status != "completed" and review.mastery_decision in ("meets", "exceeds"):
-                completed_index = lesson.objective_index
-                lesson.status = "completed"
-                next_lesson = await unlock_next_lesson(db, course.id, completed_index)
+            # Handle multi-activity progression
+            if review.mastery_decision in ("meets", "exceeds"):
+                activity.activity_status = "completed"
 
-                # If the unlocked lesson has no content yet, schedule on-demand generation
-                if next_lesson and next_lesson.lesson_content is None:
-                    # Load learner profile for personalized generation
-                    profile_result = await db.execute(
-                        select(User)
-                        .where(User.id == user_id)
-                        .options(selectinload(User.learner_profile))
+                # Check for next activity in this lesson
+                next_activity = await _get_next_activity(db, lesson.id, activity.activity_index)
+                if next_activity:
+                    # Unlock next activity, don't mark lesson complete yet
+                    next_activity.activity_status = "active"
+                    logger.info(
+                        "Activity %s completed, unlocking next activity %s (index %d)",
+                        activity.id[:8], next_activity.id[:8], next_activity.activity_index,
                     )
-                    user_obj = profile_result.scalar_one_or_none()
-                    learner_profile = (
-                        user_obj.learner_profile.to_agent_dict()
-                        if user_obj and user_obj.learner_profile
-                        else None
-                    )
-                    lt_list = course.lesson_titles or []
-                    next_idx = next_lesson.objective_index
-                    preset_title = (
-                        lt_list[next_idx]["lesson_title"]
-                        if next_idx < len(lt_list)
-                        else None
-                    )
-                    lesson_summary = (
-                        lt_list[next_idx]["lesson_summary"]
-                        if next_idx < len(lt_list)
-                        else None
-                    )
-                    next_lesson_to_generate = (
-                        next_lesson.objective_index,
-                        list(course.input_objectives),
-                        course.generated_description or course.input_description or "",
-                        learner_profile,
-                        preset_title,
-                        lesson_summary,
-                        course.professional_role,
-                        course.career_context,
-                        submission_text,  # latest portfolio content
-                    )
+                elif lesson.status != "completed":
+                    # All activities done — mark lesson complete and unlock next
+                    completed_index = lesson.objective_index
+                    lesson.status = "completed"
+                    next_lesson = await unlock_next_lesson(db, course.id, completed_index)
 
-                if await check_all_lessons_completed(db, course.id):
-                    result = await db.execute(
-                        select(CourseInstance)
-                        .where(CourseInstance.id == course.id)
-                        .options(
-                            selectinload(CourseInstance.lessons),
-                            selectinload(CourseInstance.assessments),
+                    # If the unlocked lesson has no content yet, schedule on-demand generation
+                    if next_lesson and next_lesson.lesson_content is None:
+                        profile_result = await db.execute(
+                            select(User)
+                            .where(User.id == user_id)
+                            .options(selectinload(User.learner_profile))
                         )
-                    )
-                    course = result.scalar_one()
-                    try:
-                        await transition_course(db, course, "awaiting_assessment")
-                    except Exception:
-                        pass
+                        user_obj = profile_result.scalar_one_or_none()
+                        learner_profile = (
+                            user_obj.learner_profile.to_agent_dict()
+                            if user_obj and user_obj.learner_profile
+                            else None
+                        )
+                        lt_list = course.lesson_titles or []
+                        next_idx = next_lesson.objective_index
+                        preset_title = (
+                            lt_list[next_idx]["lesson_title"]
+                            if next_idx < len(lt_list)
+                            else None
+                        )
+                        lesson_summary = (
+                            lt_list[next_idx]["lesson_summary"]
+                            if next_idx < len(lt_list)
+                            else None
+                        )
+                        next_lesson_to_generate = (
+                            next_lesson.objective_index,
+                            list(course.input_objectives),
+                            course.generated_description or course.input_description or "",
+                            learner_profile,
+                            preset_title,
+                            lesson_summary,
+                            course.professional_role,
+                            course.career_context,
+                            submission_text,
+                        )
+
+                    if await check_all_lessons_completed(db, course.id):
+                        result = await db.execute(
+                            select(CourseInstance)
+                            .where(CourseInstance.id == course.id)
+                            .options(
+                                selectinload(CourseInstance.lessons),
+                                selectinload(CourseInstance.assessments),
+                            )
+                        )
+                        course = result.scalar_one()
+                        try:
+                            await transition_course(db, course, "awaiting_assessment")
+                        except Exception:
+                            pass
 
             await db.flush()
             await db.commit()

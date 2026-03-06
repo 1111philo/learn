@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, Circle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCourseStore } from '@/stores/course-store';
 import { submitActivity, getActivity, connectReviewStream } from '@/api/activities';
@@ -8,13 +8,19 @@ import { getArtifact } from '@/api/portfolio';
 import { ActivityPanel } from '@/components/activity/ActivityPanel';
 import { SubmissionForm } from '@/components/activity/SubmissionForm';
 import { FeedbackDisplay } from '@/components/activity/FeedbackDisplay';
+import { CelebrationOverlay } from '@/components/gamification/CelebrationOverlay';
 import type { ActivityReviewResult } from '@/api/types';
 
 export function ActivityPage() {
-  const { courseId, index } = useParams<{ courseId: string; index: string }>();
+  const { courseId, index, activityIndex: activityIndexParam } = useParams<{
+    courseId: string;
+    index: string;
+    activityIndex: string;
+  }>();
   const navigate = useNavigate();
   const { course, loadCourse } = useCourseStore();
   const lessonIndex = Number(index ?? 0);
+  const activityIndex = Number(activityIndexParam ?? 0);
   const [reviewing, setReviewing] = useState(false);
   const [feedback, setFeedback] = useState<ActivityReviewResult | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -23,9 +29,19 @@ export function ActivityPage() {
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const lesson = course?.lessons.find((l) => l.objective_index === lessonIndex);
-  const activity = lesson?.activity;
+  const activities = lesson?.activities ?? [];
+  const activity = activities.find((a) => a.activity_index === activityIndex);
+  const totalActivities = lesson?.total_activities ?? activities.length;
 
-  // On mount, check if a review is in-flight via the REST endpoint
+  // Reset state when activity changes
+  useEffect(() => {
+    setFeedback(null);
+    setRetrying(false);
+    setError(null);
+    setReviewing(false);
+  }, [activityIndex, lessonIndex]);
+
+  // Check if a review is in-flight
   useEffect(() => {
     if (!activity?.id) return;
     let cancelled = false;
@@ -36,9 +52,7 @@ export function ActivityPage() {
         setReviewing(true);
         connectSSE(detail.id);
       }
-    }).catch(() => {
-      // Standalone endpoint unavailable — fall back to course data
-    });
+    }).catch(() => {});
 
     return () => {
       cancelled = true;
@@ -48,7 +62,7 @@ export function ActivityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity?.id]);
 
-  // Load current portfolio content for the course (re-fetch on lesson change)
+  // Load portfolio content
   useEffect(() => {
     if (!course?.portfolio_artifact_id) return;
     let cancelled = false;
@@ -57,19 +71,16 @@ export function ActivityPage() {
       if (!cancelled) {
         setPortfolioContent(artifact.content_pointer ?? undefined);
       }
-    }).catch(() => {
-      // Portfolio not available — start with empty form
-    });
+    }).catch(() => {});
     return () => { cancelled = true; };
-  }, [course?.portfolio_artifact_id, lessonIndex]);
+  }, [course?.portfolio_artifact_id, lessonIndex, activityIndex]);
 
   if (!course) return null;
 
   if (!activity?.activity_spec) {
-    return <p className="text-muted-foreground">No activity for this lesson.</p>;
+    return <p className="text-muted-foreground">Activity not available yet.</p>;
   }
 
-  // Show previous feedback if already submitted and no new feedback (and not retrying)
   const existingFeedback = activity.latest_feedback;
   const displayFeedback = retrying
     ? null
@@ -90,7 +101,8 @@ export function ActivityPage() {
     activity.mastery_decision === 'meets' ||
     activity.mastery_decision === 'exceeds';
 
-  const isLast = lessonIndex === course.input_objectives.length - 1;
+  const isLastActivity = activityIndex >= totalActivities - 1;
+  const isLastLesson = lessonIndex === course.input_objectives.length - 1;
 
   function connectSSE(activityId: string) {
     cleanupRef.current?.();
@@ -101,7 +113,6 @@ export function ActivityPage() {
           setFeedback(event.data);
           setReviewing(false);
           setRetrying(false);
-          // Refetch course to update sidebar lock states
           if (courseId) loadCourse(courseId);
         } else if (event.type === 'review_error') {
           setError(event.data.error);
@@ -128,7 +139,9 @@ export function ActivityPage() {
   }
 
   function handleContinue() {
-    if (isLast) {
+    if (!isLastActivity) {
+      navigate(`/courses/${courseId}/lessons/${lessonIndex}/activity/${activityIndex + 1}`);
+    } else if (isLastLesson) {
       navigate(`/courses/${courseId}/assessment`);
     } else {
       navigate(`/courses/${courseId}/lessons/${lessonIndex + 1}`);
@@ -138,7 +151,7 @@ export function ActivityPage() {
   const lessonTitle = course?.lesson_titles?.[lessonIndex]?.lesson_title;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <button
           onClick={() => navigate(`/courses/${courseId}/lessons/${lessonIndex}`)}
@@ -148,14 +161,54 @@ export function ActivityPage() {
           Back to lesson
         </button>
         <h2 className="text-lg font-semibold">
-          {lessonTitle ? `${lessonTitle} — Activity` : `Lesson ${lessonIndex + 1} Activity`}
+          {lessonTitle
+            ? `${lessonTitle} — Activity ${activityIndex + 1}`
+            : `Lesson ${lessonIndex + 1} — Activity ${activityIndex + 1}`}
         </h2>
+
+        {/* Activity progress dots */}
+        <div className="mt-2 flex items-center gap-1.5" role="navigation" aria-label="Activity progress">
+          {activities.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => navigate(`/courses/${courseId}/lessons/${lessonIndex}/activity/${a.activity_index}`)}
+              className="p-0.5"
+              aria-label={`Activity ${a.activity_index + 1}: ${a.activity_status}`}
+              aria-current={a.activity_index === activityIndex ? 'step' : undefined}
+            >
+              {a.activity_status === 'completed' ? (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              ) : a.activity_index === activityIndex ? (
+                <Circle className="h-4 w-4 text-primary fill-primary" />
+              ) : (
+                <Circle className="h-4 w-4 text-muted-foreground/40" />
+              )}
+            </button>
+          ))}
+          <span className="ml-1 text-xs text-muted-foreground">
+            {activityIndex + 1} of {totalActivities}
+          </span>
+        </div>
       </div>
 
       <section aria-labelledby="task-heading">
         <h3 id="task-heading" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Your Task</h3>
         <ActivityPanel spec={activity.activity_spec} />
       </section>
+
+      {/* Celebration when feedback arrives with mastery */}
+      {displayFeedback && passed && !retrying && (
+        <CelebrationOverlay
+          tier={isLastActivity ? (isLastLesson ? 'course' : 'lesson') : 'activity'}
+          message={
+            isLastActivity && isLastLesson
+              ? 'All lessons complete! Time for your capstone.'
+              : isLastActivity
+                ? 'Lesson complete! On to the next one.'
+                : 'Activity complete! Keep building.'
+          }
+        />
+      )}
 
       {reviewing ? (
         <div role="status" aria-live="polite" className="flex items-center gap-3 text-muted-foreground">
@@ -180,7 +233,11 @@ export function ActivityPage() {
             {passed ? (
               <>
                 <Button onClick={handleContinue}>
-                  {isLast ? 'Take Assessment' : 'Continue'}
+                  {!isLastActivity
+                    ? 'Next Activity'
+                    : isLastLesson
+                      ? 'Take Assessment'
+                      : 'Next Lesson'}
                 </Button>
                 {displayFeedback.revision_encouraged && (
                   <Button

@@ -6,6 +6,14 @@ export interface CatalogCourse {
   learning_objectives: string[];
   tags: string[];
   estimated_hours: number | null;
+  depends_on: string | null;
+  locked: boolean;
+  completed: boolean;
+}
+
+export interface CatalogResponse {
+  courses: CatalogCourse[];
+  all_completed: boolean;
 }
 
 // ---- Course ----
@@ -56,7 +64,9 @@ export interface LessonResponse {
   objective_index: number;
   lesson_content: string | null;
   status: 'locked' | 'unlocked' | 'completed';
-  activity: ActivitySummary | null;
+  activities: ActivitySummary[];
+  total_activities: number;
+  completed_activities: number;
 }
 
 // ---- Activity ----
@@ -80,9 +90,12 @@ export interface ActivityFeedback {
   tips: string[];
 }
 
-/** Activity as embedded in the course response (no submissions/reviewing). */
+export type ActivityStatus = 'pending' | 'active' | 'completed';
+
 export interface ActivitySummary {
   id: string;
+  activity_index: number;
+  activity_status: ActivityStatus;
   activity_spec: ActivitySpec | null;
   latest_score: number | null;
   latest_feedback: ActivityFeedback | null;
@@ -93,7 +106,6 @@ export interface ActivitySummary {
   portfolio_artifact_id: string | null;
 }
 
-/** Full activity from GET /activities/{id} (includes submissions + reviewing). */
 export interface ActivityDetail extends ActivitySummary {
   submissions: { text: string; submitted_at: string }[];
   reviewing: boolean;
@@ -150,21 +162,6 @@ export interface AssessmentSubmitRequest {
   responses: { objective: string; text: string }[];
 }
 
-// ---- Agent Logs ----
-export interface AgentLog {
-  id: string;
-  course_instance_id: string;
-  agent_name: string;
-  prompt: string;
-  output: string | null;
-  status: 'success' | 'error';
-  duration_ms: number | null;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  model_name: string | null;
-  created_at: string;
-}
-
 // ---- SSE Events ----
 export interface CourseDescribedEvent {
   lesson_previews: { index: number; title: string; summary: string }[];
@@ -185,6 +182,7 @@ export interface LessonWrittenEvent {
 export interface ActivityCreatedEvent {
   objective_index: number;
   activity_id: string;
+  activity_index: number;
   skipped?: boolean;
 }
 

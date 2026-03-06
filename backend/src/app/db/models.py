@@ -148,7 +148,8 @@ class Lesson(Base):
 
     course_instance: Mapped["CourseInstance"] = relationship(back_populates="lessons")
     activities: Mapped[list["Activity"]] = relationship(
-        back_populates="lesson", cascade="all, delete-orphan"
+        back_populates="lesson", cascade="all, delete-orphan",
+        order_by="Activity.activity_index",
     )
 
 
@@ -159,6 +160,8 @@ class Activity(Base):
     lesson_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False
     )
+    activity_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    activity_status: Mapped[str] = mapped_column(String(20), default="pending")
     activity_spec: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     submissions: Mapped[dict] = mapped_column(JSONB, default=list)
     latest_score: Mapped[float | None] = mapped_column(Float, nullable=True)

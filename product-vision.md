@@ -1,4 +1,4 @@
-# 1111 School — Product Vision
+# 1111 — Product Vision
 
 ## What Is This
 

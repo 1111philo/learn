@@ -7,13 +7,13 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = { Name = "${var.app_name}-vpc" }
+  tags = { Name = "${local.prefix}-vpc" }
 }
 
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
-  tags = { Name = "${var.app_name}-igw" }
+  tags = { Name = "${local.prefix}-igw" }
 }
 
 resource "aws_subnet" "public_a" {
@@ -22,7 +22,7 @@ resource "aws_subnet" "public_a" {
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
-  tags = { Name = "${var.app_name}-public-a" }
+  tags = { Name = "${local.prefix}-public-a" }
 }
 
 resource "aws_subnet" "public_b" {
@@ -31,7 +31,7 @@ resource "aws_subnet" "public_b" {
   availability_zone       = data.aws_availability_zones.available.names[1]
   map_public_ip_on_launch = true
 
-  tags = { Name = "${var.app_name}-public-b" }
+  tags = { Name = "${local.prefix}-public-b" }
 }
 
 resource "aws_route_table" "public" {
@@ -42,7 +42,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.main.id
   }
 
-  tags = { Name = "${var.app_name}-public-rt" }
+  tags = { Name = "${local.prefix}-public-rt" }
 }
 
 resource "aws_route_table_association" "public_a" {

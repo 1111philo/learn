@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="1111 School", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="1111", version="0.2.0", lifespan=lifespan)
 
 if settings.cors_origins:
     app.add_middleware(

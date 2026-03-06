@@ -38,6 +38,44 @@ def _build_review_data(activity: Activity) -> dict:
     }
 
 
+@router.get("/by-lesson/{lesson_id}", response_model=list[ActivityResponse])
+async def list_activities_for_lesson(
+    lesson_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    result = await db.execute(
+        select(Lesson)
+        .where(Lesson.id == lesson_id)
+        .options(
+            selectinload(Lesson.course_instance),
+            selectinload(Lesson.activities),
+        )
+    )
+    lesson = result.scalar_one_or_none()
+    if not lesson or lesson.course_instance.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    return [
+        ActivityResponse(
+            id=a.id,
+            activity_index=a.activity_index,
+            activity_status=a.activity_status,
+            activity_spec=a.activity_spec,
+            latest_score=a.latest_score,
+            latest_feedback=a.latest_feedback,
+            mastery_decision=a.mastery_decision,
+            attempt_count=a.attempt_count,
+            submissions=a.submissions or [],
+            reviewing=is_running(review_key(a.id)),
+            portfolio_readiness=a.portfolio_readiness,
+            revision_count=a.revision_count,
+            portfolio_artifact_id=a.portfolio_artifact_id,
+        )
+        for a in sorted(lesson.activities, key=lambda x: x.activity_index)
+    ]
+
+
 @router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(
     activity_id: str,
@@ -61,6 +99,8 @@ async def get_activity(
     key = review_key(activity_id)
     return ActivityResponse(
         id=activity.id,
+        activity_index=activity.activity_index,
+        activity_status=activity.activity_status,
         activity_spec=activity.activity_spec,
         latest_score=activity.latest_score,
         latest_feedback=activity.latest_feedback,
@@ -83,7 +123,6 @@ async def submit_activity(
 ):
     key = review_key(activity_id)
 
-    # Load activity with its lesson and course
     result = await db.execute(
         select(Activity)
         .where(Activity.id == activity_id)
@@ -108,7 +147,6 @@ async def submit_activity(
         else ""
     )
 
-    # Save submission before spawning background task
     submissions = list(activity.submissions or [])
     submissions.append({
         "text": req.text,
@@ -145,7 +183,6 @@ async def review_stream(
 ):
     key = review_key(activity_id)
 
-    # Verify activity exists and belongs to user
     result = await db.execute(
         select(Activity)
         .where(Activity.id == activity_id)
@@ -159,8 +196,6 @@ async def review_stream(
     if activity.lesson.course_instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # If no review is running, re-query for fresh state to avoid serving
-    # stale feedback from a previous attempt (race with background task commit)
     if not is_running(key):
         db.expire_all()
         result_fresh = await db.execute(

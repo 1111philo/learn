@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and fill in secrets
+# Usage: terraform apply -var-file=envs/test.tfvars -var-file=terraform.tfvars
+
+anthropic_api_key = "sk-ant-..."
+jwt_secret        = "change-me-to-a-random-string"
+db_password       = "change-me-to-a-strong-password"

@@ -16,6 +16,24 @@ variable "app_name" {
   default     = "learn"
 }
 
+variable "environment" {
+  description = "Environment name (e.g. prod, test). Used to isolate resources."
+  type        = string
+  default     = "prod"
+}
+
+variable "domain_name" {
+  description = "Custom domain for the App Runner service (e.g. test-1111.philosophers.group)"
+  type        = string
+  default     = ""
+}
+
+variable "hosted_zone_name" {
+  description = "Route 53 hosted zone name (e.g. philosophers.group)"
+  type        = string
+  default     = ""
+}
+
 variable "anthropic_api_key" {
   description = "Anthropic API key for LLM calls"
   type        = string

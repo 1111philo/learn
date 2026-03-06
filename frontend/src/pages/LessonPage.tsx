@@ -1,15 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react';
 import { useCourseStore } from '@/stores/course-store';
 import { useLessonNavStore } from '@/stores/lesson-nav-store';
 import { MarkdownRenderer } from '@/components/lesson/MarkdownRenderer';
 import { Button } from '@/components/ui/button';
 
-/**
- * Split lesson markdown into sections on top-level headings (# or ## if no #).
- * Each section includes its heading line so MarkdownRenderer can style it.
- */
 function splitIntoSections(content: string) {
   const hasH1 = /^# /m.test(content);
   const pattern = hasH1 ? /^(?=# )/m : /^(?=## )/m;
@@ -41,13 +37,11 @@ export function LessonPage() {
     [lesson?.lesson_content],
   );
 
-  // Clear sections immediately when switching lessons
   useEffect(() => {
     setSections([]);
     setCurrentPage(0);
   }, [lessonIndex, setSections, setCurrentPage]);
 
-  // Sync parsed sections to store + restore saved page position
   useEffect(() => {
     if (!courseId || parsedSections.length === 0) return;
     setSections(parsedSections);
@@ -56,13 +50,11 @@ export function LessonPage() {
     setCurrentPage(savedPage);
   }, [courseId, lessonIndex, parsedSections, setSections, setCurrentPage]);
 
-  // Persist current page to localStorage whenever it changes
   useEffect(() => {
     if (!courseId || parsedSections.length === 0) return;
     localStorage.setItem(lessonPageKey(courseId, lessonIndex), String(currentPage));
   }, [currentPage, courseId, lessonIndex, parsedSections.length]);
 
-  // Poll until on-demand lesson content arrives
   useEffect(() => {
     if (!generating || !courseId) return;
     const id = setInterval(() => loadCourse(courseId), 3000);
@@ -88,24 +80,31 @@ export function LessonPage() {
     );
   }
 
-  // Navigation state
+  // Multi-activity navigation
+  const activities = lesson.activities ?? [];
+  const firstIncompleteActivity = activities.find(
+    (a) => a.activity_status !== 'completed',
+  );
+  const firstActivityIndex = firstIncompleteActivity
+    ? firstIncompleteActivity.activity_index
+    : 0;
+  const allActivitiesDone = activities.length > 0 && activities.every(
+    (a) => a.activity_status === 'completed',
+  );
+
   const totalContentPages = sections.length || 1;
   const isFirstSection = currentPage === 0;
   const isLastSection = currentPage >= totalContentPages - 1;
   const isFirstLesson = lessonIndex === 0;
   const totalLessons = course.lesson_titles?.length ?? course.lessons.length;
   const isLastLesson = lessonIndex === totalLessons - 1;
-  const hasActivity = lesson.activity?.activity_spec != null;
-  const activityDone =
-    lesson.activity?.mastery_decision === 'meets' ||
-    lesson.activity?.mastery_decision === 'exceeds';
 
   const prevDisabled = isFirstSection && isFirstLesson;
 
   const nextLabel = !isLastSection
     ? 'Next'
-    : hasActivity && !activityDone
-      ? 'Complete Activity'
+    : activities.length > 0 && !allActivitiesDone
+      ? 'Start Activity'
       : !isLastLesson
         ? 'Next Lesson'
         : 'Take Assessment';
@@ -128,8 +127,8 @@ export function LessonPage() {
       goToPage(currentPage + 1);
       return;
     }
-    if (hasActivity && !activityDone) {
-      navigate(`/courses/${courseId}/lessons/${lessonIndex}/activity`);
+    if (activities.length > 0 && !allActivitiesDone) {
+      navigate(`/courses/${courseId}/lessons/${lessonIndex}/activity/${firstActivityIndex}`);
       return;
     }
     if (!isLastLesson) {
@@ -144,6 +143,32 @@ export function LessonPage() {
   return (
     <div>
       {lessonTitle && <h1 className="mb-4 text-2xl font-bold">{lessonTitle}</h1>}
+
+      {/* Activity progress dots */}
+      {activities.length > 0 && (
+        <div className="mb-4 flex items-center gap-2" aria-label={`${lesson.completed_activities} of ${lesson.total_activities} activities completed`}>
+          <span className="text-xs text-muted-foreground">Activities:</span>
+          {activities.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => navigate(`/courses/${courseId}/lessons/${lessonIndex}/activity/${a.activity_index}`)}
+              className="p-0.5"
+              aria-label={`Activity ${a.activity_index + 1}: ${a.activity_status}`}
+            >
+              {a.activity_status === 'completed' ? (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              ) : a.activity_status === 'active' ? (
+                <Circle className="h-4 w-4 text-primary animate-pulse" />
+              ) : (
+                <Circle className="h-4 w-4 text-muted-foreground/40" />
+              )}
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground">
+            {lesson.completed_activities}/{lesson.total_activities}
+          </span>
+        </div>
+      )}
 
       {lesson.lesson_content ? (
         <>

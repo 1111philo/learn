@@ -59,8 +59,25 @@ export function FeedbackDisplay({
 
   return (
     <div className="rounded-lg border bg-card p-4 sm:p-5 space-y-4">
+      {/* Positive affirmation */}
+      {mastery === 'exceeds' && (
+        <p className="text-sm font-medium text-green-700" role="status">
+          Outstanding! You've exceeded expectations.
+        </p>
+      )}
+      {mastery === 'meets' && (
+        <p className="text-sm font-medium text-green-700" role="status">
+          Great work! You've demonstrated mastery.
+        </p>
+      )}
+      {mastery === 'not_yet' && (
+        <p className="text-sm font-medium text-yellow-700" role="status">
+          Good progress! Here's what to focus on next.
+        </p>
+      )}
+
       {/* Score + mastery */}
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-baseline gap-2 flex-wrap">
         <span className={`text-3xl font-bold tabular-nums ${scoreColor}`}>{score}</span>
         <span className="text-sm text-foreground/50">/ 100</span>
         <Badge className={`ml-1 ${MASTERY_COLORS[mastery] ?? ''}`}>

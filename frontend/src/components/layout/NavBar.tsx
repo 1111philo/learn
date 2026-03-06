@@ -4,11 +4,11 @@ import { Menu, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Logo } from '@/components/layout/Logo';
 
 const NAV_ITEMS = [
   { to: '/catalog', label: 'Catalog' },
   { to: '/my-courses', label: 'My Courses' },
-  { to: '/agent-logs', label: 'Agent Logs' },
   { to: '/portfolio', label: 'Portfolio' },
 ];
 
@@ -20,12 +20,11 @@ export function NavBar() {
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-        <Link to="/catalog" className="text-lg font-bold tracking-tight">
-          1111 School
+        <Link to="/catalog" aria-label="1111 home">
+          <Logo className="h-7 w-7" />
         </Link>
 
-        {/* Desktop nav — hidden on mobile */}
-        <nav className="hidden sm:flex gap-4">
+        <nav className="hidden sm:flex gap-4" aria-label="Main navigation">
           {NAV_ITEMS.map(({ to, label }) => (
             <Link
               key={to}
@@ -42,7 +41,6 @@ export function NavBar() {
           ))}
         </nav>
 
-        {/* Desktop right-side controls — hidden on mobile */}
         <div className="ml-auto hidden sm:flex items-center gap-3">
           {user && (
             <span className="text-sm text-muted-foreground">{user.email}</span>
@@ -57,18 +55,17 @@ export function NavBar() {
             )}
           >
             <Settings className="h-4 w-4" />
-            Settings
+            <span className="sr-only sm:not-sr-only">Settings</span>
           </Link>
           <button
             onClick={logout}
             className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <LogOut className="h-4 w-4" />
-            Log out
+            <span className="sr-only sm:not-sr-only">Log out</span>
           </button>
         </div>
 
-        {/* Mobile hamburger — visible on mobile only */}
         <div className="ml-auto sm:hidden">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -80,7 +77,7 @@ export function NavBar() {
               </button>
             </SheetTrigger>
             <SheetContent side="right" className="w-64 pt-10">
-              <nav className="flex flex-col gap-4 px-4">
+              <nav className="flex flex-col gap-4 px-4" aria-label="Mobile navigation">
                 {NAV_ITEMS.map(({ to, label }) => (
                   <Link
                     key={to}

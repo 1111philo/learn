@@ -36,13 +36,17 @@ class LessonResponse(BaseModel):
     objective_index: int
     lesson_content: str | None
     status: str
-    activity: "ActivitySummary | None" = None
+    activities: list["ActivitySummary"] = []
+    total_activities: int = 0
+    completed_activities: int = 0
 
     model_config = {"from_attributes": True}
 
 
 class ActivitySummary(BaseModel):
     id: str
+    activity_index: int = 0
+    activity_status: str = "pending"
     activity_spec: dict | None
     latest_score: float | None
     latest_feedback: dict | None

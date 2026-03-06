@@ -1,5 +1,5 @@
 resource "aws_ecr_repository" "app" {
-  name                 = var.app_name
+  name                 = local.prefix
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -7,7 +7,7 @@ resource "aws_ecr_repository" "app" {
     scan_on_push = false
   }
 
-  tags = { Name = "${var.app_name}-ecr" }
+  tags = { Name = "${local.prefix}-ecr" }
 }
 
 # Build and push the Docker image to ECR so App Runner has something to pull.

@@ -29,7 +29,7 @@ class ActivityReviewOutput(BaseModel):
     improvements: list[str] = Field(min_length=2, max_length=5)
     tips: list[str] = Field(min_length=2, max_length=6)
     mastery_decision: str  # not_yet, meets, exceeds
-    portfolio_readiness: str | None = None  # practice_only, emerging_portfolio_piece, portfolio_ready
+    portfolio_readiness: str | None = None
     employer_relevance_notes: str | None = None
     revision_priority: str | None = None
     resume_bullet_seed: str | None = None
@@ -42,6 +42,8 @@ class ActivitySubmitResponse(BaseModel):
 
 class ActivityResponse(BaseModel):
     id: str
+    activity_index: int = 0
+    activity_status: str = "pending"
     activity_spec: dict | None = None
     latest_score: float | None = None
     latest_feedback: dict | None = None

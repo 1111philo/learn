@@ -1,7 +1,7 @@
 [project]
 name = "learn-backend"
 version = "0.1.0"
-description = "1111 School - Generative Learning Platform Backend"
+description = "1111 - Generative Learning Platform Backend"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

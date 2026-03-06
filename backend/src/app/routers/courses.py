@@ -127,12 +127,13 @@ async def generation_stream(
                 "event": "lesson_written",
                 "data": {"objective_index": idx, "skipped": True},
             })
-        if lesson.activities:
+        for act in sorted(lesson.activities, key=lambda a: a.activity_index):
             catchup_events.append({
                 "event": "activity_created",
                 "data": {
                     "objective_index": idx,
-                    "activity_id": lesson.activities[0].id,
+                    "activity_id": act.id,
+                    "activity_index": act.activity_index,
                     "skipped": True,
                 },
             })
@@ -238,16 +239,26 @@ async def get_course(
                 objective_index=l.objective_index,
                 lesson_content=l.lesson_content,
                 status=l.status,
-                activity=ActivitySummary(
-                    id=l.activities[0].id,
-                    activity_spec=l.activities[0].activity_spec,
-                    latest_score=l.activities[0].latest_score,
-                    latest_feedback=l.activities[0].latest_feedback,
-                    mastery_decision=l.activities[0].mastery_decision,
-                    attempt_count=l.activities[0].attempt_count,
-                )
-                if l.activities
-                else None,
+                activities=[
+                    ActivitySummary(
+                        id=a.id,
+                        activity_index=a.activity_index,
+                        activity_status=a.activity_status,
+                        activity_spec=a.activity_spec,
+                        latest_score=a.latest_score,
+                        latest_feedback=a.latest_feedback,
+                        mastery_decision=a.mastery_decision,
+                        attempt_count=a.attempt_count,
+                        portfolio_readiness=a.portfolio_readiness,
+                        revision_count=a.revision_count,
+                        portfolio_artifact_id=a.portfolio_artifact_id,
+                    )
+                    for a in sorted(l.activities, key=lambda x: x.activity_index)
+                ],
+                total_activities=len(l.activities),
+                completed_activities=sum(
+                    1 for a in l.activities if a.activity_status == "completed"
+                ),
             )
             for l in course.lessons
         ],

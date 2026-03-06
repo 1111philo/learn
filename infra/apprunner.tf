@@ -1,6 +1,6 @@
 # IAM role for App Runner to pull from ECR
 resource "aws_iam_role" "apprunner_ecr" {
-  name = "${var.app_name}-apprunner-ecr-role"
+  name = "${local.prefix}-apprunner-ecr-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -21,7 +21,7 @@ resource "aws_iam_role_policy_attachment" "apprunner_ecr" {
 
 resource "aws_apprunner_service" "app" {
   depends_on   = [null_resource.docker_push]
-  service_name = var.app_name
+  service_name = local.prefix
 
   source_configuration {
     authentication_configuration {
@@ -36,7 +36,7 @@ resource "aws_apprunner_service" "app" {
         port = "8000"
 
         runtime_environment_variables = {
-          DATABASE_URL      = "postgresql+asyncpg://${var.app_name}:${var.db_password}@${aws_db_instance.main.endpoint}/${var.app_name}"
+          DATABASE_URL      = "postgresql+asyncpg://${local.db_prefix}:${var.db_password}@${aws_db_instance.main.endpoint}/${local.db_prefix}"
           ANTHROPIC_API_KEY = var.anthropic_api_key
           JWT_SECRET        = var.jwt_secret
           DEFAULT_MODEL     = var.default_model
@@ -62,5 +62,5 @@ resource "aws_apprunner_service" "app" {
     unhealthy_threshold = 3
   }
 
-  tags = { Name = "${var.app_name}-apprunner" }
+  tags = { Name = "${local.prefix}-apprunner" }
 }

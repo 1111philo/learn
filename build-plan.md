@@ -1,4 +1,4 @@
-# 1111 School — Build Plan
+# 1111 — Build Plan
 
 Goal: validate the product with the internal team as fast as possible. Each phase ends with
 something testable by a real person.

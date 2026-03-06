@@ -8,7 +8,7 @@ class LessonPlanOutput(BaseModel):
     learning_objective: str
     key_concepts: list[str] = Field(min_length=2, max_length=8)
     mastery_criteria: list[str] = Field(min_length=2, max_length=6)
-    suggested_activity: "ActivitySeed"
+    activity_seeds: list["ActivitySeed"] = Field(min_length=2, max_length=5)
     lesson_outline: list[str] = Field(min_length=3, max_length=10)
     work_product: str | None = None
     intended_audience: str | None = None
@@ -21,8 +21,10 @@ class LessonPlanOutput(BaseModel):
 class ActivitySeed(BaseModel):
     """Seed for the activity_creator agent, produced by lesson_planner."""
 
+    activity_index: int
     activity_type: str
     prompt: str
+    contribution_description: str
     expected_evidence: list[str] = Field(min_length=2, max_length=5)
     artifact_type: str | None = None
     employer_skill_signals: list[str] | None = None

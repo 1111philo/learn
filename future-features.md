@@ -1,4 +1,4 @@
-# 1111 School — Future Features
+# 1111 — Future Features
 
 Everything that's real but not part of the POC validation. Organized by theme, roughly prioritized
 within each section.

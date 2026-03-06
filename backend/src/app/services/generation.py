@@ -73,11 +73,13 @@ async def _generate_single_objective(
                     "objective_index": objective_index,
                     "skipped": True,
                 })
-                await broadcast(course_id, "activity_created", {
-                    "objective_index": objective_index,
-                    "activity_id": existing.activities[0].id,
-                    "skipped": True,
-                })
+                for act in existing.activities:
+                    await broadcast(course_id, "activity_created", {
+                        "objective_index": objective_index,
+                        "activity_id": act.id,
+                        "activity_index": act.activity_index,
+                        "skipped": True,
+                    })
                 return True
 
             logger.info(
@@ -154,39 +156,51 @@ async def _generate_single_objective(
                 "objective_index": objective_index,
             })
 
-            # 3. Create the activity (only if lesson doesn't already have one)
+            # 3. Create multiple activities per lesson
             if not existing or not existing.activities:
-                logger.info("[%s] %s waiting for semaphore (activity_creator)…", course_id_short, obj_label)
-                async with semaphore:
-                    logger.info("[%s] %s running activity_creator…", course_id_short, obj_label)
-                    activity_spec = await run_activity_creator(
-                        ctx, plan.suggested_activity, objective,
-                        plan.mastery_criteria, learner_profile,
-                        portfolio_content=portfolio_content,
+                total_activities = len(plan.activity_seeds)
+                for i, seed in enumerate(plan.activity_seeds):
+                    logger.info("[%s] %s waiting for semaphore (activity_creator %d/%d)…", course_id_short, obj_label, i + 1, total_activities)
+                    async with semaphore:
+                        logger.info("[%s] %s running activity_creator %d/%d…", course_id_short, obj_label, i + 1, total_activities)
+                        activity_spec = await run_activity_creator(
+                            ctx, seed, objective,
+                            plan.mastery_criteria, learner_profile,
+                            portfolio_content=portfolio_content,
+                            activity_index=i,
+                            total_activities=total_activities,
+                        )
+                    activity = Activity(
+                        lesson_id=lesson.id,
+                        activity_index=i,
+                        activity_status="active" if i == 0 else "pending",
+                        activity_spec=activity_spec.model_dump(),
                     )
-                activity = Activity(
-                    lesson_id=lesson.id,
-                    activity_spec=activity_spec.model_dump(),
-                )
-                db.add(activity)
-                await db.flush()
-                await db.commit()
-                logger.info(
-                    "[%s] %s activity_creator done → rubric items: %d, hints: %d",
-                    course_id_short, obj_label,
-                    len(activity_spec.scoring_rubric), len(activity_spec.hints),
-                )
+                    db.add(activity)
+                    await db.flush()
+                    await db.commit()
+                    logger.info(
+                        "[%s] %s activity_creator %d/%d done → rubric items: %d, hints: %d",
+                        course_id_short, obj_label, i + 1, total_activities,
+                        len(activity_spec.scoring_rubric), len(activity_spec.hints),
+                    )
+                    await broadcast(course_id, "activity_created", {
+                        "objective_index": objective_index,
+                        "activity_id": activity.id,
+                        "activity_index": i,
+                    })
             else:
-                activity = existing.activities[0]
                 logger.info(
-                    "[%s] %s activity_creator SKIP (activity already exists id=%s)",
-                    course_id_short, obj_label, activity.id[:8],
+                    "[%s] %s activity_creator SKIP (activities already exist, count=%d)",
+                    course_id_short, obj_label, len(existing.activities),
                 )
-
-            await broadcast(course_id, "activity_created", {
-                "objective_index": objective_index,
-                "activity_id": activity.id,
-            })
+                for act in existing.activities:
+                    await broadcast(course_id, "activity_created", {
+                        "objective_index": objective_index,
+                        "activity_id": act.id,
+                        "activity_index": act.activity_index,
+                        "skipped": True,
+                    })
 
             logger.info("[%s] %s COMPLETE ✓", course_id_short, obj_label)
             return True

@@ -8,6 +8,7 @@ export interface ObjectiveProgress {
   planTitle: string | null;
   written: boolean;
   activityCreated: boolean;
+  activitiesCount: number;
   activityId: string | null;
   error: string | null;
 }
@@ -42,12 +43,14 @@ const STILL_GENERATING = ['generating'];
 function deriveProgress(course: CourseResponse): Map<number, ObjectiveProgress> {
   const progress = new Map<number, ObjectiveProgress>();
   for (const lesson of course.lessons) {
+    const activities = lesson.activities ?? [];
     progress.set(lesson.objective_index, {
       planned: true,
       planTitle: null,
       written: lesson.lesson_content != null,
-      activityCreated: lesson.activity?.activity_spec != null,
-      activityId: lesson.activity?.id ?? null,
+      activityCreated: activities.length > 0,
+      activitiesCount: activities.length,
+      activityId: activities[0]?.id ?? null,
       error: null,
     });
   }
@@ -133,7 +136,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         const progress = new Map(state.progress);
         const existing = (idx: number) => progress.get(idx) ?? {
           planned: false, planTitle: null, written: false,
-          activityCreated: false, activityId: null, error: null,
+          activityCreated: false, activitiesCount: 0, activityId: null, error: null,
         };
 
         switch (event.type) {
@@ -159,7 +162,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
           case 'activity_created': {
             const e = existing(event.data.objective_index);
             progress.set(event.data.objective_index, {
-              ...e, activityCreated: true, activityId: event.data.activity_id,
+              ...e,
+              activityCreated: true,
+              activitiesCount: e.activitiesCount + 1,
+              activityId: event.data.activity_id,
             });
             return { ...state, progress };
           }

@@ -1,4 +1,4 @@
-# Contributing to 1111 School
+# Contributing to 1111
 
 ## Workflow
 

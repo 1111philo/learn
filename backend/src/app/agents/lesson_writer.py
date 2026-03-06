@@ -29,10 +29,10 @@ lesson_writer = Agent(
         "to the activity (e.g., 'You're now ready to build your [work_product]')\n"
         "- Use Markdown headings (##, ###), lists, and code blocks where appropriate\n"
         "- Write in a clear, engaging voice — teach, don't lecture\n"
-        "- The lesson plan includes a suggested_activity and mastery_criteria. By the end of "
-        "the lesson, the learner should have everything they need to attempt the activity and "
+        "- The lesson plan includes multiple activity_seeds and mastery_criteria. By the end of "
+        "the lesson, the learner should have everything they need to attempt the activities and "
         "plausibly meet each mastery criterion. Make this explicit: use worked examples that "
-        "mirror the skill demands of the activity.\n\n"
+        "mirror the skill demands of the activities.\n\n"
         "Tailor tone, examples, and difficulty to the learner's profile if provided."
     ),
 )

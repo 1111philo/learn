@@ -1,4 +1,4 @@
-1111 School PRD Review — Consolidated Findings
+1111 PRD Review — Consolidated Findings
 
 ## 1. Architecture & Simplicity: Over-Engineered in Key Areas
 

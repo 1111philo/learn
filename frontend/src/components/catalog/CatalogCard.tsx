@@ -6,12 +6,14 @@ import { startCatalogCourse } from '@/api/catalog';
 import { triggerGeneration } from '@/api/courses';
 import type { CatalogCourse } from '@/api/types';
 import { useState } from 'react';
+import { Lock } from 'lucide-react';
 
 interface CatalogCardProps {
   course: CatalogCourse;
+  dependencyName?: string;
 }
 
-export function CatalogCard({ course }: CatalogCardProps) {
+export function CatalogCard({ course, dependencyName }: CatalogCardProps) {
   const navigate = useNavigate();
   const [starting, setStarting] = useState(false);
 
@@ -27,7 +29,7 @@ export function CatalogCard({ course }: CatalogCardProps) {
   }
 
   return (
-    <Card className="flex flex-col">
+    <Card className={`flex flex-col${course.locked ? ' opacity-60' : ''}`}>
       <CardHeader>
         <CardTitle className="text-base">{course.name}</CardTitle>
         <CardDescription className="line-clamp-2">
@@ -48,14 +50,26 @@ export function CatalogCard({ course }: CatalogCardProps) {
           </p>
         )}
       </CardContent>
-      <CardFooter>
-        <Button
-          className="w-full"
-          onClick={handleStart}
-          disabled={starting}
-        >
-          {starting ? 'Starting...' : 'Start Course'}
-        </Button>
+      <CardFooter className="flex-col items-stretch gap-1">
+        {course.locked ? (
+          <>
+            <Button className="w-full" disabled>
+              <Lock className="mr-2 h-3.5 w-3.5" />
+              Locked
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Complete {dependencyName ?? course.depends_on} first
+            </p>
+          </>
+        ) : (
+          <Button
+            className="w-full"
+            onClick={handleStart}
+            disabled={starting}
+          >
+            {starting ? 'Starting...' : 'Start Course'}
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

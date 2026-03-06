@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 cd "$(dirname "$0")/.."
 
 echo ""
-echo "=== 1111 School Setup ==="
+echo "=== 1111 Setup ==="
 echo ""
 
 # --- Check prerequisites ---

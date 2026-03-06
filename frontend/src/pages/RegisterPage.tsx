@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/api/client';
+import { Logo } from '@/components/layout/Logo';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -35,9 +36,9 @@ export function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6 px-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">1111 School</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Create a new account</p>
+        <div className="flex flex-col items-center gap-3">
+          <Logo className="h-14 w-14" />
+          <p className="text-sm text-muted-foreground">Create a new account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

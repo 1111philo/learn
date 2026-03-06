@@ -11,6 +11,10 @@ export function getActivity(activityId: string): Promise<ActivityDetail> {
   return get<ActivityDetail>(`/api/activities/${activityId}`);
 }
 
+export function fetchActivitiesForLesson(lessonId: string): Promise<ActivityDetail[]> {
+  return get<ActivityDetail[]>(`/api/activities/by-lesson/${lessonId}`);
+}
+
 export function submitActivity(
   activityId: string,
   text: string,

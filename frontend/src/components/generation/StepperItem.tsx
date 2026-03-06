@@ -29,7 +29,7 @@ function StepIcon({ done, active }: { done: boolean; active: boolean }) {
 }
 
 export function StepperItem({ objectiveLabel, lessonSummary, progress, inferActive }: StepperItemProps) {
-  const p = progress ?? { planned: false, planTitle: null, written: false, activityCreated: false, activityId: null, error: null };
+  const p = progress ?? { planned: false, planTitle: null, written: false, activityCreated: false, activitiesCount: 0, activityId: null, error: null };
 
   const anyStarted = p.planned || p.written || p.activityCreated;
 
@@ -60,7 +60,7 @@ export function StepperItem({ objectiveLabel, lessonSummary, progress, inferActi
   const steps = [
     { label: p.planTitle ? `Planned: ${p.planTitle}` : (p.planned ? 'Lesson planned' : 'Planning lesson'), done: p.planned },
     { label: 'Writing content', done: p.written },
-    { label: 'Creating activity', done: p.activityCreated },
+    { label: p.activitiesCount > 1 ? `Creating activities (${p.activitiesCount})` : (p.activityCreated ? 'Activities created' : 'Creating activities'), done: p.activityCreated },
   ];
 
   const allDone = p.planned && p.written && p.activityCreated;

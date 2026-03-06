@@ -1,12 +1,12 @@
 resource "aws_db_subnet_group" "main" {
-  name       = "${var.app_name}-db-subnets"
+  name       = "${local.prefix}-db-subnets"
   subnet_ids = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 
-  tags = { Name = "${var.app_name}-db-subnets" }
+  tags = { Name = "${local.prefix}-db-subnets" }
 }
 
 resource "aws_security_group" "rds" {
-  name        = "${var.app_name}-rds-sg"
+  name        = "${local.prefix}-rds-sg"
   description = "Allow PostgreSQL access"
   vpc_id      = aws_vpc.main.id
 
@@ -25,11 +25,11 @@ resource "aws_security_group" "rds" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.app_name}-rds-sg" }
+  tags = { Name = "${local.prefix}-rds-sg" }
 }
 
 resource "aws_db_instance" "main" {
-  identifier     = "${var.app_name}-db"
+  identifier     = "${local.prefix}-db"
   engine         = "postgres"
   engine_version = "16"
   instance_class = "db.t3.micro"
@@ -37,8 +37,8 @@ resource "aws_db_instance" "main" {
   allocated_storage = 20
   storage_type      = "gp3"
 
-  db_name  = var.app_name
-  username = var.app_name
+  db_name  = local.db_prefix
+  username = local.db_prefix
   password = var.db_password
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
@@ -48,5 +48,5 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot = true
   apply_immediately   = true
 
-  tags = { Name = "${var.app_name}-db" }
+  tags = { Name = "${local.prefix}-db" }
 }

@@ -9,6 +9,7 @@ class PredefinedCourse(BaseModel):
     version: str = "1.0.0"
     name: str
     description: str
+    depends_on: str | None = None
     learning_objectives: list[str] = []
     tags: list[str] = []
     estimated_hours: float = 0
@@ -39,6 +40,7 @@ def load_catalog(courses_dir: Path | None = None) -> dict[str, PredefinedCourse]
                 version=data.get("version", "1.0.0"),
                 name=data.get("name", ""),
                 description=data.get("description", ""),
+                depends_on=data.get("dependsOn"),
                 learning_objectives=data.get("learningObjectives", []),
                 tags=data.get("tags", []),
                 estimated_hours=data.get("estimatedHours", 0),
