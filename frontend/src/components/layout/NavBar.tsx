@@ -22,7 +22,6 @@ export function NavBar() {
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
         <Link to="/catalog" className="flex items-center gap-2">
           <img src={logoSvg} alt="1111 Logo: four white ones on black" className="h-8 w-8 rounded" />
-          <span className="text-lg font-bold tracking-tight">Learn</span>
         </Link>
 
         {/* Desktop nav — hidden on mobile */}
