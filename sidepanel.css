@@ -454,6 +454,12 @@ hr {
   to { transform: rotate(360deg); }
 }
 
+.loading-substep {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
 /* -- Feedback card ---------------------------------------------------------- */
 .feedback-card {
   display: flex;

@@ -127,13 +127,19 @@ async function startOrResumeCourse(courseId) {
       return;
     }
 
-    // Show loading state
     const main = $main();
-    main.innerHTML = `
-      <div class="loading-container" role="status" aria-live="polite">
-        <div class="loading-spinner" aria-hidden="true"></div>
-        <p>Creating your personalized learning plan...</p>
-      </div>`;
+    const totalSteps = 3;
+
+    function showStep(step, label) {
+      main.innerHTML = `
+        <div class="loading-container" role="status" aria-live="polite">
+          <div class="loading-spinner" aria-hidden="true"></div>
+          <p>Creating your personalized learning plan...</p>
+          <p class="loading-substep" aria-label="Step ${step} of ${totalSteps}: ${label}">Step ${step} of ${totalSteps}: ${label}</p>
+        </div>`;
+    }
+
+    showStep(1, 'Analyzing your profile');
 
     try {
       const profileSummary = await getLearnerProfileSummary();
@@ -141,6 +147,8 @@ async function startOrResumeCourse(courseId) {
         .filter(([, p]) => p.status === 'completed')
         .map(([id]) => state.courses.find(c => c.courseId === id)?.name)
         .filter(Boolean);
+
+      showStep(2, 'Building your learning plan');
 
       const plan = await orchestrator.createLearningPlan(
         course, state.preferences, profileSummary, completedNames
@@ -160,6 +168,8 @@ async function startOrResumeCourse(courseId) {
         completedAt: null,
         finalWorkProductUrl: null
       };
+
+      showStep(3, 'Preparing your first activity');
 
       // Generate instruction for first activity
       const firstSlot = plan.activities[0];
