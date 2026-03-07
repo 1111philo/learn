@@ -5,8 +5,8 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 ## Getting started
 
 1. Fork and clone the repository.
-2. Load the extension in Chrome using developer mode (see README.md).
-3. Go to Settings and enter your Anthropic API key.
+2. Copy `.env.example.js` to `.env.js` and fill in your Anthropic API key and name. This file is gitignored and will never be committed. On app load, these values automatically seed storage if not already set — so you don't need to re-enter them after clearing data.
+3. Load the extension in Chrome using developer mode (see README.md).
 4. Make your changes and test them in the side panel.
 
 ## Development workflow
@@ -15,6 +15,7 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 - All source is vanilla JS (ES modules), CSS, and HTML.
 - Course definitions live in `data/courses.json`.
 - Agent system prompts live in `prompts/*.md` -- edit these to change agent behavior without touching code.
+- `.env.js` seeds your API key and name into storage on first load. It only writes if the values aren't already set, so it won't overwrite manual changes in Settings.
 - Enable **Developer mode** in Settings > Data Management to log all agent interactions. Export the JSON to inspect agent requests, responses, and errors.
 
 ## Architecture

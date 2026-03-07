@@ -34,12 +34,26 @@ let state = {
 // -- Bootstrap ----------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await seedFromEnv();
   state.preferences = await getPreferences();
   state.courses = await loadCourses();
   state.allProgress = await getAllProgress();
   bindNav();
   render();
 });
+
+async function seedFromEnv() {
+  try {
+    const { ENV } = await import('../.env.js');
+    if (ENV.apiKey && !(await getApiKey())) {
+      await saveApiKey(ENV.apiKey);
+    }
+    const prefs = await getPreferences();
+    if (ENV.name && !prefs.name) {
+      await savePreferences({ ...prefs, name: ENV.name });
+    }
+  } catch { /* .env.js not present — expected in production */ }
+}
 
 function bindNav() {
   document.querySelectorAll('[data-nav]').forEach((btn) => {
