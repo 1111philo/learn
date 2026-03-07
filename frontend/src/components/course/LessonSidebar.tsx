@@ -32,7 +32,7 @@ export function LessonSidebar({ course, onNavigate, className }: LessonSidebarPr
   const allDone = completed === totalLessons && totalLessons > 0;
 
   return (
-    <aside className={cn("w-64 shrink-0 space-y-4", className)} aria-label="Course navigation">
+    <aside className={cn("shrink-0 space-y-4", className)} aria-label="Course navigation">
       {course.professional_role && (
         <div className="rounded-md bg-primary/10 px-3 py-2 text-xs">
           <span className="font-medium">Role:</span>{' '}
