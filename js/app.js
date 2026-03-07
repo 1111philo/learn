@@ -613,23 +613,42 @@ async function updateProfileFromFeedbackInBackground(feedbackText, course, activ
 
 async function renderWork() {
   const main = $main();
-  const products = await getWorkProducts();
+  const items = [];
 
-  if (products.length === 0) {
-    main.innerHTML = '<h2>Work</h2><p>No completed work products yet.</p>';
+  // In-progress courses with a learning plan
+  for (const [courseId, p] of Object.entries(state.allProgress)) {
+    if (p.status === 'completed') continue;
+    if (!p.learningPlan) continue;
+    const course = state.courses.find(c => c.courseId === courseId);
+    if (!course) continue;
+    const desc = p.learningPlan.finalWorkProductDescription || course.name;
+    const started = new Date(p.startedAt).toLocaleDateString();
+    items.push(`
+      <li class="work-item">
+        <strong>${esc(desc)}</strong>
+        <small>In progress since ${started}</small>
+      </li>`);
+  }
+
+  // Completed work products
+  const products = await getWorkProducts();
+  for (const w of products) {
+    const label = w.url ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.courseName)}</a>` : esc(w.courseName);
+    items.push(`
+      <li class="work-item">
+        <strong>${label}</strong>
+        <small>Completed ${new Date(w.completedAt).toLocaleDateString()}</small>
+      </li>`);
+  }
+
+  if (items.length === 0) {
+    main.innerHTML = '<h2>Work</h2><p>No work products yet. Start a course to begin.</p>';
     return;
   }
 
-  const items = products.map((w) => `
-    <li class="work-item">
-      <strong>${esc(w.courseName)}</strong>
-      <a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.url)}</a>
-      <small>Completed ${new Date(w.completedAt).toLocaleDateString()}</small>
-    </li>`).join('');
-
   main.innerHTML = `
     <h2>Work</h2>
-    <ul class="work-list" role="list">${items}</ul>`;
+    <ul class="work-list" role="list">${items.join('')}</ul>`;
 }
 
 // -- Settings -----------------------------------------------------------------
@@ -894,11 +913,11 @@ function instructionMessage(text) {
 }
 
 function draftMessage(draft) {
+  const time = new Date(draft.timestamp).toLocaleString();
   return `
     <div class="msg msg-user">
-      <p class="draft-label">Draft recorded</p>
-      ${draft.url ? `<a href="${esc(draft.url)}" target="_blank" rel="noopener" class="draft-link">${esc(draft.url)}</a>` : ''}
-      <small>${new Date(draft.timestamp).toLocaleString()}</small>
+      <p class="draft-label">${draft.url ? `<a href="${esc(draft.url)}" target="_blank" rel="noopener" class="draft-link">Draft recorded</a>` : 'Draft recorded'}</p>
+      <small>${time}</small>
     </div>`;
 }
 
