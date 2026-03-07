@@ -496,7 +496,7 @@ async function renderSettings() {
 
     <div class="settings-section">
       <h3>API Key</h3>
-      <p class="settings-hint">Enter your Anthropic API key to enable AI-powered learning.</p>
+      <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
       <div class="api-key-row">
         <label for="api-key-input" class="sr-only">API Key</label>
         <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••' : ''}">
