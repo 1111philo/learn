@@ -10,9 +10,10 @@ import { useLessonNavStore } from '@/stores/lesson-nav-store';
 interface LessonSidebarProps {
   course: CourseResponse;
   onNavigate?: () => void;
+  className?: string;
 }
 
-export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
+export function LessonSidebar({ course, onNavigate, className }: LessonSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { sections, currentPage, setCurrentPage } = useLessonNavStore();
@@ -31,7 +32,7 @@ export function LessonSidebar({ course, onNavigate }: LessonSidebarProps) {
   const allDone = completed === totalLessons && totalLessons > 0;
 
   return (
-    <aside className="w-64 shrink-0 space-y-4" aria-label="Course navigation">
+    <aside className={cn("w-64 shrink-0 space-y-4", className)} aria-label="Course navigation">
       {course.professional_role && (
         <div className="rounded-md bg-primary/10 px-3 py-2 text-xs">
           <span className="font-medium">Role:</span>{' '}
