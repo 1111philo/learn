@@ -19,13 +19,21 @@ async function loadPrompt(name) {
 }
 
 function parseJSON(text) {
-  // Strip markdown fencing if present
-  const cleaned = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    throw new ApiError('parse', 'Failed to parse agent JSON response.');
+  // Try parsing as-is first
+  const trimmed = text.trim();
+  try { return JSON.parse(trimmed); } catch { /* continue */ }
+
+  // Strip markdown fencing
+  const fenced = trimmed.replace(/^```(?:json)?\s*/gm, '').replace(/```\s*$/gm, '').trim();
+  try { return JSON.parse(fenced); } catch { /* continue */ }
+
+  // Extract first JSON object from anywhere in the text
+  const match = trimmed.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch { /* fall through */ }
   }
+
+  throw new ApiError('parse', 'Failed to parse agent JSON response.');
 }
 
 async function requireKey() {
