@@ -55,6 +55,7 @@ export function CoursePage() {
               <LessonSidebar
                 course={course}
                 onNavigate={() => setSidebarOpen(false)}
+                className="w-full"
               />
             </SheetContent>
           </Sheet>
