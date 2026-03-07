@@ -262,51 +262,6 @@ nav button:focus-visible {
   margin-bottom: 2px;
 }
 
-/* ── Assessment panel ───────────────────────────────────────────────────── */
-.assessment-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space);
-}
-
-.draft-thumbnail {
-  width: 100%;
-  border-radius: var(--radius);
-  border: 1px solid var(--color-border);
-}
-
-.draft-url {
-  font-size: 0.85rem;
-  word-break: break-all;
-}
-
-fieldset {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: var(--space);
-}
-
-legend {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.criterion {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 0;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.criterion input[type="checkbox"] {
-  margin-top: 2px;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
 /* ── Work list ──────────────────────────────────────────────────────────── */
 .work-list {
   list-style: none;

@@ -78,9 +78,8 @@ function renderCourses() {
       <li>
         <button class="course-card${locked ? ' locked' : ''}"
                 data-course="${c.courseId}"
-                ${locked ? 'disabled aria-disabled="true"' : ''}
-                aria-label="${c.name}${locked ? ' (locked -- complete prerequisite first)' : ''}">
-          <span class="course-status" aria-label="Status: ${status.replace('_', ' ')}">${statusIcon(status)}</span>
+                ${locked ? 'disabled' : ''}>
+          <span class="course-status" aria-hidden="true">${statusIcon(status)}</span>
           <div class="course-info">
             <strong>${esc(c.name)}</strong>
             <p>${esc(c.description)}</p>
@@ -241,7 +240,7 @@ async function renderCourse() {
       <span class="progress-label">Activity ${p.currentActivityIndex + 1} of ${planActivities.length}</span>
       <button class="reset-btn" id="reset-course-btn" aria-label="Reset course" title="Reset course">&#8635;</button>
     </div>
-    <div class="chat" role="log" aria-live="polite" aria-label="Activity conversation">`;
+    <div class="chat" role="log" aria-label="Activity conversation">`;
 
   // Prior activities summary
   for (let i = 0; i < p.currentActivityIndex; i++) {
@@ -338,6 +337,7 @@ function confirmResetCourse(course, progress) {
       </div>
     </div>`;
 
+  $('#cancel-reset-btn').focus();
   $('#cancel-reset-btn').addEventListener('click', () => render());
   $('#confirm-reset-btn').addEventListener('click', async () => {
     await chrome.storage.local.remove(`progress-${progress.courseId}`);
@@ -619,6 +619,7 @@ async function renderSettings() {
         </div>
       </div>`;
 
+    $('#cancel-delete-btn').focus();
     $('#cancel-delete-btn').addEventListener('click', () => renderSettings());
     $('#confirm-delete-btn').addEventListener('click', async () => {
       await chrome.storage.local.clear();
@@ -703,7 +704,7 @@ function showErrorWithRetry(message) {
 // -- Helpers ------------------------------------------------------------------
 
 function appMessage(text) {
-  return `<div class="msg msg-app" role="status"><p>${esc(text)}</p></div>`;
+  return `<div class="msg msg-app"><p>${esc(text)}</p></div>`;
 }
 
 function instructionMessage(text) {
@@ -722,7 +723,7 @@ function instructionMessage(text) {
     }
   }
 
-  let html = '<div class="msg msg-app instruction-card" role="status">';
+  let html = '<div class="msg msg-app instruction-card">';
   if (intro) html += `<p class="instruction-intro">${esc(intro)}</p>`;
   if (steps.length > 0) {
     html += '<ol class="instruction-steps">';
@@ -754,7 +755,7 @@ function feedbackCard(draft) {
   else if (draft.recommendation === 'revise') recLabel = 'Revision recommended';
   else if (draft.recommendation === 'continue') recLabel = 'Acceptable -- revision optional';
 
-  let html = `<div class="msg msg-app feedback-card" role="status">
+  let html = `<div class="msg msg-app feedback-card">
     <p>${esc(draft.feedback)}</p>
     <div class="feedback-score">
       <span class="score-badge">${scorePercent}%</span>
