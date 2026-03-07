@@ -51,7 +51,7 @@ export function CoursePage() {
                 Lessons
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 pt-10">
+            <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto pt-6">
               <LessonSidebar
                 course={course}
                 onNavigate={() => setSidebarOpen(false)}
