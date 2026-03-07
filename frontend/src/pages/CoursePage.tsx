@@ -38,7 +38,7 @@ export function CoursePage() {
     <div className="flex gap-6">
       {/* Persistent sidebar — hidden on mobile */}
       <div className="hidden sm:block">
-        <LessonSidebar course={course} />
+        <LessonSidebar course={course} className="w-64" />
       </div>
 
       <div className="min-w-0 flex-1">
