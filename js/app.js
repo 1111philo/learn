@@ -258,28 +258,8 @@ async function renderCourse() {
     html += appMessage('Building on your previous work, here is your next activity.');
   }
 
-  // Current activity instruction + tips
+  // Current activity instruction
   html += instructionMessage(activity.instruction);
-  if (activity.tips && activity.tips.length > 0) {
-    html += `<div class="msg msg-app tips-card" role="note">
-      <details class="tips-details">
-        <summary>Tips</summary>
-        <ul class="tips-list">${activity.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
-      </details>
-    </div>`;
-  }
-
-  // Feedback / regenerate (only if no drafts yet for this activity)
-  if (!hasDrafts && p.status !== 'completed') {
-    html += `<div class="activity-feedback-bar">
-      <button id="feedback-toggle-btn" class="feedback-toggle-btn">Have a question or issue with this activity?</button>
-      <div id="feedback-form" class="feedback-form" hidden>
-        <label for="feedback-input" class="sr-only">Your feedback</label>
-        <textarea id="feedback-input" rows="2" placeholder="e.g. I don't have access to DevTools, can you suggest an alternative?"></textarea>
-        <button id="feedback-submit-btn" class="primary-btn">Regenerate Activity</button>
-      </div>
-    </div>`;
-  }
 
   // Show drafts + feedback for this activity
   for (const draft of draftsForActivity) {
@@ -297,6 +277,10 @@ async function renderCourse() {
   // Action bar
   if (p.status !== 'completed') {
     html += '<div class="action-bar">';
+
+    if (!hasDrafts) {
+      html += '<button id="feedback-btn" class="secondary-btn" aria-label="Give feedback on this activity">Feedback</button>';
+    }
 
     if (lastDraft && lastDraft.recommendation) {
       const rec = lastDraft.recommendation;
@@ -322,19 +306,9 @@ async function renderCourse() {
   $('#back-btn').addEventListener('click', () => navigate('courses'));
   $('#reset-course-btn').addEventListener('click', () => confirmResetCourse(course, p));
 
-  const feedbackToggle = $('#feedback-toggle-btn');
-  if (feedbackToggle) {
-    feedbackToggle.addEventListener('click', () => {
-      const form = $('#feedback-form');
-      const isHidden = form.hidden;
-      form.hidden = !isHidden;
-      if (!form.hidden) $('#feedback-input').focus();
-    });
-  }
-
-  const feedbackSubmit = $('#feedback-submit-btn');
-  if (feedbackSubmit) {
-    feedbackSubmit.addEventListener('click', () => regenerateCurrentActivity(course, p));
+  const feedbackBtn = $('#feedback-btn');
+  if (feedbackBtn) {
+    feedbackBtn.addEventListener('click', () => showActivityFeedback(course, p));
   }
 
   const recordBtn = $('#record-draft-btn');
@@ -350,6 +324,25 @@ async function renderCourse() {
       render();
     });
   }
+}
+
+function showActivityFeedback(course, p) {
+  const main = $main();
+  main.innerHTML = `
+    <div class="confirm-container" role="dialog" aria-label="Activity feedback">
+      <h2>Activity Feedback</h2>
+      <p>Describe what's wrong or ask a question. The activity will be regenerated to address your feedback while keeping the same learning goal.</p>
+      <label for="feedback-input" class="sr-only">Your feedback</label>
+      <textarea id="feedback-input" rows="3" class="feedback-textarea" placeholder="e.g. I'm on a phone and can't use DevTools"></textarea>
+      <div class="action-bar">
+        <button id="cancel-feedback-btn" class="secondary-btn">Cancel</button>
+        <button id="submit-feedback-btn" class="primary-btn">Regenerate</button>
+      </div>
+    </div>`;
+
+  $('#feedback-input').focus();
+  $('#cancel-feedback-btn').addEventListener('click', () => render());
+  $('#submit-feedback-btn').addEventListener('click', () => regenerateCurrentActivity(course, p));
 }
 
 async function regenerateCurrentActivity(course, p) {
@@ -378,7 +371,7 @@ async function regenerateCurrentActivity(course, p) {
 
     const generated = await orchestrator.regenerateActivity(
       course, currentSlot, progressSummary, profileSummary,
-      activity.instruction, feedbackText
+      activity.instruction, activity.tips, feedbackText
     );
 
     p.activities[p.currentActivityIndex] = {
