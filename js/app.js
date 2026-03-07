@@ -941,10 +941,16 @@ function esc(s) {
 }
 
 /** Convert URLs in already-escaped text into clickable links. */
+/** Convert URLs in already-escaped text into clickable links. Handles both https://... and bare domain.tld/path URLs. */
 function linkify(escaped) {
   return escaped.replace(
-    /https?:\/\/[^\s&lt;&amp;)"\]]+/g,
-    url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`
+    /(?:https?:\/\/)?(?:[\w-]+\.)+[a-z]{2,}(?:\/[^\s&lt;&amp;)"\]]*)?/gi,
+    match => {
+      // Skip things that look like file extensions (e.g. "style.css") — require a slash or known domain
+      if (!match.includes('/') && !match.startsWith('http') && !/\.(com|org|net|io|dev|co|edu|gov|app|me)\b/i.test(match)) return match;
+      const href = match.startsWith('http') ? match : `https://${match}`;
+      return `<a href="${href}" target="_blank" rel="noopener">${match}</a>`;
+    }
   );
 }
 
