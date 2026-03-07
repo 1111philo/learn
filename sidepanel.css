@@ -42,9 +42,8 @@ header {
 }
 
 .logo {
-  width: 28px;
-  height: 28px;
-  color: var(--color-primary-text);
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
 }
 
