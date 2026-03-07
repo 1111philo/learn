@@ -676,6 +676,19 @@ hr {
 .key-feedback-error { color: var(--color-warning); }
 .key-feedback-info { color: var(--color-text-secondary); }
 
+.form-feedback {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-success);
+  min-height: 1.3em;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.form-feedback-show {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
   .loading-spinner { animation: none; border-top-color: var(--color-accent); }

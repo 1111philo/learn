@@ -526,6 +526,7 @@ async function renderSettings() {
           <textarea name="learnerProfile" rows="5" placeholder="This is updated automatically by the AI as you learn. You can also edit it yourself.">${esc(profileSummary)}</textarea>
         </label>
         <button type="submit" class="primary-btn">Save</button>
+        <div id="prefs-feedback" role="status" aria-live="polite"></div>
       </form>
     </div>
 
@@ -577,7 +578,7 @@ async function renderSettings() {
     state.preferences = { name: fd.get('name') };
     await savePreferences(state.preferences);
     await saveLearnerProfileSummary(fd.get('learnerProfile'));
-    announce('Personalization saved.');
+    showFormFeedback('prefs-feedback', 'Saved!');
   });
 
   // Export
@@ -592,6 +593,14 @@ async function renderSettings() {
     URL.revokeObjectURL(url);
     announce('Data exported.');
   });
+}
+
+function showFormFeedback(id, msg) {
+  const el = $(`#${id}`);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'form-feedback form-feedback-show';
+  setTimeout(() => { el.className = 'form-feedback'; }, 2000);
 }
 
 function showKeyFeedback(msg, type) {
