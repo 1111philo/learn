@@ -635,7 +635,7 @@ async function renderSettings() {
       <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
       <div class="api-key-row">
         <label for="api-key-input" class="sr-only">API Key</label>
-        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••' : ''}">
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}">
         <button id="save-key-btn" class="primary-btn">Save</button>
       </div>
       <div id="key-feedback" role="status" aria-live="polite"></div>
@@ -682,20 +682,20 @@ async function renderSettings() {
   // API key
   const keyInput = $('#api-key-input');
   keyInput.addEventListener('focus', () => {
-    if (keyInput.value === '••••••••') keyInput.value = '';
+    if (keyInput.value === '••••••••••••••••••••••••••••••••••••••••') keyInput.value = '';
   });
   keyInput.addEventListener('blur', async () => {
-    if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••';
+    if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
   });
 
   const saveKey = async () => {
     const key = keyInput.value.trim();
-    if (!key || key === '••••••••') {
+    if (!key || key === '••••••••••••••••••••••••••••••••••••••••') {
       showKeyFeedback('Please enter an API key.', 'error');
       return;
     }
     await saveApiKey(key);
-    keyInput.value = '••••••••';
+    keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
     showKeyFeedback('Saved!', 'success');
   };
 
