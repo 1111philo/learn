@@ -192,6 +192,35 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
 }
 
 /**
+ * Update the learner profile after learner feedback on an activity.
+ */
+export async function updateProfileFromFeedback(fullProfile, feedbackText, activityContext) {
+  const apiKey = await requireKey();
+  const systemPrompt = await loadPrompt('learner-profile-update');
+
+  const userContent = JSON.stringify({
+    currentProfile: fullProfile,
+    learnerFeedback: feedbackText,
+    context: {
+      courseName: activityContext.courseName,
+      activityType: activityContext.activityType,
+      activityGoal: activityContext.activityGoal,
+      timestamp: Date.now()
+    }
+  });
+
+  const { content } = await callClaude({
+    apiKey,
+    model: MODEL_LIGHT,
+    systemPrompt,
+    messages: [{ role: 'user', content: userContent }],
+    maxTokens: 1024
+  });
+
+  return parseJSON(content);
+}
+
+/**
  * Update the learner profile after an assessment.
  */
 export async function updateLearnerProfile(fullProfile, assessmentResult, activityContext) {

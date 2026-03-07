@@ -381,6 +381,7 @@ async function regenerateCurrentActivity(course, p) {
     };
 
     await saveCourseProgress(p.courseId, p);
+    updateProfileFromFeedbackInBackground(feedbackText, course, currentSlot);
     render();
   } catch (e) {
     handleApiError(e);
@@ -519,6 +520,40 @@ async function updateProfileInBackground(assessmentResult, course, activity) {
     await saveLearnerProfileSummary(result.summary);
   } catch (e) {
     console.warn('Learner profile update failed (non-blocking):', e);
+  }
+}
+
+async function updateProfileFromFeedbackInBackground(feedbackText, course, activity) {
+  try {
+    let profile = await getLearnerProfile();
+    if (!profile) {
+      const prefs = state.preferences;
+      profile = {
+        name: prefs.name || '',
+        completedCourses: [],
+        activeCourses: [],
+        strengths: [],
+        weaknesses: [],
+        revisionPatterns: '',
+        pacing: '',
+        preferences: {},
+        accessibilityNeeds: [],
+        recurringSupport: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+    }
+
+    const result = await orchestrator.updateProfileFromFeedback(profile, feedbackText, {
+      courseName: course.name,
+      activityType: activity.type,
+      activityGoal: activity.goal
+    });
+
+    await saveLearnerProfile(result.profile);
+    await saveLearnerProfileSummary(result.summary);
+  } catch (e) {
+    console.warn('Learner profile feedback update failed (non-blocking):', e);
   }
 }
 
