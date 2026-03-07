@@ -260,7 +260,7 @@ async function renderCourse() {
   }
 
   // Current activity instruction + tips
-  html += appMessage(activity.instruction);
+  html += instructionMessage(activity.instruction);
   if (activity.tips && activity.tips.length > 0) {
     html += `<div class="msg msg-app tips-card" role="note">
       <details class="tips-details">
@@ -650,6 +650,38 @@ function showErrorWithRetry(message) {
 
 function appMessage(text) {
   return `<div class="msg msg-app" role="status"><p>${esc(text)}</p></div>`;
+}
+
+function instructionMessage(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  let intro = '';
+  const steps = [];
+
+  for (const line of lines) {
+    const stepMatch = line.match(/^(\d+)[.)]\s+(.+)/);
+    if (stepMatch) {
+      steps.push(stepMatch[2]);
+    } else {
+      if (steps.length === 0) {
+        intro += (intro ? ' ' : '') + line;
+      }
+    }
+  }
+
+  let html = '<div class="msg msg-app instruction-card" role="status">';
+  if (intro) html += `<p class="instruction-intro">${esc(intro)}</p>`;
+  if (steps.length > 0) {
+    html += '<ol class="instruction-steps">';
+    for (const step of steps) {
+      html += `<li>${esc(step)}</li>`;
+    }
+    html += '</ol>';
+  }
+  if (!intro && steps.length === 0) {
+    html += `<p>${esc(text)}</p>`;
+  }
+  html += '</div>';
+  return html;
 }
 
 function draftMessage(draft) {

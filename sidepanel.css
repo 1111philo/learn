@@ -549,6 +549,27 @@ hr {
   margin-bottom: 2px;
 }
 
+/* -- Instruction card ------------------------------------------------------- */
+.instruction-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.instruction-intro {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+.instruction-steps {
+  margin: 0 0 0 20px;
+  font-size: 0.9rem;
+}
+
+.instruction-steps li {
+  padding: 4px 0;
+}
+
 /* -- Tips card -------------------------------------------------------------- */
 .tips-card {
   border-left: 3px solid var(--color-accent);
