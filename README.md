@@ -101,6 +101,7 @@ Each course in `data/courses.json` has:
 | Host                        | Why                                    |
 |-----------------------------|----------------------------------------|
 | `https://api.anthropic.com/*` | Send requests to the Claude API with the user's own key |
+| `<all_urls>`                | Capture screenshots of the active tab for AI assessment |
 
 ## License
 

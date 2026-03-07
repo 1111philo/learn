@@ -804,7 +804,7 @@ function showError(message) {
         <button class="secondary-btn" id="error-back-btn">Back</button>
       </div>
     </div>`;
-  $('#error-back-btn').addEventListener('click', () => navigate('courses'));
+  $('#error-back-btn').addEventListener('click', () => render());
 }
 
 function handleApiError(e) {
@@ -837,7 +837,7 @@ function showErrorWithRetry(message) {
         <button class="primary-btn" id="error-retry-btn">Retry</button>
       </div>
     </div>`;
-  $('#error-back-btn').addEventListener('click', () => navigate('courses'));
+  $('#error-back-btn').addEventListener('click', () => render());
   $('#error-retry-btn').addEventListener('click', () => render());
 }
 
