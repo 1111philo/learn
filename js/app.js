@@ -6,7 +6,8 @@ import {
   exportAllData,
   getApiKey, saveApiKey,
   getLearnerProfile, saveLearnerProfile,
-  getLearnerProfileSummary, saveLearnerProfileSummary
+  getLearnerProfileSummary, saveLearnerProfileSummary,
+  getDevMode, saveDevMode, appendDevLog
 } from './storage.js';
 import { loadCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
@@ -14,6 +15,12 @@ import { ApiError } from './api.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $main = () => $('#main-content');
+
+async function logDev(type, data) {
+  try {
+    if (await getDevMode()) await appendDevLog({ type, ...data });
+  } catch { /* non-blocking */ }
+}
 
 let state = {
   view: 'courses',        // courses | course | work | settings
@@ -367,6 +374,8 @@ async function regenerateCurrentActivity(course, p) {
   const feedbackText = $('#feedback-input')?.value?.trim();
   if (!feedbackText) return;
 
+  logDev('learner_feedback', { feedback: feedbackText, courseId: course.courseId, activityIndex: p.currentActivityIndex });
+
   const main = $main();
   main.innerHTML = `
     <div class="loading-container" role="status" aria-live="polite">
@@ -611,6 +620,7 @@ async function renderSettings() {
   const prefs = state.preferences;
   const hasKey = await orchestrator.isReady();
   const profileSummary = await getLearnerProfileSummary();
+  const devModeOn = await getDevMode();
 
   main.innerHTML = `
     <h2>Settings</h2>
@@ -647,6 +657,11 @@ async function renderSettings() {
     <hr>
     <div class="settings-section">
       <h3>Data Management</h3>
+      <label class="toggle-label">
+        <input type="checkbox" id="dev-mode-toggle" ${devModeOn ? 'checked' : ''}>
+        Developer mode
+      </label>
+      <p class="settings-hint">Logs agent requests, responses, feedback, and errors. Included in JSON export.</p>
     </div>
     <div class="settings-actions">
       <button id="export-btn" class="settings-action-btn">
@@ -699,6 +714,11 @@ async function renderSettings() {
     await savePreferences(state.preferences);
     await saveLearnerProfileSummary(fd.get('learnerProfile'));
     showFormFeedback('prefs-feedback', 'Saved!');
+  });
+
+  // Developer mode toggle
+  $('#dev-mode-toggle').addEventListener('change', async (e) => {
+    await saveDevMode(e.target.checked);
   });
 
   // Export
@@ -782,6 +802,7 @@ function showError(message) {
 }
 
 function handleApiError(e) {
+  logDev('error', { type: e instanceof ApiError ? e.type : 'unknown', message: e.message || String(e) });
   if (e instanceof ApiError) {
     if (e.type === 'invalid_key') {
       showError('Invalid API key. Go to Settings to update your key.');

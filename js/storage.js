@@ -80,6 +80,30 @@ export async function saveLearnerProfileSummary(summary) {
   await chrome.storage.local.set({ learnerProfileSummary: summary });
 }
 
+// --- Developer mode ---
+
+export async function getDevMode() {
+  const result = await chrome.storage.local.get('devMode');
+  return result.devMode || false;
+}
+
+export async function saveDevMode(enabled) {
+  await chrome.storage.local.set({ devMode: enabled });
+}
+
+export async function getDevLog() {
+  const result = await chrome.storage.local.get('devLog');
+  return result.devLog || [];
+}
+
+export async function appendDevLog(entry) {
+  const log = await getDevLog();
+  log.push({ ...entry, timestamp: Date.now() });
+  // Keep last 500 entries to avoid storage bloat
+  if (log.length > 500) log.splice(0, log.length - 500);
+  await chrome.storage.local.set({ devLog: log });
+}
+
 export async function exportAllData() {
   const metadata = await chrome.storage.local.get(null);
   const blobs = await exportAllBlobs();

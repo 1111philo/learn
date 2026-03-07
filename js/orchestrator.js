@@ -4,7 +4,13 @@
  */
 
 import { callClaude, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
-import { getApiKey } from './storage.js';
+import { getApiKey, getDevMode, appendDevLog } from './storage.js';
+
+async function devLog(type, data) {
+  try {
+    if (await getDevMode()) await appendDevLog({ type, ...data });
+  } catch { /* non-blocking */ }
+}
 
 // Prompt cache (loaded once per session)
 const promptCache = {};
@@ -94,17 +100,21 @@ function validateAssessment(parsed) {
 }
 
 /** Call an agent function with validation. Retries once on validation failure. */
-async function callWithValidation(agentFn, validator) {
+async function callWithValidation(agentFn, validator, agentName) {
   const parsed = await agentFn();
   const error = validator(parsed);
-  if (!error) return parsed;
+  if (!error) {
+    devLog('agent_response', { agent: agentName, response: parsed });
+    return parsed;
+  }
   console.warn(`Validation failed (retrying): ${error}`);
+  devLog('validation_failure', { agent: agentName, error, response: parsed });
   // Retry once
   const retry = await agentFn();
   const retryError = validator(retry);
+  devLog('agent_response', { agent: agentName, response: retry, retried: true, retryError });
   if (retryError) {
     console.warn(`Validation failed after retry: ${retryError}`);
-    // If it's a safety issue, throw. Otherwise return best-effort.
     if (retryError.includes('unsafe')) throw new ApiError('safety', retryError);
   }
   return retry;
@@ -150,7 +160,9 @@ export async function createLearningPlan(course, preferences, profileSummary, co
     maxTokens: 2048
   });
 
-  return parseJSON(content);
+  const parsed = parseJSON(content);
+  devLog('agent_response', { agent: 'course-creation', response: parsed });
+  return parsed;
 }
 
 /**
@@ -178,7 +190,7 @@ export async function generateNextActivity(course, planSlot, progressSummary, pr
     return parseJSON(content);
   };
 
-  return callWithValidation(callAgent, validateActivity);
+  return callWithValidation(callAgent, validateActivity, 'activity-creation');
 }
 
 /**
@@ -212,7 +224,7 @@ export async function regenerateActivity(course, planSlot, progressSummary, prof
     return parseJSON(content);
   };
 
-  return callWithValidation(callAgent, validateActivity);
+  return callWithValidation(callAgent, validateActivity, 'activity-regeneration');
 }
 
 /**
@@ -273,7 +285,7 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
     return parseJSON(content);
   };
 
-  return callWithValidation(callAgent, validateAssessment);
+  return callWithValidation(callAgent, validateAssessment, 'activity-assessment');
 }
 
 /**
@@ -294,6 +306,8 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
     }
   });
 
+  devLog('agent_request', { agent: 'profile-from-feedback', feedback: feedbackText, context: activityContext });
+
   const { content } = await callClaude({
     apiKey,
     model: MODEL_LIGHT,
@@ -302,7 +316,9 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
     maxTokens: 1024
   });
 
-  return parseJSON(content);
+  const parsed = parseJSON(content);
+  devLog('agent_response', { agent: 'profile-from-feedback', response: parsed });
+  return parsed;
 }
 
 /**
@@ -337,5 +353,7 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
     maxTokens: 1024
   });
 
-  return parseJSON(content);
+  const parsed = parseJSON(content);
+  devLog('agent_response', { agent: 'profile-update', response: parsed });
+  return parsed;
 }

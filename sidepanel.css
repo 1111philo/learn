@@ -590,6 +590,18 @@ hr {
   margin-bottom: 8px;
 }
 
+.toggle-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
 .settings-section input {
   font: inherit;
   font-weight: 400;
