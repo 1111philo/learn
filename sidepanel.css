@@ -484,21 +484,20 @@ hr {
   border-left: 3px solid var(--color-accent);
 }
 
-.tips-label {
-  margin-bottom: 4px;
+.tips-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 2px 0;
 }
 
 .tips-list {
-  margin: 0 0 4px 16px;
+  margin: 4px 0 0 16px;
   font-size: 0.85rem;
 }
 
 .tips-list li {
   margin-bottom: 2px;
-}
-
-.tips-time {
-  color: var(--color-text-secondary);
 }
 
 /* -- Error states ----------------------------------------------------------- */

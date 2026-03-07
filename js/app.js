@@ -170,8 +170,7 @@ async function startOrResumeCourse(courseId) {
       progress.activities.push({
         ...firstSlot,
         instruction: generated.instruction,
-        tips: generated.tips,
-        estimatedMinutes: generated.estimatedMinutes
+        tips: generated.tips
       });
 
       await saveCourseProgress(courseId, progress);
@@ -220,8 +219,7 @@ async function renderCourse() {
       p.activities[p.currentActivityIndex] = {
         ...currentSlot,
         instruction: generated.instruction,
-        tips: generated.tips,
-        estimatedMinutes: generated.estimatedMinutes
+        tips: generated.tips
       };
 
       await saveCourseProgress(p.courseId, p);
@@ -264,9 +262,10 @@ async function renderCourse() {
   html += appMessage(activity.instruction);
   if (activity.tips && activity.tips.length > 0) {
     html += `<div class="msg msg-app tips-card" role="note">
-      <p class="tips-label"><strong>Tips</strong></p>
-      <ul class="tips-list">${activity.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
-      ${activity.estimatedMinutes ? `<p class="tips-time"><small>Estimated time: ~${activity.estimatedMinutes} min</small></p>` : ''}
+      <details class="tips-details">
+        <summary>Tips</summary>
+        <ul class="tips-list">${activity.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+      </details>
     </div>`;
   }
 
