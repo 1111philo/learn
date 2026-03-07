@@ -4,7 +4,7 @@ import {
   getWorkProducts, saveWorkProduct,
   saveScreenshot, getScreenshot,
   exportAllData,
-  getApiKey, saveApiKey, clearApiKey,
+  getApiKey, saveApiKey,
   getLearnerProfile, saveLearnerProfile,
   getLearnerProfileSummary, saveLearnerProfileSummary
 } from './storage.js';
@@ -497,17 +497,10 @@ async function renderSettings() {
     <div class="settings-section">
       <h3>API Key</h3>
       <p class="settings-hint">Enter your Anthropic API key to enable AI-powered learning.</p>
-      <div class="api-key-status ${hasKey ? 'status-set' : 'status-unset'}">
-        ${hasKey ? 'API key is set' : 'No API key set'}
-      </div>
-      <label>
-        API Key
-        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off">
-      </label>
-      <div class="action-bar action-bar-left">
-        <button id="save-key-btn" class="primary-btn">Save Key</button>
-        <button id="test-key-btn" class="secondary-btn" ${!hasKey ? 'disabled' : ''}>Test Key</button>
-        <button id="clear-key-btn" class="secondary-btn" ${!hasKey ? 'disabled' : ''}>Clear Key</button>
+      <div class="api-key-row">
+        <label for="api-key-input" class="sr-only">API Key</label>
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••' : ''}">
+        <button id="save-key-btn" class="primary-btn">Save</button>
       </div>
       <div id="key-feedback" role="status" aria-live="polite"></div>
     </div>
@@ -545,42 +538,24 @@ async function renderSettings() {
       </button>
     </div>`;
 
-  // API key handlers
+  // API key
+  const keyInput = $('#api-key-input');
+  keyInput.addEventListener('focus', () => {
+    if (keyInput.value === '••••••••') keyInput.value = '';
+  });
+  keyInput.addEventListener('blur', async () => {
+    if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••';
+  });
+
   $('#save-key-btn').addEventListener('click', async () => {
-    const input = $('#api-key-input');
-    const key = input.value.trim();
-    if (!key) {
+    const key = keyInput.value.trim();
+    if (!key || key === '••••••••') {
       showKeyFeedback('Please enter an API key.', 'error');
       return;
     }
     await saveApiKey(key);
-    input.value = '';
-    showKeyFeedback('API key saved.', 'success');
-    renderSettings(); // refresh status
-  });
-
-  $('#test-key-btn').addEventListener('click', async () => {
-    showKeyFeedback('Testing...', 'info');
-    try {
-      const { callClaude, MODEL_LIGHT } = await import('./api.js');
-      const apiKey = await getApiKey();
-      await callClaude({
-        apiKey,
-        model: MODEL_LIGHT,
-        systemPrompt: 'Reply with exactly: OK',
-        messages: [{ role: 'user', content: 'Test' }],
-        maxTokens: 8
-      });
-      showKeyFeedback('API key is valid!', 'success');
-    } catch (e) {
-      showKeyFeedback(e.message || 'Key test failed.', 'error');
-    }
-  });
-
-  $('#clear-key-btn').addEventListener('click', async () => {
-    await clearApiKey();
-    showKeyFeedback('API key cleared.', 'info');
-    renderSettings();
+    keyInput.value = '••••••••';
+    showKeyFeedback('Saved!', 'success');
   });
 
   // Personalization

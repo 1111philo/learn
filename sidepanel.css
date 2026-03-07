@@ -578,24 +578,6 @@ hr {
   margin-bottom: 8px;
 }
 
-.api-key-status {
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  margin-bottom: 8px;
-}
-
-.status-set {
-  background: #dcfce7;
-  color: var(--color-success);
-}
-
-.status-unset {
-  background: #fef3c7;
-  color: var(--color-warning);
-}
-
 .settings-section label {
   display: flex;
   flex-direction: column;
@@ -620,6 +602,26 @@ hr {
 
 .action-bar-left {
   justify-content: flex-start;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 4px;
+}
+
+.api-key-row input {
+  flex: 1;
+  font: inherit;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.api-key-row input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .key-feedback {
