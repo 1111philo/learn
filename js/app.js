@@ -84,7 +84,7 @@ function renderCourses() {
           <div class="course-info">
             <strong>${esc(c.name)}</strong>
             <p>${esc(c.description)}</p>
-            <small>${c.estimatedHours} hours${locked ? ' -- requires ' + c.dependsOn : ''}</small>
+            <small>${progressLabel(c, locked)}</small>
           </div>
         </button>
       </li>`;
@@ -103,6 +103,15 @@ function statusIcon(s) {
   if (s === 'completed') return '<span aria-hidden="true">&#10003;</span>';
   if (s === 'in_progress') return '<span aria-hidden="true">&#9654;</span>';
   return '<span aria-hidden="true">&#9675;</span>';
+}
+
+function progressLabel(course, locked) {
+  if (locked) return 'Requires ' + course.dependsOn;
+  const prog = state.allProgress[course.courseId];
+  if (!prog) return 'Not started';
+  if (prog.status === 'completed') return 'Completed';
+  const total = prog.learningPlan?.activities?.length || '?';
+  return `Activity ${prog.currentActivityIndex + 1} of ${total}`;
 }
 
 // -- Active course ------------------------------------------------------------

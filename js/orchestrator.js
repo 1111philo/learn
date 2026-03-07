@@ -54,8 +54,7 @@ export async function createLearningPlan(course, preferences, profileSummary, co
       courseId: course.courseId,
       name: course.name,
       description: course.description,
-      learningObjectives: course.learningObjectives,
-      estimatedHours: course.estimatedHours
+      learningObjectives: course.learningObjectives
     },
     learnerProfile: profileSummary || `${preferences.name || 'Learner'}`,
     completedCourses: completedCourseNames

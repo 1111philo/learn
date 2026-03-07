@@ -77,7 +77,6 @@ Each course in `data/courses.json` has:
 | `description`       | `string`   | Summary of purpose and expected value            |
 | `dependsOn`         | `string?`  | Optional prerequisite course ID                  |
 | `learningObjectives`| `string[]` | Outcome statements the course achieves           |
-| `estimatedHours`    | `number`   | Approximate total hours to complete              |
 
 ## Permissions
 

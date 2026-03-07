@@ -8,8 +8,7 @@
       "Identify common accessibility barriers on web pages",
       "Use browser developer tools to run basic accessibility audits",
       "Propose concrete fixes for the accessibility issues you find"
-    ],
-    "estimatedHours": 4
+    ]
   },
   {
     "courseId": "accessibility-audit-report",
@@ -20,7 +19,6 @@
       "Select an appropriate website and scope an accessibility audit",
       "Document accessibility issues with evidence and WCAG references",
       "Write a complete accessibility audit report with prioritized recommendations"
-    ],
-    "estimatedHours": 6
+    ]
   }
 ]
