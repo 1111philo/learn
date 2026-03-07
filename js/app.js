@@ -500,35 +500,58 @@ async function recordDraft(activity) {
   }
 }
 
+function defaultProfile() {
+  return {
+    name: state.preferences?.name || '',
+    completedCourses: [],
+    activeCourses: [],
+    strengths: [],
+    weaknesses: [],
+    revisionPatterns: '',
+    pacing: '',
+    preferences: {},
+    accessibilityNeeds: [],
+    recurringSupport: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+
+/** Merge agent-returned profile with existing profile so data is never lost. */
+function mergeProfile(existing, returned) {
+  const merged = { ...existing };
+  // Merge simple string fields — keep returned if non-empty, else keep existing
+  for (const key of ['name', 'revisionPatterns', 'pacing']) {
+    if (returned[key]) merged[key] = returned[key];
+  }
+  // Merge array fields — union of existing + returned, deduplicated
+  for (const key of ['completedCourses', 'activeCourses', 'strengths', 'weaknesses', 'accessibilityNeeds', 'recurringSupport']) {
+    const combined = [...(existing[key] || []), ...(returned[key] || [])];
+    merged[key] = [...new Set(combined)];
+  }
+  // Merge preferences object — returned values override existing keys
+  merged.preferences = { ...(existing.preferences || {}), ...(returned.preferences || {}) };
+  // Timestamps
+  merged.createdAt = existing.createdAt || returned.createdAt;
+  merged.updatedAt = returned.updatedAt || Date.now();
+  return merged;
+}
+
+async function saveProfileResult(existing, result) {
+  const merged = mergeProfile(existing, result.profile);
+  await saveLearnerProfile(merged);
+  await saveLearnerProfileSummary(result.summary);
+}
+
 async function updateProfileInBackground(assessmentResult, course, activity) {
   try {
-    let profile = await getLearnerProfile();
-    if (!profile) {
-      const prefs = state.preferences;
-      profile = {
-        name: prefs.name || '',
-        completedCourses: [],
-        activeCourses: [],
-        strengths: [],
-        weaknesses: [],
-        revisionPatterns: '',
-        pacing: '',
-        preferences: {},
-        accessibilityNeeds: [],
-        recurringSupport: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-    }
-
+    const profile = await getLearnerProfile() || defaultProfile();
     const result = await orchestrator.updateLearnerProfile(profile, assessmentResult, {
       courseName: course.name,
       activityType: activity.type,
       activityGoal: activity.goal
     });
-
-    await saveLearnerProfile(result.profile);
-    await saveLearnerProfileSummary(result.summary);
+    await saveProfileResult(profile, result);
   } catch (e) {
     console.warn('Learner profile update failed (non-blocking):', e);
   }
@@ -536,33 +559,13 @@ async function updateProfileInBackground(assessmentResult, course, activity) {
 
 async function updateProfileFromFeedbackInBackground(feedbackText, course, activity) {
   try {
-    let profile = await getLearnerProfile();
-    if (!profile) {
-      const prefs = state.preferences;
-      profile = {
-        name: prefs.name || '',
-        completedCourses: [],
-        activeCourses: [],
-        strengths: [],
-        weaknesses: [],
-        revisionPatterns: '',
-        pacing: '',
-        preferences: {},
-        accessibilityNeeds: [],
-        recurringSupport: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-    }
-
+    const profile = await getLearnerProfile() || defaultProfile();
     const result = await orchestrator.updateProfileFromFeedback(profile, feedbackText, {
       courseName: course.name,
       activityType: activity.type,
       activityGoal: activity.goal
     });
-
-    await saveLearnerProfile(result.profile);
-    await saveLearnerProfileSummary(result.summary);
+    await saveProfileResult(profile, result);
   } catch (e) {
     console.warn('Learner profile feedback update failed (non-blocking):', e);
   }
