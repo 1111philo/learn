@@ -531,8 +531,16 @@ async function renderSettings() {
     </div>
 
     <hr>
-    <button id="export-btn" class="export-btn">&#8615; Export all data as JSON</button>
-    <button id="delete-all-btn" class="danger-btn-full">&#10005; Delete all data</button>`;
+    <div class="settings-actions">
+      <button id="export-btn" class="settings-action-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3 3-3M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Export data as JSON
+      </button>
+      <button id="delete-all-btn" class="settings-action-btn settings-action-danger">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 0 1 1.34-1.34h2.66a1.33 1.33 0 0 1 1.34 1.34V4m2 0v9.33a1.33 1.33 0 0 1-1.34 1.34H4.67a1.33 1.33 0 0 1-1.34-1.34V4h9.34Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Delete all data
+      </button>
+    </div>`;
 
   // API key handlers
   $('#save-key-btn').addEventListener('click', async () => {
