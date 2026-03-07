@@ -324,7 +324,8 @@ legend {
 }
 
 .settings-form input,
-.settings-form select {
+.settings-form select,
+.settings-form textarea {
   font: inherit;
   font-weight: 400;
   padding: 8px;
@@ -332,8 +333,14 @@ legend {
   border-radius: var(--radius);
 }
 
+.settings-form textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
 .settings-form input:focus,
-.settings-form select:focus {
+.settings-form select:focus,
+.settings-form textarea:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }

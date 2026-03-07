@@ -399,7 +399,6 @@ async function updateProfileInBackground(assessmentResult, course, activity) {
       const prefs = state.preferences;
       profile = {
         name: prefs.name || '',
-        experienceLevel: prefs.experienceLevel || 'beginner',
         completedCourses: [],
         activeCourses: [],
         strengths: [],
@@ -456,6 +455,7 @@ async function renderSettings() {
   const main = $main();
   const prefs = state.preferences;
   const hasKey = await orchestrator.isReady();
+  const profileSummary = await getLearnerProfileSummary();
 
   main.innerHTML = `
     <h2>Settings</h2>
@@ -480,21 +480,21 @@ async function renderSettings() {
 
     <hr>
 
-    <form id="prefs-form" class="settings-form" aria-label="Preferences">
-      <label>
-        Name
-        <input type="text" name="name" value="${esc(prefs.name || '')}">
-      </label>
-      <label>
-        Experience level
-        <select name="experienceLevel">
-          <option value="beginner"${prefs.experienceLevel === 'beginner' ? ' selected' : ''}>Beginner</option>
-          <option value="intermediate"${prefs.experienceLevel === 'intermediate' ? ' selected' : ''}>Intermediate</option>
-          <option value="advanced"${prefs.experienceLevel === 'advanced' ? ' selected' : ''}>Advanced</option>
-        </select>
-      </label>
-      <button type="submit" class="primary-btn">Save</button>
-    </form>
+    <div class="settings-section">
+      <h3>Personalization</h3>
+      <form id="prefs-form" class="settings-form" aria-label="Personalization">
+        <label>
+          Name
+          <input type="text" name="name" value="${esc(prefs.name || '')}">
+        </label>
+        <label>
+          Learner Profile
+          <textarea name="learnerProfile" rows="5" placeholder="This is updated automatically by the AI as you learn. You can also edit it yourself.">${esc(profileSummary)}</textarea>
+        </label>
+        <button type="submit" class="primary-btn">Save</button>
+      </form>
+    </div>
+
     <hr>
     <button id="export-btn" class="secondary-btn">Export all data as JSON</button>`;
 
@@ -536,16 +536,14 @@ async function renderSettings() {
     renderSettings();
   });
 
-  // Preferences
+  // Personalization
   $('#prefs-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    state.preferences = {
-      name: fd.get('name'),
-      experienceLevel: fd.get('experienceLevel')
-    };
+    state.preferences = { name: fd.get('name') };
     await savePreferences(state.preferences);
-    announce('Preferences saved.');
+    await saveLearnerProfileSummary(fd.get('learnerProfile'));
+    announce('Personalization saved.');
   });
 
   // Export

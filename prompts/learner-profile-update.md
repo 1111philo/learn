@@ -17,7 +17,6 @@ Respond with ONLY valid JSON, no markdown fencing:
 {
   "profile": {
     "name": "...",
-    "experienceLevel": "beginner|intermediate|advanced",
     "completedCourses": ["course-id", ...],
     "activeCourses": ["course-id", ...],
     "strengths": ["...", ...],

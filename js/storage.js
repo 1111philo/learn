@@ -5,7 +5,7 @@
 
 export async function getPreferences() {
   const result = await chrome.storage.local.get('preferences');
-  return result.preferences || { name: '', experienceLevel: 'beginner' };
+  return result.preferences || { name: '' };
 }
 
 export async function savePreferences(prefs) {

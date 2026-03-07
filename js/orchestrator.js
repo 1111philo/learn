@@ -57,7 +57,7 @@ export async function createLearningPlan(course, preferences, profileSummary, co
       learningObjectives: course.learningObjectives,
       estimatedHours: course.estimatedHours
     },
-    learnerProfile: profileSummary || `${preferences.name || 'Learner'}, ${preferences.experienceLevel} level`,
+    learnerProfile: profileSummary || `${preferences.name || 'Learner'}`,
     completedCourses: completedCourseNames
   });
 
