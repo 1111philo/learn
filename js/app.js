@@ -779,6 +779,8 @@ function handleApiError(e) {
       showErrorWithRetry('Rate limited. Try again in a moment.');
     } else if (e.type === 'network') {
       showErrorWithRetry('Network error. Check your connection.');
+    } else if (e.type === 'safety') {
+      showError('Content was flagged as unsafe. Please try a different approach.');
     } else {
       showError(e.message);
     }

@@ -36,6 +36,76 @@ function parseJSON(text) {
   throw new ApiError('parse', 'Failed to parse agent JSON response.');
 }
 
+// -- Output validators --------------------------------------------------------
+
+const UNSAFE_PATTERNS = /\b(kill\s+(yourself|your)|self[- ]?harm|suicide\s+method|how\s+to\s+(hack|steal|attack))\b/i;
+const PLATFORM_SHORTCUTS = /\b(F12|Ctrl\s*\+\s*Shift\s*\+\s*I|Cmd\s*\+\s*Option\s*\+\s*I|Ctrl\s*\+\s*Shift\s*\+\s*J|Ctrl\s*\+\s*Shift\s*\+\s*C)\b/i;
+const MULTI_SITE = /\b(visit\s+.{3,30}then\s+visit|compare\s+.{3,30}with|open\s+.{3,30}and\s+.{3,30}open|go\s+to\s+.{3,30}then\s+go\s+to|navigate\s+to\s+.{3,30}then\s+navigate)\b/i;
+
+function validateSafety(text) {
+  if (UNSAFE_PATTERNS.test(text)) return 'Response contains unsafe content.';
+  return null;
+}
+
+function validateActivity(parsed) {
+  if (!parsed.instruction || typeof parsed.instruction !== 'string') return 'Missing instruction.';
+  if (!Array.isArray(parsed.tips)) return 'Missing tips array.';
+
+  const instr = parsed.instruction;
+
+  // Safety
+  const safety = validateSafety(instr + ' ' + parsed.tips.join(' '));
+  if (safety) return safety;
+
+  // Must end with "Record"
+  const lines = instr.split('\n').filter(l => l.trim());
+  const lastLine = lines[lines.length - 1]?.toLowerCase() || '';
+  if (!lastLine.includes('record')) return 'Last step must tell the learner to hit Record.';
+
+  // Max 4 numbered steps
+  const steps = instr.match(/^\d+\.\s/gm);
+  if (steps && steps.length > 4) return 'Too many steps (max 4).';
+
+  // No platform-specific shortcuts
+  if (PLATFORM_SHORTCUTS.test(instr)) return 'Contains platform-specific keyboard shortcuts.';
+
+  // No multi-site instructions
+  if (MULTI_SITE.test(instr)) return 'Activity must focus on a single page.';
+
+  return null;
+}
+
+function validateAssessment(parsed) {
+  if (typeof parsed.score !== 'number' || parsed.score < 0 || parsed.score > 1) return 'Score must be 0.0-1.0.';
+  if (!['advance', 'revise', 'continue'].includes(parsed.recommendation)) return 'Invalid recommendation.';
+  if (!parsed.feedback || typeof parsed.feedback !== 'string') return 'Missing feedback.';
+  if (!Array.isArray(parsed.strengths)) return 'Missing strengths array.';
+  if (!Array.isArray(parsed.improvements)) return 'Missing improvements array.';
+
+  const allText = parsed.feedback + ' ' + parsed.strengths.join(' ') + ' ' + parsed.improvements.join(' ');
+  const safety = validateSafety(allText);
+  if (safety) return safety;
+
+  return null;
+}
+
+/** Call an agent function with validation. Retries once on validation failure. */
+async function callWithValidation(agentFn, validator) {
+  const parsed = await agentFn();
+  const error = validator(parsed);
+  if (!error) return parsed;
+  console.warn(`Validation failed (retrying): ${error}`);
+  // Retry once
+  const retry = await agentFn();
+  const retryError = validator(retry);
+  if (retryError) {
+    console.warn(`Validation failed after retry: ${retryError}`);
+    // If it's a safety issue, throw. Otherwise return best-effort.
+    if (retryError.includes('unsafe')) throw new ApiError('safety', retryError);
+  }
+  return retry;
+}
+
 async function requireKey() {
   const key = await getApiKey();
   if (!key) throw new ApiError('invalid_key', 'No API key set. Add your key in Settings.');
@@ -93,15 +163,18 @@ export async function generateNextActivity(course, planSlot, progressSummary, pr
     learnerProfile: profileSummary || 'No profile yet'
   });
 
-  const { content } = await callClaude({
-    apiKey,
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages: [{ role: 'user', content: userContent }],
-    maxTokens: 1024
-  });
+  const callAgent = async () => {
+    const { content } = await callClaude({
+      apiKey,
+      model: MODEL_LIGHT,
+      systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      maxTokens: 1024
+    });
+    return parseJSON(content);
+  };
 
-  return parseJSON(content);
+  return callWithValidation(callAgent, validateActivity);
 }
 
 /**
@@ -118,19 +191,24 @@ export async function regenerateActivity(course, planSlot, progressSummary, prof
     learnerProfile: profileSummary || 'No profile yet'
   });
 
-  const { content } = await callClaude({
-    apiKey,
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages: [
-      { role: 'user', content: userContent },
-      { role: 'assistant', content: JSON.stringify({ instruction: previousInstruction, tips: previousTips || [] }) },
-      { role: 'user', content: `The learner has feedback about this activity: "${learnerFeedback}"\n\nGenerate a new version of this activity that addresses their feedback. You MUST keep the same learning goal: "${planSlot.goal}". The activity must still align with the course learning objectives.` }
-    ],
-    maxTokens: 1024
-  });
+  const messages = [
+    { role: 'user', content: userContent },
+    { role: 'assistant', content: JSON.stringify({ instruction: previousInstruction, tips: previousTips || [] }) },
+    { role: 'user', content: `The learner has feedback about this activity: "${learnerFeedback}"\n\nGenerate a new version of this activity that addresses their feedback. You MUST keep the same learning goal: "${planSlot.goal}". The activity must still align with the course learning objectives.` }
+  ];
 
-  return parseJSON(content);
+  const callAgent = async () => {
+    const { content } = await callClaude({
+      apiKey,
+      model: MODEL_LIGHT,
+      systemPrompt,
+      messages,
+      maxTokens: 1024
+    });
+    return parseJSON(content);
+  };
+
+  return callWithValidation(callAgent, validateActivity);
 }
 
 /**
@@ -180,15 +258,18 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
     }
   }
 
-  const { content } = await callClaude({
-    apiKey,
-    model: MODEL_HEAVY,
-    systemPrompt,
-    messages: [{ role: 'user', content: contentParts }],
-    maxTokens: 1024
-  });
+  const callAgent = async () => {
+    const { content } = await callClaude({
+      apiKey,
+      model: MODEL_HEAVY,
+      systemPrompt,
+      messages: [{ role: 'user', content: contentParts }],
+      maxTokens: 1024
+    });
+    return parseJSON(content);
+  };
 
-  return parseJSON(content);
+  return callWithValidation(callAgent, validateAssessment);
 }
 
 /**
