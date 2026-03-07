@@ -32,7 +32,7 @@ export function LessonSidebar({ course, onNavigate, className }: LessonSidebarPr
   const allDone = completed === totalLessons && totalLessons > 0;
 
   return (
-    <aside className={cn("shrink-0 space-y-4", className)} aria-label="Course navigation">
+    <aside className={cn("space-y-4", className)} aria-label="Course navigation">
       {course.professional_role && (
         <div className="rounded-md bg-primary/10 px-3 py-2 text-xs">
           <span className="font-medium">Role:</span>{' '}
@@ -91,7 +91,7 @@ export function LessonSidebar({ course, onNavigate, className }: LessonSidebarPr
                   ) : (
                     <Circle className="h-3.5 w-3.5 shrink-0" />
                   )}
-                  <span className="truncate flex-1">{title}</span>
+                  <span className="flex-1 min-w-0">{title}</span>
                   {totalActivities > 0 && !isLocked && (
                     <span className="text-[10px] text-muted-foreground tabular-nums">
                       {completedActivities}/{totalActivities}
@@ -126,7 +126,7 @@ export function LessonSidebar({ course, onNavigate, className }: LessonSidebarPr
                                 currentPage === si && !onActivityPage && 'text-primary',
                               )}
                             />
-                            <span className="truncate">
+                            <span className="min-w-0">
                               {section.title || `Section ${si + 1}`}
                             </span>
                           </button>
