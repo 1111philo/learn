@@ -38,7 +38,7 @@ export function CoursePage() {
     <div className="flex gap-6">
       {/* Persistent sidebar — hidden on mobile */}
       <div className="hidden sm:block">
-        <LessonSidebar course={course} className="w-64" />
+        <LessonSidebar course={course} className="w-64 shrink-0" />
       </div>
 
       <div className="min-w-0 flex-1">
@@ -51,7 +51,7 @@ export function CoursePage() {
                 Lessons
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto pt-6">
+            <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto overflow-x-hidden px-4 pt-6">
               <LessonSidebar
                 course={course}
                 onNavigate={() => setSidebarOpen(false)}
