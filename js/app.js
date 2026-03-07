@@ -531,6 +531,9 @@ async function renderSettings() {
     </div>
 
     <hr>
+    <div class="settings-section">
+      <h3>Data Management</h3>
+    </div>
     <div class="settings-actions">
       <button id="export-btn" class="settings-action-btn">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3 3-3M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
