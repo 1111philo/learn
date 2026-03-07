@@ -292,15 +292,15 @@ async function renderCourse() {
       if (rec === 'advance' && p.currentActivityIndex < planActivities.length - 1) {
         html += '<button id="next-activity-btn" class="primary-btn">Next Activity</button>';
       } else if (rec === 'revise') {
-        html += '<button id="record-draft-btn" class="primary-btn">Revise Draft</button>';
+        html += '<button id="record-draft-btn" class="record-btn">&#9679; Revise Draft</button>';
       } else if (rec === 'continue') {
         if (p.currentActivityIndex < planActivities.length - 1) {
           html += '<button id="next-activity-btn" class="secondary-btn">Next Activity</button>';
         }
-        html += '<button id="record-draft-btn" class="primary-btn">Revise Draft</button>';
+        html += '<button id="record-draft-btn" class="record-btn">&#9679; Revise Draft</button>';
       }
     } else {
-      html += `<button id="record-draft-btn" class="primary-btn">${hasDrafts ? 'Revise Draft' : 'Record Draft'}</button>`;
+      html += `<button id="record-draft-btn" class="record-btn">&#9679; ${hasDrafts ? 'Revise Draft' : 'Record Draft'}</button>`;
     }
 
     html += '</div>';
