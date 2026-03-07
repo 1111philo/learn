@@ -41,6 +41,7 @@ function parseJSON(text) {
 const UNSAFE_PATTERNS = /\b(kill\s+(yourself|your)|self[- ]?harm|suicide\s+method|how\s+to\s+(hack|steal|attack))\b/i;
 const PLATFORM_SHORTCUTS = /\b(F12|Ctrl\s*\+\s*Shift\s*\+\s*I|Cmd\s*\+\s*Option\s*\+\s*I|Ctrl\s*\+\s*Shift\s*\+\s*J|Ctrl\s*\+\s*Shift\s*\+\s*C)\b/i;
 const MULTI_SITE = /\b(visit\s+.{3,30}then\s+visit|compare\s+.{3,30}with|open\s+.{3,30}and\s+.{3,30}open|go\s+to\s+.{3,30}then\s+go\s+to|navigate\s+to\s+.{3,30}then\s+navigate)\b/i;
+const NON_BROWSER_APP = /\b(open\s+(your\s+)?(text\s+editor|terminal|command\s+(line|prompt)|file\s+(manager|explorer)|finder|notepad|textedit|sublime|atom|vim|emacs|nano)|VS\s*Code|Visual\s+Studio|IntelliJ|PyCharm|Xcode|Android\s+Studio|PowerShell)\b/i;
 
 function validateSafety(text) {
   if (UNSAFE_PATTERNS.test(text)) return 'Response contains unsafe content.';
@@ -71,6 +72,9 @@ function validateActivity(parsed) {
 
   // No multi-site instructions
   if (MULTI_SITE.test(instr)) return 'Activity must focus on a single page.';
+
+  // No non-browser apps
+  if (NON_BROWSER_APP.test(instr)) return 'Activity must happen entirely in the browser.';
 
   return null;
 }
