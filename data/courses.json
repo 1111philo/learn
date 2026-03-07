@@ -1,0 +1,26 @@
+[
+  {
+    "courseId": "web-accessibility-fundamentals",
+    "name": "Web Accessibility Fundamentals",
+    "description": "Learn to identify, evaluate, and address common web accessibility barriers so that digital content works for everyone, including people who use assistive technology.",
+    "dependsOn": null,
+    "learningObjectives": [
+      "Identify common accessibility barriers on web pages",
+      "Use browser developer tools to run basic accessibility audits",
+      "Propose concrete fixes for the accessibility issues you find"
+    ],
+    "estimatedHours": 4
+  },
+  {
+    "courseId": "accessibility-audit-report",
+    "name": "Writing an Accessibility Audit Report",
+    "description": "Produce a professional accessibility audit report for a real website, combining technical evaluation with clear, actionable recommendations.",
+    "dependsOn": "web-accessibility-fundamentals",
+    "learningObjectives": [
+      "Select an appropriate website and scope an accessibility audit",
+      "Document accessibility issues with evidence and WCAG references",
+      "Write a complete accessibility audit report with prioritized recommendations"
+    ],
+    "estimatedHours": 6
+  }
+]
