@@ -239,6 +239,7 @@ async function renderCourse() {
       <button class="back-btn" aria-label="Back to courses" id="back-btn">&larr;</button>
       <h2>${esc(course.name)}</h2>
       <span class="progress-label">Activity ${p.currentActivityIndex + 1} of ${planActivities.length}</span>
+      <button class="reset-btn" id="reset-course-btn" aria-label="Reset course" title="Reset course">&#8635;</button>
     </div>
     <div class="chat" role="log" aria-live="polite" aria-label="Activity conversation">`;
 
@@ -308,6 +309,7 @@ async function renderCourse() {
   main.innerHTML = html;
 
   $('#back-btn').addEventListener('click', () => navigate('courses'));
+  $('#reset-course-btn').addEventListener('click', () => confirmResetCourse(course, p));
 
   const recordBtn = $('#record-draft-btn');
   if (recordBtn) {
@@ -322,6 +324,30 @@ async function renderCourse() {
       render();
     });
   }
+}
+
+function confirmResetCourse(course, progress) {
+  const main = $main();
+  main.innerHTML = `
+    <div class="confirm-container" role="alertdialog" aria-label="Confirm reset">
+      <h2>Reset "${esc(course.name)}"?</h2>
+      <p>This will permanently delete all progress, drafts, and feedback for this course. This cannot be undone.</p>
+      <div class="action-bar">
+        <button id="cancel-reset-btn" class="secondary-btn">Cancel</button>
+        <button id="confirm-reset-btn" class="danger-btn">Reset Course</button>
+      </div>
+    </div>`;
+
+  $('#cancel-reset-btn').addEventListener('click', () => render());
+  $('#confirm-reset-btn').addEventListener('click', async () => {
+    await chrome.storage.local.remove(`progress-${progress.courseId}`);
+    delete state.allProgress[progress.courseId];
+    state.progress = null;
+    state.activeCourseId = null;
+    state.view = 'courses';
+    announce(`${course.name} has been reset.`);
+    render();
+  });
 }
 
 async function recordDraft(activity) {

@@ -195,6 +195,24 @@ nav button:focus-visible {
   outline: 2px solid var(--color-accent);
 }
 
+.reset-btn {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+
+.reset-btn:hover { color: var(--color-text); }
+
+.reset-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+}
+
 .chat {
   display: flex;
   flex-direction: column;
@@ -402,6 +420,37 @@ hr {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* -- Confirm dialog --------------------------------------------------------- */
+.confirm-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding: calc(var(--space) * 2) var(--space);
+}
+
+.confirm-container p {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.danger-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius);
+  background: #dc2626;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.danger-btn:hover { opacity: 0.9; }
+
+.danger-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* -- Loading ---------------------------------------------------------------- */
