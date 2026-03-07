@@ -295,7 +295,7 @@ async function renderCourse() {
         html += '<button id="record-draft-btn" class="record-btn">&#9679; Revise Draft</button>';
       }
     } else {
-      html += `<button id="record-draft-btn" class="record-btn">&#9679; ${hasDrafts ? 'Revise Draft' : 'Record Draft'}</button>`;
+      html += `<button id="record-draft-btn" class="record-btn">&#9679; Record</button>`;
     }
 
     html += '</div>';
