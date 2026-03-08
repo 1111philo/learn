@@ -283,7 +283,6 @@ async function renderCourse() {
   const lastDraft = hasDrafts ? draftsForActivity[draftsForActivity.length - 1] : null;
 
   const typeLabel = TYPE_LABELS[activity.type] || activity.type;
-  const workProduct = p.learningPlan.finalWorkProductDescription || '';
 
   let html = `
     <div class="course-header">
@@ -307,12 +306,6 @@ async function renderCourse() {
       const scorePercent = Math.round((lastPrev.score || 0) * 100);
       html += `<div class="msg msg-prior" role="note"><p><strong>${esc(prevLabel)}:</strong> ${esc(lastPrev.feedback)} <span class="prior-score">${scorePercent}%</span></p></div>`;
     }
-  }
-
-  // Framing line tying task to final product
-  if (workProduct) {
-    const framingVerb = { explore: 'Researching for', apply: 'Building skills for', create: 'Assembling', final: 'Delivering' }[activity.type] || 'Working on';
-    html += `<div class="build-framing">${esc(framingVerb)} your <strong>${esc(workProduct)}</strong></div>`;
   }
 
   // Bridge message

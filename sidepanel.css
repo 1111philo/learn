@@ -762,17 +762,6 @@ hr {
   display: block;
 }
 
-/* ── Build framing ─────────────────────────────────────────────────────── */
-.build-framing {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  padding: 6px 10px;
-  background: var(--color-surface);
-  border-radius: var(--radius);
-  border-left: 3px solid var(--color-accent);
-  margin-bottom: 4px;
-}
-
 .prior-score {
   font-weight: 600;
   margin-left: 4px;
