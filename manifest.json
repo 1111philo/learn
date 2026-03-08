@@ -23,6 +23,10 @@
     "https://api.anthropic.com/*",
     "https://czrqy8ea0a.execute-api.us-east-1.amazonaws.com/*"
   ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js"
   }

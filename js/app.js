@@ -703,7 +703,24 @@ async function recordDraft(activity) {
   let pageUrl = '';
   try {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    pageUrl = tab ? tab.url : '';
+    if (!tab?.url || /^(chrome|edge|brave|about):/.test(tab.url)) {
+      showError('Cannot capture this page. Navigate to a regular webpage and try again.');
+      return;
+    }
+    pageUrl = tab.url;
+
+    // Ensure host permission for this tab's origin so captureVisibleTab works
+    const tabUrl = new URL(tab.url);
+    const origin = `${tabUrl.protocol}//${tabUrl.host}/*`;
+    const hasAccess = await chrome.permissions.contains({ origins: [origin] });
+    if (!hasAccess) {
+      const granted = await chrome.permissions.request({ origins: [origin] });
+      if (!granted) {
+        showError('Screenshot permission was denied. Please allow access and try again.');
+        return;
+      }
+    }
+
     const resp = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
     if (resp?.error) throw new Error(resp.error);
     dataUrl = resp?.dataUrl || null;
