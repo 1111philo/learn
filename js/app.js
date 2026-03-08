@@ -12,13 +12,17 @@ import {
 import { loadCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
 import { ApiError } from './api.js';
+import { trackEvent, flushNow } from './telemetry.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $main = () => $('#main-content');
 
 async function logDev(type, data) {
   try {
-    if (await getDevMode()) await appendDevLog({ type, ...data });
+    if (await getDevMode()) {
+      await appendDevLog({ type, ...data });
+      trackEvent(type, data);
+    }
   } catch { /* non-blocking */ }
 }
 
@@ -51,6 +55,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   state.allProgress = await getAllProgress();
   bindNav();
   render();
+  if (await getDevMode()) {
+    trackEvent('session_start', {
+      extensionVersion: chrome.runtime.getManifest().version,
+      platform: navigator.platform,
+    });
+  }
 });
 
 async function seedFromEnv() {
@@ -239,6 +249,7 @@ async function startOrResumeCourse(courseId) {
 
       await saveCourseProgress(courseId, newProgress);
       state.allProgress[courseId] = newProgress;
+      trackEvent('course_started', { courseId, totalActivities: plan.activities.length });
       return newProgress;
     })();
 
@@ -525,6 +536,10 @@ async function regenerateCurrentActivity(course, p) {
     };
 
     await saveCourseProgress(p.courseId, p);
+    trackEvent('activity_regenerated', {
+      courseId: course.courseId, activityIndex: p.currentActivityIndex,
+      activityType: currentSlot.type,
+    });
     updateProfileFromFeedbackInBackground(feedbackText, course, currentSlot);
     render();
   } catch (e) {
@@ -615,6 +630,7 @@ async function submitDispute(course, p, activity, draft) {
       passed: draft.passed || false
     };
 
+    const originalScore = draft.score;
     const result = await orchestrator.reassessDraft(
       course, activity, screenshotDataUrl, draft.url,
       priorDrafts, profileSummary, previousAssessment, feedbackText
@@ -627,6 +643,10 @@ async function submitDispute(course, p, activity, draft) {
     draft.score = result.score;
     draft.recommendation = result.recommendation;
     draft.disputed = true;
+
+    trackEvent('dispute', {
+      courseId: course.courseId, originalScore, revisedScore: result.score,
+    });
 
     // Handle completion changes
     if (activity.type === 'final' && result.passed && p.status !== 'completed') {
@@ -709,6 +729,13 @@ async function recordDraft(activity) {
 
     p.drafts.push(draft);
 
+    const attemptNumber = priorDrafts.length + 1;
+    trackEvent('draft_submitted', {
+      courseId: p.courseId, activityIndex: p.currentActivityIndex,
+      activityType: activity.type, attemptNumber,
+      score: result.score, recommendation: result.recommendation,
+    });
+
     // Advance or complete
     if (activity.type === 'final' && result.passed) {
       p.status = 'completed';
@@ -719,6 +746,19 @@ async function recordDraft(activity) {
         courseName: course.name,
         url: pageUrl,
         completedAt: p.completedAt
+      });
+      trackEvent('course_completed', {
+        courseId: p.courseId,
+        totalActivities: p.learningPlan.activities.length,
+        daysElapsed: Math.max(1, Math.ceil((p.completedAt - p.startedAt) / 86400000)),
+      });
+    }
+
+    if (result.recommendation === 'advance') {
+      trackEvent('activity_completed', {
+        courseId: p.courseId, activityType: activity.type,
+        score: result.score, recommendation: result.recommendation,
+        draftCount: attemptNumber,
       });
     }
 
@@ -785,6 +825,10 @@ async function updateProfileInBackground(assessmentResult, course, activity) {
       activityGoal: activity.goal
     });
     await saveProfileResult(profile, result);
+    trackEvent('profile_updated', {
+      trigger: 'assessment', strengthsCount: result.profile?.strengths?.length || 0,
+      weaknessesCount: result.profile?.weaknesses?.length || 0,
+    });
   } catch (e) {
     console.warn('Learner profile update failed (non-blocking):', e);
   }
@@ -799,6 +843,10 @@ async function updateProfileFromFeedbackInBackground(feedbackText, course, activ
       activityGoal: activity.goal
     });
     await saveProfileResult(profile, result);
+    trackEvent('profile_updated', {
+      trigger: 'feedback', strengthsCount: result.profile?.strengths?.length || 0,
+      weaknessesCount: result.profile?.weaknesses?.length || 0,
+    });
   } catch (e) {
     console.warn('Learner profile feedback update failed (non-blocking):', e);
   }
@@ -1079,10 +1127,37 @@ async function renderSettings() {
     showFormFeedback('prefs-feedback', 'Saved!');
   });
 
-  // Developer mode toggle
+  // Developer mode toggle with consent notice
   $('#dev-mode-toggle').addEventListener('change', async (e) => {
-    await saveDevMode(e.target.checked);
-    announce(e.target.checked ? 'Developer mode on' : 'Developer mode off');
+    if (e.target.checked) {
+      // Show consent notice before enabling
+      const main = $main();
+      main.innerHTML = `
+        <div class="confirm-container" role="alertdialog" aria-label="Developer mode consent">
+          <h2>Enable Developer Mode?</h2>
+          <p>This will log agent interactions locally and send <strong>anonymous, metadata-only</strong> usage data to help improve the extension. No personal info, prompt content, or screenshots are ever sent.</p>
+          <p class="settings-hint">You can disable this at any time.</p>
+          <div class="action-bar">
+            <button id="cancel-devmode-btn" class="secondary-btn">Cancel</button>
+            <button id="confirm-devmode-btn" class="primary-btn">Enable</button>
+          </div>
+        </div>`;
+      $('#cancel-devmode-btn').focus();
+      $('#cancel-devmode-btn').addEventListener('click', () => { renderSettings(); });
+      $('#confirm-devmode-btn').addEventListener('click', async () => {
+        await saveDevMode(true);
+        trackEvent('session_start', {
+          extensionVersion: chrome.runtime.getManifest().version,
+          platform: navigator.platform,
+        });
+        announce('Developer mode on');
+        renderSettings();
+      });
+    } else {
+      await saveDevMode(false);
+      flushNow();
+      announce('Developer mode off');
+    }
   });
 
   // Export

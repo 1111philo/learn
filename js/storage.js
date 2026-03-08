@@ -76,6 +76,17 @@ export async function saveLearnerProfileSummary(summary) {
   await chrome.storage.local.set({ learnerProfileSummary: summary });
 }
 
+// --- Service credentials (telemetry) ---
+
+export async function getServiceCredentials() {
+  const result = await chrome.storage.local.get('serviceCredentials');
+  return result.serviceCredentials || null;
+}
+
+export async function saveServiceCredentials(creds) {
+  await chrome.storage.local.set({ serviceCredentials: creds });
+}
+
 // --- Developer mode ---
 
 export async function getDevMode() {

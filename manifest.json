@@ -21,6 +21,7 @@
   },
   "host_permissions": [
     "https://api.anthropic.com/*",
+    "https://*.execute-api.*.amazonaws.com/*",
     "<all_urls>"
   ],
   "background": {

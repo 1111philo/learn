@@ -5,10 +5,14 @@
 
 import { callClaude, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { getApiKey, getDevMode, appendDevLog } from './storage.js';
+import { trackEvent } from './telemetry.js';
 
 async function devLog(type, data) {
   try {
-    if (await getDevMode()) await appendDevLog({ type, ...data });
+    if (await getDevMode()) {
+      await appendDevLog({ type, ...data });
+      trackEvent(type, data);
+    }
   } catch { /* non-blocking */ }
 }
 
