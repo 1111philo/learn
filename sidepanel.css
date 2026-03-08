@@ -240,6 +240,24 @@ nav button:focus-visible {
   border: 1px solid var(--color-border);
 }
 
+.msg-change-note {
+  background: #eff6ff;
+  align-self: flex-start;
+  border: 1px solid #bfdbfe;
+  border-left: 3px solid var(--color-accent);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.change-note-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-accent);
+  margin-bottom: 2px;
+}
+
 /* ── Prior activities (collapsed below current) ────────────────────────── */
 .prior-activities {
   margin-top: 4px;

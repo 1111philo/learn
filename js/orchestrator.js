@@ -228,7 +228,7 @@ export async function regenerateActivity(course, planSlot, progressSummary, prof
   const messages = [
     { role: 'user', content: userContent },
     { role: 'assistant', content: JSON.stringify({ instruction: previousInstruction, tips: previousTips || [] }) },
-    { role: 'user', content: `The learner has feedback about this activity: "${learnerFeedback}"\n\nGenerate a new version of this activity that addresses their feedback. You MUST keep the same learning goal: "${planSlot.goal}". The activity must still align with the course learning objectives.` }
+    { role: 'user', content: `The learner has feedback about this activity: "${learnerFeedback}"\n\nGenerate a new version of this activity that addresses their feedback. You MUST keep the same learning goal: "${planSlot.goal}". The activity must still align with the course learning objectives.\n\nInclude a brief "changeNote" (1-2 sentences) explaining what you changed and why, so the learner knows their feedback was heard.` }
   ];
 
   const callAgent = async () => {

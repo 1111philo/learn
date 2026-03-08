@@ -369,6 +369,11 @@ async function renderCourse() {
     </div>
     <div class="chat" role="log" aria-label="Activity conversation">`;
 
+  // Feedback acknowledgment (shown after activity regeneration)
+  if (activity.changeNote) {
+    html += `<div class="msg msg-change-note" role="status"><p class="change-note-label">Updated based on your feedback</p><p>${esc(activity.changeNote)}</p></div>`;
+  }
+
   // Current activity instruction
   html += instructionMessage(activity.instruction);
 
@@ -530,7 +535,8 @@ async function regenerateCurrentActivity(course, p) {
     p.activities[p.currentActivityIndex] = {
       ...currentSlot,
       instruction: generated.instruction,
-      tips: generated.tips
+      tips: generated.tips,
+      changeNote: generated.changeNote || null,
     };
 
     await saveCourseProgress(p.courseId, p);
@@ -542,6 +548,7 @@ async function regenerateCurrentActivity(course, p) {
       originalInstruction: activity.instruction,
       learnerFeedback: feedbackText,
       newInstruction: generated.instruction,
+      changeNote: generated.changeNote || null,
     });
     updateProfileFromFeedbackInBackground(feedbackText, course, currentSlot);
     render();
