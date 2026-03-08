@@ -32,8 +32,7 @@ The profile updates after both assessments and learner feedback. A code-level `m
 - Views: `courses`, `course`, `work` (portfolio cards), `work-detail` (build timeline), `settings`.
 - Activity types map to user labels: `explore`→Research, `apply`→Practice, `create`→Draft, `final`→Deliver.
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
-- "Personal best" label appears on feedback cards when a draft score exceeds all prior drafts for that activity.
-- Completion summary card shows stats (steps, recordings, days, best score, most-revised step) when a course finishes.
+- Completion summary card shows stats (steps, recordings, days) when a course finishes.
 
 ## File structure
 ```

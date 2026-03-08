@@ -361,13 +361,9 @@ async function renderCourse() {
   // Current activity instruction
   html += instructionMessage(activity.instruction);
 
-  // Show drafts + feedback for this activity (with personal best tracking)
-  let bestScoreSoFar = -1;
   for (const draft of draftsForActivity) {
-    const isPersonalBest = draft.score > bestScoreSoFar;
-    if (draft.score > bestScoreSoFar) bestScoreSoFar = draft.score;
     html += draftMessage(draft);
-    html += feedbackCard(draft, isPersonalBest);
+    html += feedbackCard(draft);
   }
 
   // Course completion summary
@@ -825,9 +821,6 @@ async function renderWork() {
     // Count completed steps: for completed courses all are done; otherwise it's currentActivityIndex
     const completedSteps = p.status === 'completed' ? total : p.currentActivityIndex;
     const recordingCount = p.drafts?.length || 0;
-    const bestScore = p.drafts?.length
-      ? Math.max(...p.drafts.map(d => d.score || 0))
-      : 0;
 
     // Build segmented progress bar
     const segments = (p.learningPlan.activities || []).map((a, i) => {
@@ -848,7 +841,6 @@ async function renderWork() {
           <div class="progress-bar-segmented">${segments}</div>
           <div class="work-card-stats">
             <span>${recordingCount} recording${recordingCount !== 1 ? 's' : ''}</span>
-            ${bestScore > 0 ? `<span>Best: ${Math.round(bestScore * 100)}%</span>` : ''}
             ${isCompleted && finalUrl ? `<a href="${esc(finalUrl)}" target="_blank" rel="noopener" class="work-open-link" onclick="event.stopPropagation()">Open</a>` : ''}
           </div>
         </button>
@@ -1260,7 +1252,7 @@ function draftMessage(draft) {
     </div>`;
 }
 
-function feedbackCard(draft, isPersonalBest = false) {
+function feedbackCard(draft) {
   const scorePercent = Math.round((draft.score || 0) * 100);
   let recLabel = '';
   if (draft.recommendation === 'advance') recLabel = 'Ready to advance';
@@ -1271,7 +1263,6 @@ function feedbackCard(draft, isPersonalBest = false) {
     <p>${esc(draft.feedback)}</p>
     <div class="feedback-score">
       <span class="score-badge">${scorePercent}%</span>
-      ${isPersonalBest ? '<span class="personal-best-label">Personal best</span>' : ''}
       ${recLabel ? `<span class="rec-label rec-${draft.recommendation}">${esc(recLabel)}</span>` : ''}
     </div>`;
 
@@ -1302,26 +1293,6 @@ function completionSummary(course, p) {
   const days = p.startedAt && p.completedAt
     ? Math.max(1, Math.ceil((p.completedAt - p.startedAt) / 86400000))
     : 1;
-  const bestDraft = (p.drafts || []).reduce((best, d) => (!best || d.score > best.score) ? d : best, null);
-  const bestScore = bestDraft ? Math.round(bestDraft.score * 100) : 0;
-
-  // Find most-revised step
-  const revisionCounts = {};
-  for (const d of (p.drafts || [])) {
-    revisionCounts[d.activityId] = (revisionCounts[d.activityId] || 0) + 1;
-  }
-  let mostRevisedId = null;
-  let maxRevisions = 0;
-  for (const [id, count] of Object.entries(revisionCounts)) {
-    if (count > maxRevisions) { maxRevisions = count; mostRevisedId = id; }
-  }
-  const mostRevisedActivity = mostRevisedId
-    ? (p.activities || []).find(a => a.id === mostRevisedId)
-    : null;
-  const mostRevisedLabel = mostRevisedActivity
-    ? `${TYPE_LABELS[mostRevisedActivity.type] || mostRevisedActivity.type} (${maxRevisions} recordings)`
-    : '';
-
   return `<div class="msg msg-app completion-card">
     <h3>Build Complete</h3>
     <strong class="completion-title">${esc(workName)}</strong>
@@ -1329,10 +1300,6 @@ function completionSummary(course, p) {
       <span>${totalSteps} steps</span>
       <span>${totalRecordings} recording${totalRecordings !== 1 ? 's' : ''}</span>
       <span>${days} day${days !== 1 ? 's' : ''}</span>
-    </div>
-    <div class="completion-details">
-      ${bestScore > 0 ? `<span>Best score: ${bestScore}%</span>` : ''}
-      ${mostRevisedLabel ? `<span>Most revised: ${esc(mostRevisedLabel)}</span>` : ''}
     </div>
     ${p.finalWorkProductUrl ? `<a href="${esc(p.finalWorkProductUrl)}" target="_blank" rel="noopener" class="completion-link">Open final work</a>` : ''}
     <button class="secondary-btn completion-portfolio-btn" id="view-portfolio-btn">View in Portfolio</button>

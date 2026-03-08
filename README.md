@@ -20,8 +20,8 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 - **Draft recording** -- captures a screenshot of the active tab, the page URL, and AI-generated feedback
 - **Iterative feedback** -- each activity builds on prior drafts and feedback
 - **Final assessment** -- the final work product must meet a minimum passing threshold
-- **Portfolio** -- work cards show progress bars, recording counts, and best scores; tap into a Build Detail view with full draft timeline and on-demand screenshots
-- **Build narrative** -- activity type labels (Research, Practice, Draft, Deliver), framing lines, personal best indicators, and a completion summary card celebrate your process
+- **Portfolio** -- work cards show progress bars and recording counts; tap into a Build Detail view with full draft timeline and on-demand screenshots
+- **Build narrative** -- activity type labels (Research, Practice, Draft, Deliver) and a completion summary card celebrate your process
 - **Developer mode** -- toggle in Settings to log all agent requests, responses, feedback, and errors; included in JSON export
 - **JSON export** -- export all saved data (metadata + screenshots + dev logs) at any time
 - **Keyboard shortcuts** -- Enter submits inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs

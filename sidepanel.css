@@ -821,7 +821,6 @@ hr {
   display: block;
 }
 
-/* ── Personal best label ───────────────────────────────────────────────── */
 /* ── Dispute button ─────────────────────────────────────────────────────── */
 .dispute-btn {
   align-self: flex-start;
@@ -843,15 +842,6 @@ hr {
 .dispute-btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
-}
-
-.personal-best-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-success);
-  background: #dcfce7;
-  padding: 1px 6px;
-  border-radius: 4px;
 }
 
 /* ── Completion summary card ───────────────────────────────────────────── */
