@@ -93,10 +93,22 @@ jobs:
               },
           )
 
-          with urllib.request.urlopen(req) as resp:
-              data = json.loads(resp.read())
+          import re
+
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  data = json.loads(resp.read())
+          except urllib.error.HTTPError as e:
+              print(f"API error {e.code}: {e.read().decode()}")
+              raise SystemExit(1)
 
           text = data["content"][0]["text"]
+          print(f"Claude raw response: {text}")
+
+          # Strip markdown fences if present
+          text = re.sub(r'^```json?\s*\n?', '', text.strip())
+          text = re.sub(r'\n?```\s*$', '', text.strip())
+
           result = json.loads(text)
 
           new_version = result["version"]
