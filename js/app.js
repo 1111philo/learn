@@ -709,12 +709,10 @@ async function recordDraft(activity) {
     }
     pageUrl = tab.url;
 
-    // Ensure host permission for this tab's origin so captureVisibleTab works
-    const tabUrl = new URL(tab.url);
-    const origin = `${tabUrl.protocol}//${tabUrl.host}/*`;
-    const hasAccess = await chrome.permissions.contains({ origins: [origin] });
+    // Ensure host permission so captureVisibleTab works (activeTab doesn't persist in side panels)
+    const hasAccess = await chrome.permissions.contains({ origins: ['<all_urls>'] });
     if (!hasAccess) {
-      const granted = await chrome.permissions.request({ origins: [origin] });
+      const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
       if (!granted) {
         showError('Screenshot permission was denied. Please allow access and try again.');
         return;
@@ -726,6 +724,8 @@ async function recordDraft(activity) {
     dataUrl = resp?.dataUrl || null;
   } catch (e) {
     console.warn('Screenshot capture failed:', e);
+    showError(`Screenshot capture failed: ${e.message}`);
+    return;
   }
 
   if (!dataUrl) {

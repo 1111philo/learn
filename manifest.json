@@ -24,8 +24,7 @@
     "https://czrqy8ea0a.execute-api.us-east-1.amazonaws.com/*"
   ],
   "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
