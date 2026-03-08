@@ -178,13 +178,15 @@ export async function createLearningPlan(course, preferences, profileSummary, co
 /**
  * Generate the next activity's instruction.
  */
-export async function generateNextActivity(course, planSlot, progressSummary, profileSummary) {
+export async function generateNextActivity(course, planSlot, progressSummary, profileSummary, planContext) {
   const apiKey = await requireKey();
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
     course: { name: course.name, learningObjectives: course.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
+    workProduct: planContext?.finalWorkProductDescription || '',
+    workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
     learnerProfile: profileSummary || 'No profile yet'
   });
@@ -206,13 +208,15 @@ export async function generateNextActivity(course, planSlot, progressSummary, pr
 /**
  * Regenerate an activity based on learner feedback.
  */
-export async function regenerateActivity(course, planSlot, progressSummary, profileSummary, previousInstruction, previousTips, learnerFeedback) {
+export async function regenerateActivity(course, planSlot, progressSummary, profileSummary, previousInstruction, previousTips, learnerFeedback, planContext) {
   const apiKey = await requireKey();
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
     course: { name: course.name, learningObjectives: course.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
+    workProduct: planContext?.finalWorkProductDescription || '',
+    workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
     learnerProfile: profileSummary || 'No profile yet'
   });

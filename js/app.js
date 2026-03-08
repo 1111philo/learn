@@ -215,7 +215,8 @@ async function startOrResumeCourse(courseId) {
         currentActivityIndex: 0,
         learningPlan: {
           activities: plan.activities,
-          finalWorkProductDescription: plan.finalWorkProductDescription
+          finalWorkProductDescription: plan.finalWorkProductDescription,
+          workProductTool: plan.workProductTool
         },
         activities: [],
         drafts: [],
@@ -228,7 +229,7 @@ async function startOrResumeCourse(courseId) {
 
       const firstSlot = plan.activities[0];
       const generated = await orchestrator.generateNextActivity(
-        course, firstSlot, [], profileSummary
+        course, firstSlot, [], profileSummary, plan
       );
       newProgress.activities.push({
         ...firstSlot,
@@ -312,7 +313,7 @@ async function renderCourse() {
         });
 
       const generated = await orchestrator.generateNextActivity(
-        course, currentSlot, progressSummary, profileSummary
+        course, currentSlot, progressSummary, profileSummary, p.learningPlan
       );
 
       p.activities[p.currentActivityIndex] = {
@@ -419,7 +420,7 @@ async function renderCourse() {
         ${scorePercent !== null ? `<span class="prior-score">${scorePercent}%</span>` : ''}
       </div>`);
     }
-    html += `<hr><details class="prior-activities"><summary>Previous steps (${p.currentActivityIndex})</summary>${priorItems.join('')}</details>`;
+    html += `<details class="prior-activities"><summary>Previous steps (${p.currentActivityIndex})</summary>${priorItems.join('')}</details>`;
   }
 
   main.innerHTML = html;
@@ -518,7 +519,7 @@ async function regenerateCurrentActivity(course, p) {
 
     const generated = await orchestrator.regenerateActivity(
       course, currentSlot, progressSummary, profileSummary,
-      activity.instruction, activity.tips, feedbackText
+      activity.instruction, activity.tips, feedbackText, p.learningPlan
     );
 
     p.activities[p.currentActivityIndex] = {

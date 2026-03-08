@@ -15,7 +15,9 @@ This means:
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
 
-If a learning goal involves writing code, use a browser-based editor (like CodePen, JSFiddle, or Replit). If it involves writing text, use a browser-based tool (like Google Docs, Notion, or a web form). If it involves running a command, use a browser-based terminal (like Replit or StackBlitz).
+## Single document rule
+
+The entire course builds ONE work product in ONE persistent document. The input tells you the `workProduct` name and `workProductTool` (e.g. "Google Doc"). Every activity must direct the learner back to this same document — NEVER ask them to create a new document, page, or project. The first activity should say "Create a new [tool] called [workProduct]". All subsequent activities should say "Open your [workProduct]" or "Return to your [workProduct]" and add to, revise, or refine what's already there.
 
 ## Platform rule
 
