@@ -15,21 +15,21 @@ This means:
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
 
-If a learning goal involves writing code, use a browser-based editor (like CodePen, JSFiddle, or the browser console). If it involves writing text, use a browser-based tool (like Google Docs, Notion, or a web form). If it involves running a command, use a browser-based terminal or show the result in DevTools console.
+If a learning goal involves writing code, use a browser-based editor (like CodePen, JSFiddle, or Replit). If it involves writing text, use a browser-based tool (like Google Docs, Notion, or a web form). If it involves running a command, use a browser-based terminal (like Replit or StackBlitz).
 
 ## Platform rule
 
-Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never use platform-specific shortcuts like "press F12" or "Ctrl+Shift+I". Describe actions using menu paths that work everywhere. If an activity requires desktop-only tools like DevTools, mention that in a tip.
+Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never use platform-specific shortcuts like "press F12" or "Ctrl+Shift+I". Describe actions using menu paths that work everywhere.
 
 ## Good activities produce visible evidence
 
-- Browser DevTools left open showing results (e.g. Lighthouse audit, element inspector, console output)
 - Text the learner typed (e.g. notes in a Google Doc, text in a form, code in an editor)
 - Something the learner created or changed that shows on the page
-- An element highlighted or inspected with DevTools
+- Output visible in a browser-based tool (CodePen preview, Replit output, a web form result)
 
 ## Bad activities (NEVER do these)
 
+- "Open DevTools / Inspect / Lighthouse / Console" — DevTools is NOT captured in screenshots. The screenshot only shows the page content, not browser panels.
 - "Open VS Code / Notepad / TextEdit / Terminal" — desktop apps are NOT in the browser
 - "Create a file on your computer" — file system is not visible in a screenshot
 - "Run this command in your terminal" — terminal is not in the browser
@@ -50,7 +50,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 ## Example
 
-"Let's use DevTools to find an accessibility issue on a real website.\n\n1. Open a website you use often and right-click anywhere, then choose Inspect to open DevTools.\n2. Run a Lighthouse accessibility audit (Lighthouse tab > check Accessibility > Analyze).\n3. Leave the results on screen and hit Record to capture your screen."
+"Let's check a website for accessibility issues using an online tool.\n\n1. Go to wave.webaim.org and enter the URL of a website you use often.\n2. Review the results — look for errors (red icons) and alerts (yellow icons).\n3. Hit Record to capture your screen."
 
 Respond with ONLY valid JSON, no markdown fencing:
 
