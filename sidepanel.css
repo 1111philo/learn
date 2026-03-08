@@ -664,18 +664,22 @@ hr {
 .toggle-row input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 36px;
-  height: 20px;
+  width: 38px;
+  height: 22px;
   background: var(--color-border);
-  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
   position: relative;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, border-color 0.2s;
   flex-shrink: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .toggle-row input[type="checkbox"]::after {
   content: '';
+  display: block;
   position: absolute;
   top: 2px;
   left: 2px;
@@ -683,11 +687,13 @@ hr {
   height: 16px;
   background: #fff;
   border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   transition: transform 0.2s;
 }
 
 .toggle-row input[type="checkbox"]:checked {
   background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .toggle-row input[type="checkbox"]:checked::after {
