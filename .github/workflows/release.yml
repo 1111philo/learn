@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   release:
+    # Skip runs triggered by the version bump commit
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,9 +51,8 @@ jobs:
           CURRENT_VERSION="${{ steps.context.outputs.current_version }}"
           COMMITS=$(cat /tmp/commits.txt)
 
-          # Build the prompt
-          PROMPT=$(cat <<'PROMPT_END'
-          You are a release manager for a Chrome extension called "1111 Learn".
+          # Build the prompt (using jq for safe JSON escaping)
+          PROMPT="You are a release manager for a Chrome extension called \"1111 Learn\".
 
           Current version: ${CURRENT_VERSION}
           The extension uses semantic versioning (MAJOR.MINOR.PATCH):
@@ -66,27 +67,25 @@ jobs:
 
           Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:
           {
-            "version": "X.Y.Z",
-            "release_notes": "## What's New\n\n- bullet point summaries of changes\n\n## Details\n\nBrief paragraph if needed."
-          }
-          PROMPT_END
+            \"version\": \"X.Y.Z\",
+            \"release_notes\": \"## What's New\\n\\n- bullet point summaries of changes\\n\\n## Details\\n\\nBrief paragraph if needed.\"
+          }"
 
-          # Substitute variables into prompt
-          PROMPT=$(echo "$PROMPT" | sed "s|\${CURRENT_VERSION}|${CURRENT_VERSION}|g")
-          PROMPT=$(echo "$PROMPT" | sed "s|\${COMMITS}|${COMMITS}|g")
+          # Build request body with jq (safely handles special chars in prompt)
+          REQUEST_BODY=$(jq -n \
+            --arg prompt "$PROMPT" \
+            '{
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 1024,
+              messages: [{role: "user", content: $prompt}]
+            }')
 
           # Call Claude API
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "content-type: application/json" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
-            -d "$(jq -n \
-              --arg prompt "$PROMPT" \
-              '{
-                model: "claude-haiku-4-5-20251001",
-                max_tokens: 1024,
-                messages: [{role: "user", content: $prompt}]
-              }')")
+            -d "$REQUEST_BODY")
 
           # Extract the text content from Claude's response
           TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text')
