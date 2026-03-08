@@ -47,14 +47,20 @@ jobs:
         id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CURRENT_VERSION: ${{ steps.context.outputs.current_version }}
         run: |
-          CURRENT_VERSION="${{ steps.context.outputs.current_version }}"
+          python3 << 'PYEOF'
+          import json, os, urllib.request
 
-          # Write the prompt to a file to avoid shell escaping issues
-          cat <<PROMPT_END > /tmp/prompt.txt
-          You are a release manager for a Chrome extension called "1111 Learn".
+          version = os.environ["CURRENT_VERSION"]
+          api_key = os.environ["ANTHROPIC_API_KEY"]
 
-          Current version: ${CURRENT_VERSION}
+          with open("/tmp/commits.txt") as f:
+              commits = f.read().strip()
+
+          prompt = f"""You are a release manager for a Chrome extension called "1111 Learn".
+
+          Current version: {version}
           The extension uses semantic versioning (MAJOR.MINOR.PATCH):
           - PATCH: bug fixes, copy changes, small tweaks
           - MINOR: new features, significant UI changes, new agent behaviors
@@ -63,53 +69,47 @@ jobs:
           Chrome Web Store requires that each new version number is strictly greater than the previous one.
 
           Here are the commits since the last release:
-          $(cat /tmp/commits.txt)
+          {commits}
 
           Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:
-          {
+          {{
             "version": "X.Y.Z",
-            "release_notes": "## What's New\n\n- bullet point summaries of changes\n\n## Details\n\nBrief paragraph if needed."
-          }
-          PROMPT_END
+            "release_notes": "## What's New\\n\\n- bullet point summaries of changes\\n\\n## Details\\n\\nBrief paragraph if needed."
+          }}"""
 
-          # Build request body with jq (reads prompt from file for safe JSON escaping)
-          jq -n --rawfile prompt /tmp/prompt.txt \
-            '{
-              model: "claude-haiku-4-5-20251001",
-              max_tokens: 1024,
-              messages: [{role: "user", content: $prompt}]
-            }' > /tmp/request.json
+          body = json.dumps({
+              "model": "claude-haiku-4-5-20251001",
+              "max_tokens": 1024,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
 
-          # Call Claude API
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "content-type: application/json" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -d @/tmp/request.json)
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=body,
+              headers={
+                  "content-type": "application/json",
+                  "x-api-key": api_key,
+                  "anthropic-version": "2023-06-01",
+              },
+          )
 
-          # Extract the text content from Claude's response
-          TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
 
-          if [ "$TEXT" = "null" ] || [ -z "$TEXT" ]; then
-            echo "Error: Claude API returned no content"
-            echo "$RESPONSE"
-            exit 1
-          fi
+          text = data["content"][0]["text"]
+          result = json.loads(text)
 
-          # Parse version and release notes from Claude's JSON response
-          NEW_VERSION=$(echo "$TEXT" | jq -r '.version')
-          RELEASE_NOTES=$(echo "$TEXT" | jq -r '.release_notes')
+          new_version = result["version"]
+          release_notes = result["release_notes"]
 
-          if [ "$NEW_VERSION" = "null" ] || [ -z "$NEW_VERSION" ]; then
-            echo "Error: Could not parse version from Claude's response"
-            echo "$TEXT"
-            exit 1
-          fi
+          print(f"Claude chose version: {new_version}")
 
-          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"new_version={new_version}\n")
 
-          # Save release notes to file (handles multiline)
-          echo "$RELEASE_NOTES" > /tmp/release_notes.md
+          with open("/tmp/release_notes.md", "w") as f:
+              f.write(release_notes)
+          PYEOF
 
       - name: Update manifest.json version
         if: steps.context.outputs.skip != 'true'
