@@ -23,13 +23,23 @@ async function logDev(type, data) {
 }
 
 let state = {
-  view: 'courses',        // courses | course | work | settings
+  view: 'courses',        // courses | course | work | work-detail | settings
   courses: [],
   activeCourseId: null,
   progress: null,
   allProgress: {},
-  preferences: null
+  preferences: null,
+  activeWorkCourseId: null  // for work-detail view
 };
+
+// Activity type → user-facing label
+const TYPE_LABELS = {
+  explore: 'Research',
+  apply: 'Practice',
+  create: 'Draft',
+  final: 'Deliver'
+};
+const TYPE_LETTERS = { explore: 'R', apply: 'P', create: 'D', final: 'F' };
 
 // -- Bootstrap ----------------------------------------------------------------
 
@@ -73,7 +83,8 @@ function navigate(view, data) {
 function render() {
   document.querySelectorAll('[data-nav]').forEach((btn) => {
     const active = btn.dataset.nav === state.view ||
-      (btn.dataset.nav === 'courses' && state.view === 'course');
+      (btn.dataset.nav === 'courses' && state.view === 'course') ||
+      (btn.dataset.nav === 'work' && state.view === 'work-detail');
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
 
@@ -81,6 +92,7 @@ function render() {
     case 'courses': return renderCourses();
     case 'course':  return renderCourse();
     case 'work':    return renderWork();
+    case 'work-detail': return renderWorkDetail();
     case 'settings': return renderSettings();
   }
 }
@@ -129,9 +141,15 @@ function progressLabel(course, locked) {
   if (locked) return 'Requires ' + course.dependsOn;
   const prog = state.allProgress[course.courseId];
   if (!prog) return 'Not started';
-  if (prog.status === 'completed') return 'Completed';
+  const workName = prog.learningPlan?.finalWorkProductDescription;
+  if (prog.status === 'completed') {
+    return workName ? `Built: ${workName}` : 'Completed';
+  }
   const total = prog.learningPlan?.activities?.length || '?';
-  return `Activity ${prog.currentActivityIndex + 1} of ${total}`;
+  const step = prog.currentActivityIndex + 1;
+  return workName
+    ? `Building ${workName} — step ${step} of ${total}`
+    : `Activity ${step} of ${total}`;
 }
 
 // -- Active course ------------------------------------------------------------
@@ -264,11 +282,16 @@ async function renderCourse() {
   const hasDrafts = draftsForActivity.length > 0;
   const lastDraft = hasDrafts ? draftsForActivity[draftsForActivity.length - 1] : null;
 
+  const typeLabel = TYPE_LABELS[activity.type] || activity.type;
+  const workProduct = p.learningPlan.finalWorkProductDescription || '';
+
   let html = `
     <div class="course-header">
       <button class="back-btn" aria-label="Back to courses" id="back-btn">&larr;</button>
-      <h2>${esc(course.name)}</h2>
-      <span class="progress-label">Activity ${p.currentActivityIndex + 1} of ${planActivities.length}</span>
+      <div class="course-header-info">
+        <h2>${esc(course.name)}</h2>
+        <span class="progress-label">${esc(typeLabel)} ${p.currentActivityIndex + 1}/${planActivities.length}</span>
+      </div>
       <button class="reset-btn" id="reset-course-btn" aria-label="Reset course" title="Reset course">&#8635;</button>
     </div>
     <div class="chat" role="log" aria-label="Activity conversation">`;
@@ -278,10 +301,18 @@ async function renderCourse() {
     const prev = p.activities[i];
     if (!prev) continue;
     const prevDrafts = p.drafts.filter((d) => d.activityId === prev.id);
+    const prevLabel = TYPE_LABELS[prev.type] || prev.type;
     if (prevDrafts.length > 0) {
       const lastPrev = prevDrafts[prevDrafts.length - 1];
-      html += `<div class="msg msg-prior" role="note"><p><strong>${esc(prev.type)}:</strong> ${esc(lastPrev.feedback)}</p></div>`;
+      const scorePercent = Math.round((lastPrev.score || 0) * 100);
+      html += `<div class="msg msg-prior" role="note"><p><strong>${esc(prevLabel)}:</strong> ${esc(lastPrev.feedback)} <span class="prior-score">${scorePercent}%</span></p></div>`;
     }
+  }
+
+  // Framing line tying task to final product
+  if (workProduct) {
+    const framingVerb = { explore: 'Researching for', apply: 'Building skills for', create: 'Assembling', final: 'Delivering' }[activity.type] || 'Working on';
+    html += `<div class="build-framing">${esc(framingVerb)} your <strong>${esc(workProduct)}</strong></div>`;
   }
 
   // Bridge message
@@ -292,15 +323,18 @@ async function renderCourse() {
   // Current activity instruction
   html += instructionMessage(activity.instruction);
 
-  // Show drafts + feedback for this activity
+  // Show drafts + feedback for this activity (with personal best tracking)
+  let bestScoreSoFar = -1;
   for (const draft of draftsForActivity) {
+    const isPersonalBest = draft.score > bestScoreSoFar;
+    if (draft.score > bestScoreSoFar) bestScoreSoFar = draft.score;
     html += draftMessage(draft);
-    html += feedbackCard(draft);
+    html += feedbackCard(draft, isPersonalBest);
   }
 
-  // Course completion
+  // Course completion summary
   if (p.status === 'completed') {
-    html += appMessage('Course complete! Your final work product has been saved to the Work section.');
+    html += completionSummary(course, p);
   }
 
   html += '</div>';
@@ -353,6 +387,14 @@ async function renderCourse() {
       p.currentActivityIndex++;
       await saveCourseProgress(p.courseId, p);
       render();
+    });
+  }
+
+  const portfolioBtn = $('#view-portfolio-btn');
+  if (portfolioBtn) {
+    portfolioBtn.addEventListener('click', () => {
+      state.activeWorkCourseId = p.courseId;
+      navigate('work-detail');
     });
   }
 }
@@ -613,42 +655,176 @@ async function updateProfileFromFeedbackInBackground(feedbackText, course, activ
 
 async function renderWork() {
   const main = $main();
-  const items = [];
+  const cards = [];
 
-  // In-progress courses with a learning plan
+  // Gather all courses that have progress (in-progress and completed)
   for (const [courseId, p] of Object.entries(state.allProgress)) {
-    if (p.status === 'completed') continue;
     if (!p.learningPlan) continue;
     const course = state.courses.find(c => c.courseId === courseId);
     if (!course) continue;
-    const desc = p.learningPlan.finalWorkProductDescription || course.name;
-    const started = new Date(p.startedAt).toLocaleDateString();
-    items.push(`
-      <li class="work-item">
-        <strong>${esc(desc)}</strong>
-        <small>In progress since ${started}</small>
+    const workName = p.learningPlan.finalWorkProductDescription || course.name;
+    const total = p.learningPlan.activities?.length || 0;
+    const completed = Math.min(p.currentActivityIndex + (p.status === 'completed' ? 0 : 0), total);
+    // Count completed steps: for completed courses all are done; otherwise it's currentActivityIndex
+    const completedSteps = p.status === 'completed' ? total : p.currentActivityIndex;
+    const recordingCount = p.drafts?.length || 0;
+    const bestScore = p.drafts?.length
+      ? Math.max(...p.drafts.map(d => d.score || 0))
+      : 0;
+
+    // Build segmented progress bar
+    const segments = (p.learningPlan.activities || []).map((a, i) => {
+      const filled = i < completedSteps;
+      const current = i === completedSteps && p.status !== 'completed';
+      const cls = filled ? 'seg-filled' : current ? 'seg-current' : 'seg-empty';
+      return `<span class="progress-seg ${cls}" title="${TYPE_LABELS[a.type] || a.type}"></span>`;
+    }).join('');
+
+    const isCompleted = p.status === 'completed';
+    const finalUrl = p.finalWorkProductUrl;
+
+    cards.push(`
+      <li>
+        <button class="work-card" data-work-course="${esc(courseId)}">
+          <strong class="work-card-title">${esc(workName)}</strong>
+          <small class="work-card-course">${esc(course.name)}</small>
+          <div class="progress-bar-segmented">${segments}</div>
+          <div class="work-card-stats">
+            <span>${recordingCount} recording${recordingCount !== 1 ? 's' : ''}</span>
+            ${bestScore > 0 ? `<span>Best: ${Math.round(bestScore * 100)}%</span>` : ''}
+            ${isCompleted && finalUrl ? `<a href="${esc(finalUrl)}" target="_blank" rel="noopener" class="work-open-link" onclick="event.stopPropagation()">Open</a>` : ''}
+          </div>
+        </button>
       </li>`);
   }
 
-  // Completed work products
-  const products = await getWorkProducts();
-  for (const w of products) {
-    const label = w.url ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.courseName)}</a>` : esc(w.courseName);
-    items.push(`
-      <li class="work-item">
-        <strong>${label}</strong>
-        <small>Completed ${new Date(w.completedAt).toLocaleDateString()}</small>
-      </li>`);
-  }
-
-  if (items.length === 0) {
-    main.innerHTML = '<h2>Work</h2><p>No work products yet. Start a course to begin.</p>';
+  if (cards.length === 0) {
+    main.innerHTML = '<h2>Portfolio</h2><p>No work products yet. Start a course to begin.</p>';
     return;
   }
 
   main.innerHTML = `
-    <h2>Work</h2>
-    <ul class="work-list" role="list">${items.join('')}</ul>`;
+    <h2>Portfolio</h2>
+    <ul class="work-list" role="list">${cards.join('')}</ul>`;
+
+  main.querySelectorAll('[data-work-course]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.activeWorkCourseId = btn.dataset.workCourse;
+      navigate('work-detail');
+    });
+  });
+}
+
+async function renderWorkDetail() {
+  const main = $main();
+  const courseId = state.activeWorkCourseId;
+  const p = state.allProgress[courseId];
+  if (!p || !p.learningPlan) { navigate('work'); return; }
+  const course = state.courses.find(c => c.courseId === courseId);
+  const workName = p.learningPlan.finalWorkProductDescription || course?.name || 'Work Product';
+  const planActivities = p.learningPlan.activities || [];
+  const total = planActivities.length;
+  const completedSteps = p.status === 'completed' ? total : p.currentActivityIndex;
+
+  // Segmented progress bar with type letters
+  const segments = planActivities.map((a, i) => {
+    const filled = i < completedSteps;
+    const current = i === completedSteps && p.status !== 'completed';
+    const cls = filled ? 'seg-filled' : current ? 'seg-current' : 'seg-empty';
+    const letter = TYPE_LETTERS[a.type] || '?';
+    return `<span class="progress-seg-labeled ${cls}" title="${TYPE_LABELS[a.type] || a.type}">${letter}</span>`;
+  }).join('');
+
+  let html = `
+    <div class="course-header">
+      <button class="back-btn" aria-label="Back to portfolio" id="back-btn">&larr;</button>
+      <div class="course-header-info">
+        <h2>${esc(workName)}</h2>
+        <small class="work-detail-course">${esc(course?.name || '')}</small>
+      </div>
+    </div>
+    <div class="progress-bar-labeled">${segments}</div>
+    <div class="build-timeline">`;
+
+  for (let i = 0; i < total; i++) {
+    const slot = planActivities[i];
+    const activity = p.activities?.[i];
+    const typeLabel = TYPE_LABELS[slot.type] || slot.type;
+    const isFuture = i > completedSteps;
+    const isCurrent = i === completedSteps && p.status !== 'completed';
+    const drafts = (p.drafts || []).filter(d => d.activityId === slot.id);
+
+    if (isFuture) {
+      html += `<div class="timeline-step timeline-future"><span class="timeline-type">${esc(typeLabel)}</span></div>`;
+      continue;
+    }
+
+    html += `<div class="timeline-step${isCurrent ? ' timeline-current' : ''}">`;
+    html += `<div class="timeline-step-header"><span class="timeline-type">${esc(typeLabel)}</span>`;
+    if (slot.goal) html += `<span class="timeline-goal">${esc(slot.goal)}</span>`;
+    html += `</div>`;
+
+    if (drafts.length > 0) {
+      // Show latest draft
+      const latest = drafts[drafts.length - 1];
+      const latestScore = Math.round((latest.score || 0) * 100);
+      const latestTime = new Date(latest.timestamp).toLocaleString();
+      html += `<div class="timeline-draft">
+        <span class="timeline-draft-score">${latestScore}%</span>
+        <span class="timeline-draft-time">${latestTime}</span>
+        ${latest.url ? `<a href="${esc(latest.url)}" target="_blank" rel="noopener" class="timeline-draft-link">View</a>` : ''}
+        <button class="timeline-screenshot-btn" data-screenshot-key="${esc(latest.screenshotKey)}" aria-label="Show screenshot">Screenshot</button>
+      </div>`;
+
+      // Collapsible earlier attempts
+      if (drafts.length > 1) {
+        html += `<details class="timeline-history"><summary>${drafts.length - 1} earlier attempt${drafts.length > 2 ? 's' : ''}</summary>`;
+        for (let d = 0; d < drafts.length - 1; d++) {
+          const dr = drafts[d];
+          const sc = Math.round((dr.score || 0) * 100);
+          const tm = new Date(dr.timestamp).toLocaleString();
+          html += `<div class="timeline-draft timeline-draft-old">
+            <span class="timeline-draft-score">${sc}%</span>
+            <span class="timeline-draft-time">${tm}</span>
+            ${dr.url ? `<a href="${esc(dr.url)}" target="_blank" rel="noopener" class="timeline-draft-link">View</a>` : ''}
+            <button class="timeline-screenshot-btn" data-screenshot-key="${esc(dr.screenshotKey)}" aria-label="Show screenshot">Screenshot</button>
+          </div>`;
+        }
+        html += `</details>`;
+      }
+    }
+
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  main.innerHTML = html;
+
+  // Bind events
+  $('#back-btn').addEventListener('click', () => navigate('work'));
+
+  // On-demand screenshot loading
+  main.querySelectorAll('.timeline-screenshot-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.screenshotKey;
+      if (!key) return;
+      // Toggle: if next sibling is a screenshot, remove it
+      if (btn.nextElementSibling?.classList.contains('timeline-screenshot-img')) {
+        btn.nextElementSibling.remove();
+        return;
+      }
+      btn.textContent = 'Loading...';
+      const dataUrl = await getScreenshot(key);
+      btn.textContent = 'Screenshot';
+      if (dataUrl) {
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.className = 'timeline-screenshot-img';
+        img.alt = 'Draft screenshot';
+        btn.after(img);
+      }
+    });
+  });
 }
 
 // -- Settings -----------------------------------------------------------------
@@ -921,7 +1097,7 @@ function draftMessage(draft) {
     </div>`;
 }
 
-function feedbackCard(draft) {
+function feedbackCard(draft, isPersonalBest = false) {
   const scorePercent = Math.round((draft.score || 0) * 100);
   let recLabel = '';
   if (draft.recommendation === 'advance') recLabel = 'Ready to advance';
@@ -932,6 +1108,7 @@ function feedbackCard(draft) {
     <p>${esc(draft.feedback)}</p>
     <div class="feedback-score">
       <span class="score-badge">${scorePercent}%</span>
+      ${isPersonalBest ? '<span class="personal-best-label">Personal best</span>' : ''}
       ${recLabel ? `<span class="rec-label rec-${draft.recommendation}">${esc(recLabel)}</span>` : ''}
     </div>`;
 
@@ -951,6 +1128,50 @@ function feedbackCard(draft) {
 
   html += '</div>';
   return html;
+}
+
+function completionSummary(course, p) {
+  const workName = p.learningPlan?.finalWorkProductDescription || course.name;
+  const totalSteps = p.learningPlan?.activities?.length || 0;
+  const totalRecordings = p.drafts?.length || 0;
+  const days = p.startedAt && p.completedAt
+    ? Math.max(1, Math.ceil((p.completedAt - p.startedAt) / 86400000))
+    : 1;
+  const bestDraft = (p.drafts || []).reduce((best, d) => (!best || d.score > best.score) ? d : best, null);
+  const bestScore = bestDraft ? Math.round(bestDraft.score * 100) : 0;
+
+  // Find most-revised step
+  const revisionCounts = {};
+  for (const d of (p.drafts || [])) {
+    revisionCounts[d.activityId] = (revisionCounts[d.activityId] || 0) + 1;
+  }
+  let mostRevisedId = null;
+  let maxRevisions = 0;
+  for (const [id, count] of Object.entries(revisionCounts)) {
+    if (count > maxRevisions) { maxRevisions = count; mostRevisedId = id; }
+  }
+  const mostRevisedActivity = mostRevisedId
+    ? (p.activities || []).find(a => a.id === mostRevisedId)
+    : null;
+  const mostRevisedLabel = mostRevisedActivity
+    ? `${TYPE_LABELS[mostRevisedActivity.type] || mostRevisedActivity.type} (${maxRevisions} recordings)`
+    : '';
+
+  return `<div class="msg msg-app completion-card">
+    <h3>Build Complete</h3>
+    <strong class="completion-title">${esc(workName)}</strong>
+    <div class="completion-stats">
+      <span>${totalSteps} steps</span>
+      <span>${totalRecordings} recording${totalRecordings !== 1 ? 's' : ''}</span>
+      <span>${days} day${days !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="completion-details">
+      ${bestScore > 0 ? `<span>Best score: ${bestScore}%</span>` : ''}
+      ${mostRevisedLabel ? `<span>Most revised: ${esc(mostRevisedLabel)}</span>` : ''}
+    </div>
+    ${p.finalWorkProductUrl ? `<a href="${esc(p.finalWorkProductUrl)}" target="_blank" rel="noopener" class="completion-link">Open final work</a>` : ''}
+    <button class="secondary-btn completion-portfolio-btn" id="view-portfolio-btn">View in Portfolio</button>
+  </div>`;
 }
 
 function esc(s) {

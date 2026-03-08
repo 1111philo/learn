@@ -169,7 +169,6 @@ nav button:focus-visible {
 
 .course-header h2 {
   margin-bottom: 0;
-  flex: 1;
   font-size: 1rem;
 }
 
@@ -745,8 +744,313 @@ hr {
   .loading-spinner { animation: none; border-top-color: var(--color-accent); }
 }
 
+/* ── Course header info ─────────────────────────────────────────────────── */
+.course-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.course-header-info h2 {
+  margin-bottom: 0;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.course-header-info .progress-label {
+  display: block;
+}
+
+/* ── Build framing ─────────────────────────────────────────────────────── */
+.build-framing {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  padding: 6px 10px;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--color-accent);
+  margin-bottom: 4px;
+}
+
+.prior-score {
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* ── Personal best label ───────────────────────────────────────────────── */
+.personal-best-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-success);
+  background: #dcfce7;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ── Completion summary card ───────────────────────────────────────────── */
+.completion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 2px solid var(--color-success);
+  background: #f0fdf4;
+}
+
+.completion-card h3 {
+  font-size: 0.9rem;
+  color: var(--color-success);
+  margin: 0;
+}
+
+.completion-title {
+  font-size: 1rem;
+  display: block;
+}
+
+.completion-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.completion-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.completion-link {
+  color: var(--color-accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.completion-portfolio-btn {
+  align-self: flex-start;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* ── Work cards (Portfolio) ────────────────────────────────────────────── */
+.work-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: var(--space);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.work-card:hover {
+  border-color: var(--color-primary);
+}
+
+.work-card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.work-card-title {
+  font-size: 0.95rem;
+  display: block;
+}
+
+.work-card-course {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.work-card-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.work-open-link {
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.work-open-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Segmented progress bar ────────────────────────────────────────────── */
+.progress-bar-segmented {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+
+.progress-seg {
+  flex: 1;
+  border-radius: 3px;
+}
+
+.seg-filled {
+  background: var(--color-success);
+}
+
+.seg-current {
+  background: var(--color-accent);
+  opacity: 0.6;
+}
+
+.seg-empty {
+  background: var(--color-border);
+}
+
+/* ── Labeled progress bar (work detail) ────────────────────────────────── */
+.progress-bar-labeled {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--space);
+}
+
+.progress-seg-labeled {
+  flex: 1;
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 0;
+  border-radius: 3px;
+  color: var(--color-text-secondary);
+  background: var(--color-border);
+}
+
+.progress-seg-labeled.seg-filled {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.progress-seg-labeled.seg-current {
+  background: var(--color-accent);
+  color: #fff;
+  opacity: 0.7;
+}
+
+/* ── Build timeline (work detail) ──────────────────────────────────────── */
+.build-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-step {
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.timeline-step.timeline-current {
+  border-color: var(--color-accent);
+  background: #eff6ff;
+}
+
+.timeline-step.timeline-future {
+  opacity: 0.5;
+  padding: 8px 10px;
+}
+
+.timeline-step-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.timeline-type {
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+}
+
+.timeline-goal {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.timeline-draft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.timeline-draft-old {
+  opacity: 0.7;
+}
+
+.timeline-draft-score {
+  font-weight: 700;
+}
+
+.timeline-draft-time {
+  color: var(--color-text-secondary);
+}
+
+.timeline-draft-link {
+  color: var(--color-accent);
+  font-size: 0.75rem;
+}
+
+.timeline-screenshot-btn {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.timeline-screenshot-btn:hover {
+  background: var(--color-surface);
+}
+
+.timeline-screenshot-img {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  margin-top: 4px;
+}
+
+.timeline-history {
+  font-size: 0.8rem;
+}
+
+.timeline-history summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  padding: 4px 0;
+}
+
+.work-detail-course {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
 @media (forced-colors: active) {
-  .course-card, .msg, fieldset, .work-item {
+  .course-card, .msg, fieldset, .work-item, .work-card, .timeline-step {
     border: 1px solid CanvasText;
   }
 }

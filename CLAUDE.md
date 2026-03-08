@@ -29,6 +29,11 @@ The profile updates after both assessments and learner feedback. A code-level `m
 - All activities end with "Hit Record to capture your screen."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
 - URLs in activity instructions are automatically linkified.
+- Views: `courses`, `course`, `work` (portfolio cards), `work-detail` (build timeline), `settings`.
+- Activity types map to user labels: `explore`→Research, `apply`→Practice, `create`→Draft, `final`→Deliver.
+- Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
+- "Personal best" label appears on feedback cards when a draft score exceeds all prior drafts for that activity.
+- Completion summary card shows stats (steps, recordings, days, best score, most-revised step) when a course finishes.
 
 ## File structure
 ```
