@@ -1245,10 +1245,16 @@ function instructionMessage(text) {
 
 function draftMessage(draft) {
   const time = new Date(draft.timestamp).toLocaleString();
+  const label = draft.url
+    ? `<a href="${esc(draft.url)}" target="_blank" rel="noopener" class="draft-link">Draft recorded</a>`
+    : 'Draft recorded';
   return `
-    <div class="msg msg-user">
-      <p class="draft-label">${draft.url ? `<a href="${esc(draft.url)}" target="_blank" rel="noopener" class="draft-link">Draft recorded</a>` : 'Draft recorded'}</p>
-      <small>${time}</small>
+    <div class="msg msg-draft">
+      <svg class="draft-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></svg>
+      <div>
+        <p class="draft-label">${label}</p>
+        <small>${time}</small>
+      </div>
     </div>`;
 }
 
