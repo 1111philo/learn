@@ -113,7 +113,7 @@ function renderCourses() {
         <button class="course-card${locked ? ' locked' : ''}"
                 data-course="${c.courseId}"
                 ${locked ? 'disabled' : ''}>
-          <span class="course-status" aria-hidden="true">${statusIcon(status)}</span>
+          <span class="course-status" aria-hidden="true">${state.generating?.courseId === c.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
           <div class="course-info">
             <strong>${esc(c.name)}</strong>
             <p>${esc(c.description)}</p>
