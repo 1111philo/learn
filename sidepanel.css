@@ -230,13 +230,54 @@ nav button:focus-visible {
   border: 1px solid var(--color-border);
 }
 
-.msg-prior {
-  background: transparent;
-  align-self: flex-start;
-  border: 1px dashed var(--color-border);
+/* ── Prior activities (collapsed below current) ────────────────────────── */
+.prior-activities {
+  margin-top: 4px;
   font-size: 0.8rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+}
+
+.prior-activities summary {
+  cursor: pointer;
   color: var(--color-text-secondary);
-  opacity: 0.85;
+  font-size: 0.75rem;
+  padding: 4px 0;
+}
+
+.prior-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.prior-step:last-child {
+  border-bottom: none;
+}
+
+.prior-type {
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.prior-goal {
+  color: var(--color-text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prior-score {
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .msg-draft {
@@ -768,11 +809,6 @@ hr {
 
 .course-header-info .progress-label {
   display: block;
-}
-
-.prior-score {
-  font-weight: 600;
-  margin-left: 4px;
 }
 
 /* ── Personal best label ───────────────────────────────────────────────── */
