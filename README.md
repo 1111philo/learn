@@ -120,6 +120,32 @@ Each course in `data/courses.json` has:
 | `https://czrqy8ea0a.execute-api.us-east-1.amazonaws.com/*` | Send anonymous telemetry when data sharing is enabled |
 | `<all_urls>`                | Capture screenshots of the active tab for AI assessment |
 
+## Privacy
+
+1111 Learn is local-first. All learning data (course progress, screenshots, learner profile) is stored on your device and never leaves it.
+
+### Optional data sharing
+
+If you enable **Share data with 11:11** in Settings, anonymous usage telemetry is sent to 11:11 Philosopher's Group to improve the extension:
+
+| Collected | Not collected |
+|-----------|---------------|
+| Agent prompts and AI responses | Screenshots |
+| Feedback text you write | Your Anthropic API key |
+| Scores and activity metadata | Your name or email |
+| Error messages | IP address (not stored) |
+
+- **Consent**: data sharing is off by default. You must explicitly opt in via the toggle, which shows a consent dialog. Your consent timestamp is recorded locally.
+- **Anonymity**: data is tied to a random anonymous ID generated on your device. It cannot be linked to your identity.
+- **Retention**: telemetry data is automatically deleted after 90 days.
+- **Withdrawal**: you can disable data sharing at any time. This immediately stops all future data collection.
+- **Deletion**: to request deletion of previously collected data, email [privacy@philosophers.group](mailto:privacy@philosophers.group).
+- **Data controller**: 11:11 Philosopher's Group ([philosophers.group](https://philosophers.group)).
+
+### API calls
+
+The extension makes calls to the Anthropic API using your own API key. These calls are between you and Anthropic — 11:11 Philosopher's Group has no access to them.
+
 ## License
 
 Copyright (C) 2026 11:11 Philosopher's Group

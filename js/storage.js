@@ -95,7 +95,9 @@ export async function getDevMode() {
 }
 
 export async function saveDevMode(enabled) {
-  await chrome.storage.local.set({ devMode: enabled });
+  const update = { devMode: enabled };
+  if (enabled) update.dataSharingConsentAt = new Date().toISOString();
+  await chrome.storage.local.set(update);
 }
 
 export async function getDevLog() {
