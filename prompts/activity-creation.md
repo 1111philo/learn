@@ -55,6 +55,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 - "Read this article" — reading is invisible and produces no evidence of comprehension
 - "Set up your document with headings" — empty structure teaches nothing
 - "Open DevTools / Inspect / Lighthouse / Console" — DevTools is NOT captured in screenshots
+- "Use WAVE browser extension" or any browser extension that opens a panel — extension panels and overlays are NOT reliably captured in screenshots; if referencing WAVE, always use the web version at wave.webaim.org as a regular browser tab, never the extension
 - "Open VS Code / Notepad / TextEdit / Terminal" — desktop apps are NOT in the browser
 - "Create a file on your computer" — file system is not visible in a screenshot
 - "Run this command in your terminal" — terminal is not in the browser
