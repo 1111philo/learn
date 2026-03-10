@@ -11,9 +11,10 @@ This means:
 - The activity MUST lead to exactly ONE visible result on ONE page.
 - The LAST step MUST always be exactly: "Hit Record to capture your screen."
 - Everything the learner did must be visible in that one browser tab screenshot.
-- Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks.
+- Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks. If research on an external site is needed, the learner should do that research and then navigate back to the work product document before hitting Record — the recorded tab must always be the work product.
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
+- When regenerating a rejected activity, re-read every step and confirm each one obeys this rule before responding. Do not carry over rule violations from the original instruction.
 
 ## Single document rule
 
