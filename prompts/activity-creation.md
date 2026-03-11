@@ -47,6 +47,8 @@ ALWAYS do these:
 Good: "Research common web accessibility barriers and write about what you found in your document."
 Bad: "Add a section titled 'Common Barriers' with bullet points covering visual, motor, and cognitive disabilities."
 
+Also avoid activities that chain an external tool step with a writing step in the same activity (e.g. "use WAVE to find barriers AND write explanations"). If tool use and reflection are both needed, make them separate activities.
+
 ## Platform rule
 
 Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never use platform-specific shortcuts like "press F12" or "Ctrl+Shift+I". Describe actions using menu paths that work everywhere.
