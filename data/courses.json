@@ -1,24 +1,29 @@
 [
   {
-    "courseId": "web-accessibility-fundamentals",
-    "name": "Web Accessibility Fundamentals",
-    "description": "Learn to identify, evaluate, and address common web accessibility barriers so that digital content works for everyone, including people who use assistive technology.",
+    "courseId": "foundations",
+    "name": "Foundations",
+    "description": "Build the core professional, technical, organizational, and self-management skills needed to work effectively, communicate clearly, manage information, and demonstrate impact in a modern workplace.",
     "dependsOn": null,
     "learningObjectives": [
-      "Identify common accessibility barriers on web pages",
-      "Use browser developer tools to run basic accessibility audits",
-      "Propose concrete fixes for the accessibility issues you find"
+      "Communicate professional purpose and motivation in writing, digitally, quickly, clearly, and effectively using assistive tools",
+      "Understand what technology is commonly used to accomplish the job you want to do, and resources you will need to learn to use it.",
+      "Organize and manage work information and documents in accordance with employer protocol",
+      "Motivate yourself and prioritize time to get the most important things done effectively without becoming overwhelmed or too distracted",
+      "Measure and articulate the impact of projects toward a goal and track that metric over time",
+      "Understand how online presence impacts the ability to realize career and life goals in both positive and negative ways"
     ]
   },
   {
-    "courseId": "accessibility-audit-report",
-    "name": "Writing an Accessibility Audit Report",
-    "description": "Produce a professional accessibility audit report for a real website, combining technical evaluation with clear, actionable recommendations.",
-    "dependsOn": "web-accessibility-fundamentals",
+    "courseId": "ai-leadership",
+    "name": "AI Leadership",
+    "description": "Develop foundational understanding and practical leadership skills for using generative and agentic AI tools effectively, creatively, and ethically in professional settings.",
+    "dependsOn": "foundations",
     "learningObjectives": [
-      "Select an appropriate website and scope an accessibility audit",
-      "Document accessibility issues with evidence and WCAG references",
-      "Write a complete accessibility audit report with prioritized recommendations"
+      "Understand the basic math and science concepts that make generative and agentic AI tools work",
+      "Use AI on appropriate tasks to do better work in less time with fewer resources",
+      "Use AI to generate multiple ideas and improve upon the best",
+      "Efficiently use and improve AI to learn new skills and integrate new tools as technology trend cycles evolve",
+      "Understand major issues in AI ethics and take a clear stand on a personal approach to AI ethics"
     ]
   }
 ]
