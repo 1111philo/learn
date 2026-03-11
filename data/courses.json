@@ -1,29 +1,80 @@
 [
   {
-    "courseId": "foundations",
-    "name": "Foundations",
-    "description": "Build the core professional, technical, organizational, and self-management skills needed to work effectively, communicate clearly, manage information, and demonstrate impact in a modern workplace.",
+    "courseId": "foundations-1-identity",
+    "name": "Foundations 1: Identity",
+    "description": "Create a polished written statement of purpose that clearly communicates your professional motivation, direction, and value.",
     "dependsOn": null,
     "learningObjectives": [
-      "Communicate professional purpose and motivation in writing, digitally, quickly, clearly, and effectively using assistive tools",
-      "Understand what technology is commonly used to accomplish the job you want to do, and resources you will need to learn to use it.",
-      "Organize and manage work information and documents in accordance with employer protocol",
-      "Motivate yourself and prioritize time to get the most important things done effectively without becoming overwhelmed or too distracted",
-      "Measure and articulate the impact of projects toward a goal and track that metric over time",
-      "Understand how online presence impacts the ability to realize career and life goals in both positive and negative ways"
+      "Can clarify the professional interests, values, and strengths that shape your sense of purpose",
+      "Can recognize how audience and context affect the way purpose is communicated",
+      "Can explain your professional motivation and direction in a clear written form",
+      "Can improve a written statement for clarity, tone, and accessibility",
+      "Can produce a polished written statement of purpose"
     ]
   },
   {
-    "courseId": "ai-leadership",
-    "name": "AI Leadership",
-    "description": "Develop foundational understanding and practical leadership skills for using generative and agentic AI tools effectively, creatively, and ethically in professional settings.",
-    "dependsOn": "foundations",
+    "courseId": "foundations-2-technology",
+    "name": "Foundations 2: Technology",
+    "description": "Create a clear written statement that identifies your technology stack, what you still need to learn, and how you plan to learn it.",
+    "dependsOn": "foundations-1-identity",
     "learningObjectives": [
-      "Understand the basic math and science concepts that make generative and agentic AI tools work",
-      "Use AI on appropriate tasks to do better work in less time with fewer resources",
-      "Use AI to generate multiple ideas and improve upon the best",
-      "Efficiently use and improve AI to learn new skills and integrate new tools as technology trend cycles evolve",
-      "Understand major issues in AI ethics and take a clear stand on a personal approach to AI ethics"
+      "Can identify the main tools, platforms, and systems relevant to your target role or field",
+      "Can distinguish between the technologies you already know and those you still need to learn",
+      "Can recognize different ways of learning new technologies effectively",
+      "Can organize your current and future technology needs into a coherent personal technology stack",
+      "Can produce a clear written statement describing your technology stack and learning plan"
+    ]
+  },
+  {
+    "courseId": "foundations-3-information",
+    "name": "Foundations 3: Information",
+    "description": "Create a short explanation of why organization strategies matter and how your target field approaches organizing information, tasks, or resources.",
+    "dependsOn": "foundations-2-technology",
+    "learningObjectives": [
+      "Can explain why organization strategies matter in work and learning",
+      "Can recognize common problems caused by weak organization",
+      "Can identify ways your target field organizes information, tasks, or resources",
+      "Can compare personal habits with organizational approaches used in your field",
+      "Can produce a short explanation of why organization matters and how your field approaches it"
+    ]
+  },
+  {
+    "courseId": "foundations-4-self-management",
+    "name": "Foundations 4: Self-Management",
+    "description": "Create a simple personal focus plan that names what helps you start, stay on task, and recover when distracted.",
+    "dependsOn": "foundations-3-information",
+    "learningObjectives": [
+      "Can recognize personal patterns that affect focus and follow-through",
+      "Can identify common distractions and barriers to getting started",
+      "Can identify strategies that support task initiation and sustained attention",
+      "Can recognize ways to recover focus after interruption or distraction",
+      "Can produce a simple personal focus plan"
+    ]
+  },
+  {
+    "courseId": "foundations-5-social-impact",
+    "name": "Foundations 5: Social Impact",
+    "description": "Create a short social impact statement explaining who you want your work to help, what kind of change you want to contribute to, and why that matters to you.",
+    "dependsOn": "foundations-4-self-management",
+    "learningObjectives": [
+      "Can identify a community, group, or issue you want your work to support",
+      "Can explain a problem or challenge affecting that community, group, or issue",
+      "Can describe the kind of positive change you want to contribute to",
+      "Can connect your desired impact to your personal values and goals",
+      "Can produce a short social impact statement"
+    ]
+  },
+  {
+    "courseId": "foundations-6-influence",
+    "name": "Foundations 6: Influence",
+    "description": "Create a curated influence map that identifies the key tastemakers, organizations, and individuals shaping your target field and explains how they connect to your purpose, technology path, organizational approach, self-management habits, and social impact goals.",
+    "dependsOn": "foundations-5-social-impact",
+    "learningObjectives": [
+      "Can identify organizations that shape standards, opportunities, or direction in your target field",
+      "Can identify individuals whose ideas, work, or reputation influence that field",
+      "Can recognize the platforms, communities, or channels where ideas in the field are shaped and shared",
+      "Can explain how influential people and organizations align with your own goals, learning needs, work habits, and desired impact",
+      "Can synthesize key field influencers into a coherent influence map connected to your broader professional foundation"
     ]
   }
 ]
