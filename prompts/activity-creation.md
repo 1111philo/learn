@@ -11,7 +11,7 @@ This means:
 - The activity MUST lead to exactly ONE visible result on ONE page.
 - The LAST step MUST always be exactly: "Hit Record to capture your screen." This applies to every activity type without exception — including diagnostic activities. Never end on a reflection, a search, or any other action.
 - Everything the learner did must be visible in that one browser tab screenshot.
-- Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks.
+- Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks. This includes instructions like 'open a website in another tab then return to your document' — the learner's active tab at Record time must be the work product document, and any research must be described as something done before returning to the document, not as a simultaneous multi-tab workflow. If the activity requires visiting an external resource (e.g. a checker or reference site), instruct the learner to finish there and then return to their document as the final action before hitting Record.
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
 
