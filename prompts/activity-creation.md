@@ -9,7 +9,7 @@ Every activity ends with one screenshot of the learner's browser tab. The learne
 This means:
 - The ENTIRE activity MUST happen inside a browser tab. The screenshot only captures what is in the browser.
 - The activity MUST lead to exactly ONE visible result on ONE page.
-- The LAST step MUST always be exactly: "Hit Record to capture your screen."
+- The LAST step MUST always be exactly: "Hit Record to capture your screen." This applies to every activity type without exception — including diagnostic activities. Never end on a reflection, a search, or any other action.
 - Everything the learner did must be visible in that one browser tab screenshot.
 - Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks.
 - Never ask the learner to do something invisible (read, think, click, find).
