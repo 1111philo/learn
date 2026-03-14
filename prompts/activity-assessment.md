@@ -21,6 +21,10 @@ Assess whether the learner demonstrated UNDERSTANDING of the topic, not whether 
 - Set "passed" to true if this is a final activity and score >= 0.7, or if non-final and you recommend "advance" or "continue".
 - For revisions, briefly note what improved.
 
+## Scope of assessment
+
+You can only evaluate what is visible in the screenshot in front of you. Never reference, assume, or penalize based on prior activities, prior conversations, or work that is not visible in this screenshot. If the learner refers to prior context you cannot see, acknowledge the limitation rather than guessing.
+
 Respond with ONLY valid JSON, no markdown fencing:
 
 {
