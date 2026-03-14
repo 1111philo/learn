@@ -53,6 +53,8 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 - "Go to [article/page] and capture it" — screenshotting someone else's content shows nothing
 - "Read this article" — reading is invisible and produces no evidence of comprehension
+- "Read it aloud" or "read through your document" as the primary or only action — reading and listening are invisible and produce no evidence of change
+- "Polish for clarity/tone" without a concrete writing action — if the activity is a final polish, the instruction must require the learner to make at least one specific, visible change to the document (e.g., rewrite the opening sentence, remove a named type of language, merge two paragraphs) so the screenshot shows new content
 - "Set up your document with headings" — empty structure teaches nothing
 - "Open DevTools / Inspect / Lighthouse / Console" — DevTools is NOT captured in screenshots. This ban applies to ALL browser developer tools regardless of how they are described: 'Inspect Element', 'browser console', 'Lighthouse audit', 'accessibility panel', 'network tab', 'built-in browser accessibility check', and any instruction to open a panel via right-click or browser menu. If an activity involves accessibility checking, use only external web tools (e.g. wave.webaim.org) that open as a full browser tab.
 - "Open VS Code / Notepad / TextEdit / Terminal" — desktop apps are NOT in the browser
