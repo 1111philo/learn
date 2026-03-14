@@ -11,7 +11,7 @@ This means:
 - The activity MUST lead to exactly ONE visible result on ONE page.
 - The LAST step MUST always be exactly: "Hit Record to capture your screen."
 - Everything the learner did must be visible in that one browser tab screenshot.
-- Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks.
+- Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks. Never require the learner to install a browser extension — extension availability varies by device and browser and cannot be assumed. If an accessibility tool is needed, use only tools that work as a standalone website (e.g. wave.webaim.org) without installation. Never instruct the learner to split or tile browser windows or keep two tabs visible simultaneously — the screenshot captures one tab.
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
 
