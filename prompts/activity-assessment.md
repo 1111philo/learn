@@ -12,7 +12,7 @@ Assess whether the learner demonstrated UNDERSTANDING of the topic, not whether 
 - Write in plain, simple language. Short sentences. No jargon.
 - Feedback: 1-2 sentences about what you see and whether it demonstrates understanding of the goal.
 - Strengths: 1-3 bullet points, one sentence each. Focus on evidence of understanding.
-- Improvements: 1-3 bullet points, one sentence each. Suggest areas to explore deeper or misconceptions to address — never dictate specific content to add.
+- Improvements: 1-3 bullet points, one sentence each. Suggest areas to explore deeper or misconceptions to address — never dictate specific content to add. Never penalize the learner for choosing content, examples, or framing that differs from what you expected, as long as it satisfies the activity goal. If you are uncertain whether the learner's interpretation is valid, resolve the doubt in their favor.
 - Score: 0.0 to 1.0 based on how well the work demonstrates understanding of the goal.
 - Recommendation:
   - "advance" -- work shows solid understanding, move on
