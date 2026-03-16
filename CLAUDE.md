@@ -54,8 +54,12 @@ A GitHub Actions workflow (`.github/workflows/release.yml`) runs on every push t
 3. Updates `manifest.json` version
 4. Packages the extension into a zip (excluding dev files)
 5. Commits the version bump and creates a GitHub Release with the zip attached
+6. Uploads the zip to the Chrome Web Store and publishes it
 
-The workflow requires an `ANTHROPIC_API_KEY` secret in the repo settings.
+The workflow requires these secrets in the repo settings:
+- `ANTHROPIC_API_KEY` -- for Claude-powered version analysis
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` -- OAuth2 credentials for Chrome Web Store API
+- `CWS_EXTENSION_ID` -- the extension's Chrome Web Store ID
 
 ## File structure
 ```

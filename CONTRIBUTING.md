@@ -65,6 +65,7 @@ Versioning is fully automated. When a PR is merged (or a commit is pushed) to `m
 1. Analyzes the new commits with Claude to determine the semver bump (patch, minor, or major) and generate release notes.
 2. Updates the `version` field in `manifest.json`.
 3. Packages the extension into a zip and creates a GitHub Release.
+4. Uploads the zip to the Chrome Web Store and publishes it automatically.
 
 **Do not manually bump the version in `manifest.json`** -- the workflow handles this automatically.
 

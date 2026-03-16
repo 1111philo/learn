@@ -174,3 +174,62 @@ jobs:
             "${{ env.zip_name }}" \
             --title "v${NEW_VERSION}" \
             --notes-file /tmp/release_notes.md
+
+      - name: Publish to Chrome Web Store
+        if: steps.context.outputs.skip != 'true'
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          # Get access token from refresh token
+          TOKEN_RESPONSE=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
+            -d "client_id=${GOOGLE_CLIENT_ID}" \
+            -d "client_secret=${GOOGLE_CLIENT_SECRET}" \
+            -d "refresh_token=${GOOGLE_REFRESH_TOKEN}" \
+            -d "grant_type=refresh_token")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "Failed to get access token:"
+            echo "$TOKEN_RESPONSE"
+            exit 1
+          fi
+
+          # Upload zip to Chrome Web Store
+          UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X PUT "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -T "${{ env.zip_name }}")
+
+          HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
+          BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
+
+          echo "Upload response ($HTTP_CODE): $BODY"
+
+          UPLOAD_STATUS=$(echo "$BODY" | jq -r '.uploadState')
+          if [ "$UPLOAD_STATUS" != "SUCCESS" ]; then
+            echo "Upload failed with status: $UPLOAD_STATUS"
+            exit 1
+          fi
+
+          # Publish the uploaded version
+          PUBLISH_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0")
+
+          HTTP_CODE=$(echo "$PUBLISH_RESPONSE" | tail -1)
+          BODY=$(echo "$PUBLISH_RESPONSE" | sed '$d')
+
+          echo "Publish response ($HTTP_CODE): $BODY"
+
+          PUBLISH_STATUS=$(echo "$BODY" | jq -r '.status[0]')
+          if [ "$PUBLISH_STATUS" != "OK" ]; then
+            echo "Publish failed with status: $PUBLISH_STATUS"
+            echo "Note: this may mean the extension is pending review."
+          fi

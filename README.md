@@ -80,10 +80,14 @@ Releases are automated via GitHub Actions. Every push to `main` triggers the rel
 
 1. Commits since the last release are analyzed by Claude to determine the appropriate semver bump and generate release notes.
 2. `manifest.json` is updated with the new version.
-3. The extension is packaged into a zip (ready for Chrome Web Store upload).
+3. The extension is packaged into a zip.
 4. A GitHub Release is created with the zip attached.
+5. The zip is uploaded to the Chrome Web Store and published automatically.
 
-Maintainers must add an `ANTHROPIC_API_KEY` secret to the repository settings for the workflow to function.
+Maintainers must add these secrets to the repository settings:
+- `ANTHROPIC_API_KEY` -- for Claude-powered version analysis
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` -- OAuth2 credentials for Chrome Web Store API (see [Chrome Web Store API docs](https://developer.chrome.com/docs/webstore/using-api))
+- `CWS_EXTENSION_ID` -- the extension's Chrome Web Store ID
 
 ## Agent architecture
 
