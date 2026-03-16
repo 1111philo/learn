@@ -598,3 +598,49 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
   devLog('agent_response', { agent: 'profile-update', response: parsed });
   return parsed;
 }
+
+/**
+ * Update the learner profile after completing an entire course.
+ * Sends the full course context so the profile reflects all skills learned.
+ */
+export async function updateProfileOnCourseCompletion(fullProfile, course, progress) {
+  const apiKey = await requireKey();
+  const systemPrompt = await loadPrompt('learner-profile-update');
+
+  // Summarize performance across all activities
+  const activitySummaries = (progress.learningPlan?.activities || []).map((slot) => {
+    const drafts = (progress.drafts || []).filter(d => d.activityId === slot.id);
+    const bestScore = drafts.length ? Math.max(...drafts.map(d => d.score ?? 0)) : null;
+    return { type: slot.type, goal: slot.goal, bestScore, draftCount: drafts.length };
+  });
+
+  const userContent = JSON.stringify({
+    currentProfile: fullProfile,
+    courseCompletion: {
+      courseId: course.courseId,
+      courseName: course.name,
+      learningObjectives: course.learningObjectives,
+      activitySummaries,
+      workProduct: progress.learningPlan?.finalWorkProductDescription || null,
+    },
+    context: {
+      event: 'course_completed',
+      courseName: course.name,
+      timestamp: Date.now()
+    }
+  });
+
+  devLog('agent_request', { agent: 'profile-course-completion', courseId: course.courseId });
+
+  const { content } = await callClaude({
+    apiKey,
+    model: MODEL_LIGHT,
+    systemPrompt,
+    messages: [{ role: 'user', content: userContent }],
+    maxTokens: 1024
+  });
+
+  const parsed = parseJSON(content);
+  devLog('agent_response', { agent: 'profile-course-completion', response: parsed });
+  return parsed;
+}

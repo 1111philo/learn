@@ -866,7 +866,8 @@ async function submitDispute(course, p, activity, draft) {
     });
 
     // Handle completion changes
-    if (activity.type === 'final' && result.passed && p.status !== 'completed') {
+    const justCompleted = activity.type === 'final' && result.passed && p.status !== 'completed';
+    if (justCompleted) {
       p.status = 'completed';
       p.completedAt = Date.now();
       p.finalWorkProductUrl = draft.url;
@@ -884,6 +885,7 @@ async function submitDispute(course, p, activity, draft) {
 
     // Update learner profile in background
     updateProfileFromFeedbackInBackground(feedbackText, course, activity);
+    if (justCompleted) updateProfileOnCourseCompletionInBackground(course, p);
   } catch (e) {
     handleApiError(e);
   }
@@ -979,7 +981,8 @@ async function recordDraft(activity) {
     });
 
     // Advance or complete
-    if (activity.type === 'final' && result.passed) {
+    const justCompleted2 = activity.type === 'final' && result.passed;
+    if (justCompleted2) {
       p.status = 'completed';
       p.completedAt = Date.now();
       p.finalWorkProductUrl = pageUrl;
@@ -1010,6 +1013,7 @@ async function recordDraft(activity) {
 
     // Update learner profile in background (non-blocking)
     updateProfileInBackground(result, course, activity);
+    if (justCompleted2) updateProfileOnCourseCompletionInBackground(course, p);
   } catch (e) {
     handleApiError(e);
   }
@@ -1097,6 +1101,21 @@ async function updateProfileFromFeedbackInBackground(feedbackText, course, activ
     });
   } catch (e) {
     console.warn('Learner profile feedback update failed (non-blocking):', e);
+  }
+}
+
+async function updateProfileOnCourseCompletionInBackground(course, progress) {
+  try {
+    const profile = await getLearnerProfile() || defaultProfile();
+    const result = await orchestrator.updateProfileOnCourseCompletion(profile, course, progress);
+    await saveProfileResult(profile, result);
+    trackEvent('profile_updated', {
+      trigger: 'course_completion', courseId: course.courseId,
+      strengthsCount: result?.profile?.strengths?.length || 0,
+      weaknessesCount: result?.profile?.weaknesses?.length || 0,
+    });
+  } catch (e) {
+    console.warn('Learner profile course-completion update failed (non-blocking):', e);
   }
 }
 

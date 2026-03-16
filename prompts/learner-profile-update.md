@@ -32,6 +32,17 @@ Update the old value — don't keep both. If the profile says "computer novice" 
 - If the feedback reveals accessibility needs, add to accessibilityNeeds.
 - ALWAYS update at least one field when feedback is provided.
 
+## Rules for course completion (always apply when courseCompletion is present)
+
+When the learner completes an entire course, you receive the full course context: name, learning objectives, and a summary of their performance across all activities. Use this to make a significant profile update:
+
+- Add the courseId to completedCourses.
+- Remove the courseId from activeCourses if present.
+- Update strengths to reflect the skills the learner demonstrated across the course. Be specific — not "knows WordPress" but "can publish posts and navigate WordPress Playground".
+- Update weaknesses: remove any that are contradicted by course performance. If the profile says "WordPress beginner" but they just completed a WordPress course with strong scores, replace it.
+- Update experienceLevel if the course changes the picture (e.g. from "beginner" to "familiar with WordPress basics").
+- Reference the specific objectives the learner met, not just the course name.
+
 ## General rules
 
 - Set updatedAt to the current timestamp provided.
