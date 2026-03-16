@@ -1,7 +1,7 @@
 [
   {
-    "courseId": "foundations-0-wordpress",
-    "name": "Foundations 0: WordPress",
+    "courseId": "foundations-0-basic-wordpress",
+    "name": "Foundations 0: Basic WordPress",
     "description": "Get started with WordPress using WordPress Playground. Learn what WordPress is, why its freedoms matter, how it has changed over time, and what you found by exploring WordPress Playground, based on your skill level.",
     "dependsOn": null,
     "learningObjectives": [
