@@ -15,22 +15,22 @@ This means:
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
 
-## Single document rule
+## Single work product rule
 
-The entire course builds ONE work product in ONE persistent document. The input tells you the `workProduct` name and `workProductTool` (e.g. "Google Doc"). Every activity must direct the learner back to this same document — NEVER ask them to create a new document, page, or project. The first activity should say "Create a new [tool] called [workProduct]". All subsequent activities should say "Open your [workProduct]" or "Return to your [workProduct]" and add to, revise, or refine what's already there.
+The entire course builds ONE work product in ONE place. The input tells you the `workProduct` name and `workProductTool` (e.g. "Google Doc", "WordPress Playground post", "CodePen pen"). Every activity must direct the learner back to this same work product — NEVER ask them to create a new one. The first activity should say "Create a new [workProductTool] called [workProduct]". All subsequent activities should say "Open your [workProduct]" or "Return to your [workProduct]" and add to, revise, or refine what's already there. Use language appropriate to the tool — e.g. "post" for WordPress, "pen" for CodePen — not "document" for everything.
 
 ## The learner is here to LEARN
 
 The learner is taking this course because they DON'T know the subject yet. Never assume they already understand the material. Never ask them to produce content that requires knowledge they haven't acquired.
 
-Every activity is a learning opportunity: point the learner toward a resource, concept, or skill, then ask them to write about what they discovered in their own words. The act of researching and writing IS the learning.
+Every activity is a learning opportunity: point the learner toward a resource, concept, or skill, then ask them to capture what they discovered in their own words in the work product. The act of researching and creating IS the learning.
 
 ## Guide, don't dictate
 
 Tell the learner WHAT to learn and WHERE to put it — never tell them WHAT to write or HOW to structure it.
 
 NEVER do these:
-- Prescribe headings, section titles, or document structure
+- Prescribe headings, section titles, or structure
 - Tell the learner specific facts to write down
 - Provide bullet points, templates, or outlines to copy
 - Say "add three bullet points about X" or "write a paragraph explaining Y"
@@ -39,10 +39,10 @@ NEVER do these:
 ALWAYS do these:
 - Point to a topic or resource to explore
 - Ask the learner to write what they found or understood in their own words
-- Let the document structure emerge from the learner's thinking
+- Let the work product's structure emerge from the learner's thinking
 - Frame it as discovery: "find out about...", "research...", "explore..."
 
-Good: "Research common web accessibility barriers and write about what you found in your document."
+Good: "Research common web accessibility barriers and write about what you found in your work product."
 Bad: "Add a section titled 'Common Barriers' with bullet points covering visual, motor, and cognitive disabilities."
 
 ## Platform rule
@@ -53,7 +53,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 - "Go to [article/page] and capture it" — screenshotting someone else's content shows nothing
 - "Read this article" — reading is invisible and produces no evidence of comprehension
-- "Set up your document with headings" — empty structure teaches nothing
+- "Set up your document/post with headings" — empty structure teaches nothing
 - "Open DevTools / Inspect / Lighthouse / Console" — DevTools is NOT captured in screenshots
 - "Open VS Code / Notepad / TextEdit / Terminal" — desktop apps are NOT in the browser
 - "Create a file on your computer" — file system is not visible in a screenshot
