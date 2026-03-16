@@ -992,7 +992,7 @@ async function recordDraft(activity) {
       trackEvent('course_completed', {
         courseId: p.courseId,
         totalActivities: p.learningPlan.activities.length,
-        daysElapsed: Math.max(1, Math.ceil((p.completedAt - p.startedAt) / 86400000)),
+        elapsedMs: p.completedAt - p.startedAt,
       });
     }
 
@@ -2085,13 +2085,21 @@ function feedbackCard(draft) {
   return html;
 }
 
+function formatDuration(ms) {
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${Math.max(1, mins)} min${mins !== 1 ? 's' : ''}`;
+  const hrs = Math.round(ms / 3600000);
+  if (hrs < 24) return `${hrs} hr${hrs !== 1 ? 's' : ''}`;
+  const days = Math.round(ms / 86400000);
+  return `${Math.max(1, days)} day${days !== 1 ? 's' : ''}`;
+}
+
 function completionSummary(course, p) {
   const workName = p.learningPlan?.finalWorkProductDescription || course.name;
   const totalSteps = p.learningPlan?.activities?.length || 0;
   const totalRecordings = p.drafts?.length || 0;
-  const days = p.startedAt && p.completedAt
-    ? Math.max(1, Math.ceil((p.completedAt - p.startedAt) / 86400000))
-    : 1;
+  const elapsed = p.startedAt && p.completedAt ? p.completedAt - p.startedAt : 0;
+  const durationLabel = elapsed ? formatDuration(elapsed) : '1 min';
   return `<div class="msg msg-app completion-card">
     <div class="completion-badge" aria-hidden="true">🎉</div>
     <p class="completion-eyebrow">Build Complete</p>
@@ -2099,7 +2107,7 @@ function completionSummary(course, p) {
     <div class="completion-stats">
       <span>${totalSteps} step${totalSteps !== 1 ? 's' : ''}</span>
       <span>${totalRecordings} recording${totalRecordings !== 1 ? 's' : ''}</span>
-      <span>${days} day${days !== 1 ? 's' : ''}</span>
+      <span>${durationLabel}</span>
     </div>
     <div class="completion-actions">
       <button class="secondary-btn completion-portfolio-btn" id="view-portfolio-btn">View in Portfolio</button>
