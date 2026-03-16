@@ -269,7 +269,7 @@ function renderCourses() {
           <div class="course-info">
             <strong>${esc(c.name)}</strong>
             <p>${esc(c.description)}</p>
-            <small>${progressLabel(c, locked)}</small>
+            <small>${progressLabel(c, locked)} · ~${(c.learningObjectives.length + 1) * 5} min</small>
           </div>
         </button>
       </li>`;
