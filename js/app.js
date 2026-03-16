@@ -219,9 +219,31 @@ function bindNav() {
   });
 }
 
+// View depth for determining transition direction
+const VIEW_DEPTH = { onboarding: 0, courses: 1, 'diagnostic-choice': 2, course: 2, work: 1, 'work-detail': 2, settings: 1 };
+const ANIM_CLASSES = ['view-slide-left', 'view-slide-right', 'view-fade-up'];
+
+function animateMain(anim) {
+  const main = $main();
+  main.classList.remove(...ANIM_CLASSES);
+  void main.offsetWidth; // force reflow to restart
+  main.classList.add(anim);
+  main.addEventListener('animationend', () => main.classList.remove(anim), { once: true });
+}
+
 function navigate(view, data) {
+  const prev = state.view;
   state.view = view;
   if (data) Object.assign(state, data);
+
+  const fromDepth = VIEW_DEPTH[prev] ?? 0;
+  const toDepth = VIEW_DEPTH[view] ?? 0;
+  let anim;
+  if (toDepth > fromDepth) anim = 'view-slide-left';
+  else if (toDepth < fromDepth) anim = 'view-slide-right';
+  else anim = 'view-fade-up';
+
+  animateMain(anim);
   render();
   $main().focus();
 }
@@ -645,6 +667,7 @@ async function renderCourse() {
     nextBtn.addEventListener('click', async () => {
       p.currentActivityIndex++;
       await saveCourseProgress(p.courseId, p);
+      animateMain('view-slide-left');
       render();
     });
   }
@@ -1128,7 +1151,7 @@ function renderOnboarding() {
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); advanceOnboarding(2); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 1; renderOnboarding(); });
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 1; animateMain('view-slide-right'); renderOnboarding(); });
     $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
 
   } else if (_onboardingStep === 3) {
@@ -1165,11 +1188,13 @@ function renderOnboarding() {
     $('#onboarding-skip').addEventListener('click', () => {
       _onboardingData.dataSharing = false;
       _onboardingStep = 4;
+      animateMain('view-slide-left');
       renderOnboarding();
     });
     $('#onboarding-consent').addEventListener('click', () => {
       _onboardingData.dataSharing = true;
       _onboardingStep = 4;
+      animateMain('view-slide-left');
       renderOnboarding();
     });
 
@@ -1206,7 +1231,7 @@ function renderOnboarding() {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 3; renderOnboarding(); });
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 3; animateMain('view-slide-right'); renderOnboarding(); });
     $('#onboarding-finish').addEventListener('click', () => completeOnboarding());
   }
 }
@@ -1223,6 +1248,7 @@ function advanceOnboarding(fromStep) {
     _onboardingData.statement = statement;
     _onboardingStep = 3;
   }
+  animateMain('view-slide-left');
   renderOnboarding();
 }
 
