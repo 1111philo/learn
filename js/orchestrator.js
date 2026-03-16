@@ -208,6 +208,22 @@ export async function generateDiagnosticActivity(course) {
   };
 }
 
+function validatePlan(parsed, expectedCount) {
+  if (!Array.isArray(parsed.activities)) return 'Missing activities array.';
+  if (parsed.activities.length !== expectedCount) return `Expected ${expectedCount} activities (one per objective), got ${parsed.activities.length}.`;
+  if (!parsed.finalWorkProductDescription || typeof parsed.finalWorkProductDescription !== 'string') return 'Missing finalWorkProductDescription.';
+  if (!parsed.workProductTool || typeof parsed.workProductTool !== 'string') return 'Missing workProductTool.';
+  const last = parsed.activities[parsed.activities.length - 1];
+  if (last.type !== 'final') return 'Last activity must be type "final".';
+  // No two consecutive activities should have the same type
+  for (let i = 1; i < parsed.activities.length; i++) {
+    if (parsed.activities[i].type === parsed.activities[i - 1].type) {
+      return `Activities ${i} and ${i + 1} have the same type "${parsed.activities[i].type}" — each must be different from the previous.`;
+    }
+  }
+  return null;
+}
+
 /**
  * Create a learning plan for a course.
  */
@@ -227,17 +243,19 @@ export async function createLearningPlan(course, preferences, profileSummary, co
     diagnosticResult: diagnosticResult || null
   });
 
-  const { content } = await callClaude({
-    apiKey,
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages: [{ role: 'user', content: userContent }],
-    maxTokens: 2048
-  });
+  const callAgent = async () => {
+    const { content } = await callClaude({
+      apiKey,
+      model: MODEL_LIGHT,
+      systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      maxTokens: 2048
+    });
+    return parseJSON(content);
+  };
 
-  const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'course-creation', response: parsed });
-  return parsed;
+  const expectedCount = course.learningObjectives.length;
+  return callWithValidation(callAgent, (p) => validatePlan(p, expectedCount), 'course-creation');
 }
 
 /**

@@ -30,16 +30,22 @@ You MUST specify the tool in `workProductTool` (e.g. "Google Doc", "CodePen", "N
 - **create**: Revise, restructure, or expand the work product
 - **final**: Polish and finalize the completed work product
 
+## Activity count (STRICT)
+
+Generate EXACTLY one activity per learning objective — no more, no fewer. If there are 5 learning objectives, output exactly 5 activities. The `objectiveIndex` field maps each activity to its objective (0-indexed). This is validated programmatically and will be rejected if the count doesn't match.
+
+## Activity variety (STRICT)
+
+Each activity MUST use a different activity type from the one before it. Never use the same type twice in a row. Each activity should build on the previous one — deepen, apply, or transform what came before. The last activity must always be type "final".
+
 ## Rules
 
-- Every activity must be completable in 5 minutes or less. If a task would take longer, break it into multiple smaller activities.
+- Every activity must be completable in 5 minutes or less.
 - Activity goals describe WHAT to learn and WHERE to put it — never WHAT to write. The learner decides the content.
 - Never assume the learner already knows the subject matter. Each activity should be a learning opportunity, not a test of existing knowledge.
-- Each activity goal must describe ONE simple task with ONE visible outcome on ONE webpage (the work product document). The learner will be assessed by a screenshot of a single browser tab.
-- NEVER write goals that involve multiple websites, multiple tools, or multiple outcomes (e.g. "audit three websites" is BAD — instead, create three separate activities, one per website).
+- Each activity goal must describe ONE simple task with ONE visible outcome on ONE webpage (the work product). The learner will be assessed by a screenshot of a single browser tab.
+- NEVER write goals that involve multiple websites, multiple tools, or multiple outcomes.
 - All activities must be doable entirely in the browser. Never reference desktop apps, terminals, or file system operations.
-- Generate exactly one activity per learning objective. The last activity must always be type "final".
-- Each activity must be meaningfully different from the one before it. No two activities should involve the same kind of task (e.g. two "research and write" activities in a row). Each activity should build on the previous one — deepen, apply, or transform what came before, not repeat it.
 - Adapt difficulty and pacing to the learner's profile.
 - If the learner has completed related courses, reference that experience.
 - Keep activity goals to one short sentence.
@@ -48,10 +54,10 @@ You MUST specify the tool in `workProductTool` (e.g. "Google Doc", "CodePen", "N
 
 ## Diagnostic data
 
-If a `diagnosticResult` is provided, the learner attempted a skills check before starting the course. Use this to adapt the plan:
-- Score >= 0.8: learner has strong existing knowledge — condense or skip foundational activities, focus on refinement and the final deliverable
-- Score 0.5–0.79: learner has partial knowledge — skip the most basic activities and focus on filling gaps
-- Score < 0.5: learner is a beginner — use a thorough plan that builds knowledge step by step
+If a `diagnosticResult` is provided, the learner attempted a skills check before starting the course. Use it to adjust the DEPTH of each activity (not the number — activity count is always locked to objective count):
+- Score >= 0.8: learner has strong existing knowledge — make activities more challenging and assume foundational knowledge
+- Score 0.5–0.79: learner has partial knowledge — focus activities on filling gaps
+- Score < 0.5: learner is a beginner — make activities more guided and introductory
 
 Always note in `rationale` how the diagnostic influenced your plan, even if minimally.
 
