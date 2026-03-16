@@ -981,8 +981,8 @@ async function recordDraft(activity) {
     });
 
     // Advance or complete
-    const justCompleted2 = activity.type === 'final' && result.passed;
-    if (justCompleted2) {
+    const justCompleted = activity.type === 'final' && result.passed;
+    if (justCompleted) {
       p.status = 'completed';
       p.completedAt = Date.now();
       p.finalWorkProductUrl = pageUrl;
@@ -1013,7 +1013,7 @@ async function recordDraft(activity) {
 
     // Update learner profile in background (non-blocking)
     updateProfileInBackground(result, course, activity);
-    if (justCompleted2) updateProfileOnCourseCompletionInBackground(course, p);
+    if (justCompleted) updateProfileOnCourseCompletionInBackground(course, p);
   } catch (e) {
     handleApiError(e);
   }

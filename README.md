@@ -6,7 +6,7 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 
 ## What it does
 
-1111 Learn guides learners through predefined courses using four AI agents powered by the Claude API. Each course produces one final work product. All data stays on the user's device.
+1111 Learn guides learners through predefined courses using six AI agents powered by the Claude API. Each course produces one final work product. All data stays on the user's device.
 
 ### Key features
 
@@ -16,8 +16,8 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 - **Course catalog** with prerequisite checking
 - **Personalized activity generation** adapted to the learner's profile, prior work, and diagnostic result
 - **AI assessment with vision** -- the Assessment Agent analyzes screenshots of your work and provides structured feedback with strengths, improvements, score, and a recommendation
-- **Output validation** -- deterministic validators check every agent response for safety, format compliance, and activity constraints (browser-only, single page, etc.) before showing it to the learner
-- **Learner profile** -- tracks your strengths, weaknesses, preferences, and learning patterns across courses; updated after assessments, diagnostic results, and feedback
+- **Output validation** -- deterministic validators check every agent response for safety, format compliance, and activity constraints (browser-only, single page, viewport-sized output, activity-to-objective count match) before showing it to the learner
+- **Learner profile** -- tracks your strengths, weaknesses, preferences, and learning patterns across courses; updated after assessments, diagnostic results, feedback, and course completion
 - **Activity feedback** -- submit feedback on any activity to regenerate it while keeping the same learning goal
 - **Draft recording** -- captures a screenshot of the active tab, the page URL, and AI-generated feedback
 - **Iterative feedback** -- each activity builds on prior drafts and feedback
@@ -106,7 +106,7 @@ Each course in `data/courses.json` has:
 |---------------------|------------|--------------------------------------------------|
 | `courseId`           | `string`   | Unique identifier                                |
 | `name`              | `string`   | Display title                                    |
-| `description`       | `string`   | Summary of purpose and expected value            |
+| `description`       | `string`   | One sentence explaining why the learner benefits |
 | `dependsOn`         | `string?`  | Optional prerequisite course ID                  |
 | `learningObjectives`| `string[]` | Outcome statements the course achieves           |
 

@@ -27,9 +27,9 @@ The app uses six AI agents orchestrated through `js/orchestrator.js`:
 3. **Course Creation Agent** -- generates a learning plan skeleton, informed by the diagnostic result
 4. **Activity Creation Agent** -- generates detailed instructions per activity
 5. **Activity Assessment Agent** -- evaluates screenshots with vision
-6. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after diagnostics too
+6. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after assessments, diagnostics, feedback, and course completion
 
-All activity and assessment outputs pass through deterministic validators before reaching the user. Validators check for format compliance, safety, and activity constraints (browser-only, single page, ends with "Record").
+All activity, assessment, and course plan outputs pass through deterministic validators before reaching the user. Validators check for format compliance, safety, and constraints (browser-only, single page, viewport-sized output, ends with "Record"). Course plans are validated for activity count matching learning objective count exactly, no consecutive duplicate activity types, and required fields.
 
 See `js/api.js` for the API client and model constants.
 
@@ -37,11 +37,13 @@ See `js/api.js` for the API client and model constants.
 
 Activities must:
 - Happen entirely in the browser tab (the screenshot only captures the active tab)
-- Lead to exactly one visible result on one page
+- Lead to exactly one visible result on one page, small enough to fit in a single viewport (no scrolling)
 - End with "Hit Record to capture your screen."
 - Not reference desktop apps, terminals, or file system operations
 - Not use platform-specific keyboard shortcuts
 - Take 5 minutes or less
+- Map 1:1 to learning objectives (one activity per objective, enforced by `validatePlan()`)
+- Use a different activity type from the previous activity (no two consecutive explore, apply, etc.)
 
 ## Guidelines
 
