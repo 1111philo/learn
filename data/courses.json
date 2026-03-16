@@ -2,7 +2,7 @@
   {
     "courseId": "foundations-0-basic-wordpress",
     "name": "Foundations 0: Basic WordPress",
-    "description": "Get started with WordPress using WordPress Playground. Learn what WordPress is, why its freedoms matter, how it has changed over time, and what you found by exploring WordPress Playground, based on your skill level.",
+    "description": "WordPress powers nearly half the web — understanding it opens the door to building almost anything online.",
     "dependsOn": null,
     "learningObjectives": [
       "Can launch a WordPress Playground (https://playground.wordpress.net/) instance, navigate it and publish a first post.",
@@ -15,7 +15,7 @@
   {
     "courseId": "foundations-1-identity",
     "name": "Foundations 1: Identity",
-    "description": "Create a polished written statement of purpose that clearly communicates your professional motivation, direction, and value.",
+    "description": "Knowing why you do what you do helps you make better decisions about where to go next.",
     "dependsOn": "foundations-0-wordpress",
     "learningObjectives": [
       "Can clarify the professional interests, values, and strengths that shape your sense of purpose",
@@ -28,7 +28,7 @@
   {
     "courseId": "foundations-2-technology",
     "name": "Foundations 2: Technology",
-    "description": "Create a clear written statement that identifies your technology stack, what you still need to learn, and how you plan to learn it.",
+    "description": "Mapping the tools you know and the ones you need keeps your learning focused and intentional.",
     "dependsOn": "foundations-1-identity",
     "learningObjectives": [
       "Can identify the main tools, platforms, and systems relevant to your target role or field",
@@ -41,7 +41,7 @@
   {
     "courseId": "foundations-3-information",
     "name": "Foundations 3: Information",
-    "description": "Create a short explanation of why organization strategies matter and how your target field approaches organizing information, tasks, or resources.",
+    "description": "Poor organization is the silent killer of good work — learning to manage information makes everything else easier.",
     "dependsOn": "foundations-2-technology",
     "learningObjectives": [
       "Can explain why organization strategies matter in work and learning",
@@ -54,7 +54,7 @@
   {
     "courseId": "foundations-4-self-management",
     "name": "Foundations 4: Self-Management",
-    "description": "Create a simple personal focus plan that names what helps you start, stay on task, and recover when distracted.",
+    "description": "Understanding your own focus patterns is the first step to working consistently without burning out.",
     "dependsOn": "foundations-3-information",
     "learningObjectives": [
       "Can recognize personal patterns that affect focus and follow-through",
@@ -67,7 +67,7 @@
   {
     "courseId": "foundations-5-social-impact",
     "name": "Foundations 5: Social Impact",
-    "description": "Create a short social impact statement explaining who you want your work to help, what kind of change you want to contribute to, and why that matters to you.",
+    "description": "Connecting your work to something bigger than yourself gives it direction and staying power.",
     "dependsOn": "foundations-4-self-management",
     "learningObjectives": [
       "Can identify a community, group, or issue you want your work to support",
@@ -80,7 +80,7 @@
   {
     "courseId": "foundations-6-influence",
     "name": "Foundations 6: Influence",
-    "description": "Create a curated influence map that identifies the key tastemakers, organizations, and individuals shaping your target field and explains how they connect to your purpose, technology path, organizational approach, self-management habits, and social impact goals.",
+    "description": "Knowing who shapes your field helps you learn faster and find your place in the conversation.",
     "dependsOn": "foundations-5-social-impact",
     "learningObjectives": [
       "Can identify organizations that shape standards, opportunities, or direction in your target field",
