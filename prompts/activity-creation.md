@@ -73,6 +73,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 - Include 2-3 tips (one short sentence each).
 - Calibration check: if your instruction feels thin (fewer than 3 real steps), add one more concrete action; if it feels dense (any step contains a colon, a dash, or more than 15 words), split or trim it.
 - If there's a prior activity, connect briefly in the intro.
+- NEVER repeat the same kind of task as a prior activity. If the learner previously researched and wrote, the next activity should have them apply, build, revise, or transform — not research and write again.
 
 ## Example
 
