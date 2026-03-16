@@ -2,27 +2,25 @@
   {
     "courseId": "foundations-0-basic-wordpress",
     "name": "Foundations 0: Basic WordPress",
-    "description": "WordPress powers nearly half the web — understanding it opens the door to building almost anything online.",
+    "description": "WordPress powers nearly half the web - understanding it opens the door to building almost anything online.",
     "dependsOn": null,
     "learningObjectives": [
-      "Can launch a WordPress Playground (https://playground.wordpress.net/) instance, navigate it and publish a first post.",
+      "Can launch a WordPress Playground (https://playground.wordpress.net/) instance, navigate it, and publish a first post.",
       "Can explain the four freedoms of WordPress and why they matter",
       "Can describe key moments in the history of WordPress",
-      "Can recognize WordPress Playground as a space for learning, testing, and experimentation",
-      "Can explain one surprising or delightful thing discovered in WordPress Playground"
+      "Can explain how WordPress Playground supports learning, testing, and experimentation through direct exploration"
     ]
   },
   {
     "courseId": "foundations-1-identity",
     "name": "Foundations 1: Identity",
     "description": "Knowing why you do what you do helps you make better decisions about where to go next.",
-    "dependsOn": "foundations-0-wordpress",
+    "dependsOn": "foundations-0-basic-wordpress",
     "learningObjectives": [
-      "Can clarify the professional interests, values, and strengths that shape your sense of purpose",
-      "Can recognize how audience and context affect the way purpose is communicated",
-      "Can explain your professional motivation and direction in a clear written form",
-      "Can improve a written statement for clarity, tone, and accessibility",
-      "Can produce a polished written statement of purpose"
+      "Can identify the interests, values, and strengths that shape your professional purpose",
+      "Can explain how audience and context influence the communication of professional purpose",
+      "Can draft a written statement of professional motivation and direction",
+      "Can revise a statement of purpose for clarity, tone, and accessibility"
     ]
   },
   {
@@ -33,22 +31,21 @@
     "learningObjectives": [
       "Can identify the main tools, platforms, and systems relevant to your target role or field",
       "Can distinguish between the technologies you already know and those you still need to learn",
-      "Can recognize different ways of learning new technologies effectively",
-      "Can organize your current and future technology needs into a coherent personal technology stack",
-      "Can produce a clear written statement describing your technology stack and learning plan"
+      "Can recognize effective ways of learning new technologies",
+      "Can organize relevant technologies into a personal technology stack and learning roadmap"
     ]
   },
   {
     "courseId": "foundations-3-information",
     "name": "Foundations 3: Information",
-    "description": "Poor organization is the silent killer of good work — learning to manage information makes everything else easier.",
+    "description": "Poor organization is the silent killer of good work \u2014 learning to manage information makes everything else easier.",
     "dependsOn": "foundations-2-technology",
     "learningObjectives": [
       "Can explain why organization strategies matter in work and learning",
       "Can recognize common problems caused by weak organization",
-      "Can identify ways your target field organizes information, tasks, or resources",
-      "Can compare personal habits with organizational approaches used in your field",
-      "Can produce a short explanation of why organization matters and how your field approaches it"
+      "Can identify how your target field organizes information, tasks, and resources",
+      "Can describe your current habits for organizing information, tasks, and resources",
+      "Can evaluate the gaps between your current habits and the organizational expectations of your field"
     ]
   },
   {
@@ -59,8 +56,8 @@
     "learningObjectives": [
       "Can recognize personal patterns that affect focus and follow-through",
       "Can identify common distractions and barriers to getting started",
-      "Can identify strategies that support task initiation and sustained attention",
-      "Can recognize ways to recover focus after interruption or distraction",
+      "Can apply strategies that support task initiation and sustained attention",
+      "Can apply strategies to recover focus after interruption or distraction",
       "Can produce a simple personal focus plan"
     ]
   },
@@ -74,7 +71,7 @@
       "Can explain a problem or challenge affecting that community, group, or issue",
       "Can describe the kind of positive change you want to contribute to",
       "Can connect your desired impact to your personal values and goals",
-      "Can produce a short social impact statement"
+      "Can articulate a social impact goal that connects community need, desired change, and personal purpose"
     ]
   },
   {
@@ -86,7 +83,7 @@
       "Can identify organizations that shape standards, opportunities, or direction in your target field",
       "Can identify individuals whose ideas, work, or reputation influence that field",
       "Can recognize the platforms, communities, or channels where ideas in the field are shaped and shared",
-      "Can explain how influential people and organizations align with your own goals, learning needs, work habits, and desired impact",
+      "Can evaluate the relevance of key people and organizations to your own goals and learning needs",
       "Can synthesize key field influencers into a coherent influence map connected to your broader professional foundation"
     ]
   }
