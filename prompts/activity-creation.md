@@ -10,7 +10,7 @@ This means:
 - The ENTIRE activity MUST happen inside a browser tab. The screenshot only captures what is in the browser.
 - The activity MUST lead to exactly ONE visible result on ONE page.
 - The LAST step MUST always be exactly: "Hit Record to capture your screen."
-- Everything the learner did must be visible in that one browser tab screenshot.
+- Everything the learner produced must be visible in a SINGLE VIEWPORT — no scrolling. The screenshot captures only what fits on screen. This means the output must be SHORT: a few sentences, a short list, or a small visible change. NEVER ask the learner to write an essay, a full report, multiple paragraphs, or anything that would require scrolling to see.
 - Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks.
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
@@ -62,6 +62,8 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 - "Find X on the page" — finding leaves no visible trace
 - "Click the button" — clicking is invisible in a screenshot
 - "Try different options" — vague, no single recordable outcome
+- "Write a detailed explanation of..." — too long, won't fit in one screenshot
+- "Create a full report/essay/summary" — too much content to capture in one viewport
 
 ## Format
 

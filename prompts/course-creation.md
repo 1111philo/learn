@@ -43,7 +43,7 @@ Each activity MUST use a different activity type from the one before it. Never u
 - Every activity must be completable in 5 minutes or less.
 - Activity goals describe WHAT to learn and WHERE to put it — never WHAT to write. The learner decides the content.
 - Never assume the learner already knows the subject matter. Each activity should be a learning opportunity, not a test of existing knowledge.
-- Each activity goal must describe ONE simple task with ONE visible outcome on ONE webpage (the work product). The learner will be assessed by a screenshot of a single browser tab.
+- Each activity goal must describe ONE simple task with ONE visible outcome on ONE webpage (the work product). The learner will be assessed by a screenshot of a single browser tab. The screenshot only captures what fits in one viewport (no scrolling), so each activity must produce SMALL output — a few sentences, a short list, or a visible change. Never design activities that result in long-form writing like essays, reports, or multiple paragraphs.
 - NEVER write goals that involve multiple websites, multiple tools, or multiple outcomes.
 - All activities must be doable entirely in the browser. Never reference desktop apps, terminals, or file system operations.
 - Adapt difficulty and pacing to the learner's profile.
