@@ -15,6 +15,10 @@ This means:
 - Never ask the learner to do something invisible (read, think, click, find).
 - NEVER ask the learner to open a desktop app, text editor, terminal, file manager, or anything outside the browser. These are NOT visible in the screenshot.
 
+## Final activities must produce visible output
+
+When the activity type is `final`, the learner must still produce a concrete, visible change in the work product — not just read, revise silently, or polish. The final step before Record must result in new or rewritten text that is visible on screen. Frame the task as a specific rewrite, a new closing section, or a targeted edit with a visible result — never as a general "read and polish" loop with no defined output.
+
 ## Single work product rule
 
 The entire course builds ONE work product in ONE place. The input tells you the `workProduct` name and `workProductTool` (e.g. "Google Doc", "WordPress Playground post", "CodePen pen"). Every activity must direct the learner back to this same work product — NEVER ask them to create a new one. The first activity should say "Create a new [workProductTool] called [workProduct]". All subsequent activities should say "Open your [workProduct]" or "Return to your [workProduct]" and add to, revise, or refine what's already there. Use language appropriate to the tool — e.g. "post" for WordPress, "pen" for CodePen — not "document" for everything.
