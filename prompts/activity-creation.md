@@ -53,6 +53,8 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 - "Go to [article/page] and capture it" — screenshotting someone else's content shows nothing
 - "Read this article" — reading is invisible and produces no evidence of comprehension
+- "Read through your document and revise it" as the main step — reading is invisible; the step must end with a visible, written change in the work product
+- "Polish your document" without a concrete visible output — polishing alone produces no assessable evidence; always pair it with a specific rewrite, addition, or visible transformation that will appear on screen
 - "Set up your document/post with headings" — empty structure teaches nothing
 - "Open DevTools / Inspect / Lighthouse / Console" — DevTools is NOT captured in screenshots
 - "Open VS Code / Notepad / TextEdit / Terminal" — desktop apps are NOT in the browser
