@@ -53,6 +53,8 @@ Bad: "Add a section titled 'Common Barriers' with bullet points covering visual,
 
 Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never use platform-specific shortcuts like "press F12" or "Ctrl+Shift+I". Describe actions using menu paths that work everywhere.
 
+When writing steps for a specific browser-based platform (WordPress Playground, Figma, CodePen, Notion, Replit, etc.), never describe UI elements you are not certain exist in that platform's current interface. Use generic, navigational language ("find the Posts section", "look for the menu to create a new post") rather than asserting specific layout details ("click the left sidebar", "find the top-right button"). If you are uncertain about the exact UI, describe the goal of the navigation step rather than a specific element to click.
+
 ## Bad activities (NEVER do these)
 
 - "Go to [article/page] and capture it" — screenshotting someone else's content shows nothing
