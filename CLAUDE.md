@@ -48,7 +48,7 @@ When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
 - Completion summary card shows stats (steps, recordings, elapsed time) when a course finishes. Time is displayed as minutes, hours, or days depending on duration.
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
-- Course cards show estimated time computed as `(learningObjectives.length + 1) * 5` minutes.
+- Course cards show estimated time computed as `learningObjectives.length * 5 + 2` minutes (5 min per activity + 2 min for the diagnostic).
 
 ## CI/CD
 Two GitHub Actions workflows handle versioning and releases across two branches:
