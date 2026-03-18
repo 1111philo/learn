@@ -160,7 +160,7 @@ Each course in `data/courses.json` has:
 | Host                        | Why                                    |
 |-----------------------------|----------------------------------------|
 | `https://api.anthropic.com/*` | Send requests to the Claude API with the user's own key |
-| `https://czrqy8ea0a.execute-api.us-east-1.amazonaws.com/*` | Send anonymous telemetry when data sharing is enabled |
+| `https://learn-dashboard.philosophers.group/*` | Send anonymous telemetry when data sharing is enabled |
 
 ## Privacy
 

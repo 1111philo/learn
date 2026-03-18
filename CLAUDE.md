@@ -27,7 +27,7 @@ Before every new course, a mandatory single-activity skills check is generated b
 The profile updates after assessments, diagnostic results, learner feedback, and course completion. On course completion, `updateProfileOnCourseCompletion()` sends the full course context (objectives, per-activity scores) so the profile reflects all skills learned -- e.g. removing "WordPress beginner" after completing the WordPress course. A code-level `mergeProfile()` in `app.js` unions array fields and merges preferences so agent responses can never accidentally lose accumulated data.
 
 ### Telemetry
-When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `js/telemetry.js` buffers usage events and sends them to `learn-service` (separate repo). Events include full agent I/O (prompts, responses, feedback) for debugging and improvement. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent notice is shown when enabling data sharing. The telemetry client is fire-and-forget and never blocks the UI. Service credentials are stored in `chrome.storage.local` under `serviceCredentials`.
+When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `js/telemetry.js` buffers usage events and sends them to `learn-dashboard` (separate repo). Events include full agent I/O (prompts, responses, feedback) for debugging and improvement. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent notice is shown when enabling data sharing. The telemetry client is fire-and-forget and never blocks the UI. Service credentials are stored in `chrome.storage.local` under `serviceCredentials`.
 
 ## Key conventions
 - All source is vanilla JS (ES modules), CSS, and HTML -- no local build step, no frameworks. CI packages the extension into a zip on push to `main`.
@@ -130,10 +130,10 @@ PRIVACY.md               Privacy policy (GDPR-compliant)
 8. Activities must be completable entirely in the browser -- never reference desktop apps, terminals, or file system operations.
 9. Do not manually bump the version in `manifest.json` -- the CI/CD workflows handle versioning automatically. During RC builds, `manifest.json` gains a 4-segment `version` and a `version_name` field; these are stripped on production release.
 10. Run `npm test` before submitting PRs. Tests must pass in CI on both `staging` and `main`.
-11. **Telemetry and privacy impact:** if a change adds, removes, or modifies what data is collected, sent to learn-service, or stored locally, you must:
+11. **Telemetry and privacy impact:** if a change adds, removes, or modifies what data is collected, sent to learn-dashboard, or stored locally, you must:
     - Update `PRIVACY.md` (the legally binding privacy policy) to reflect the new data practices.
     - Update the consent dialog in `js/app.js` if the change affects what users are agreeing to share.
     - Update the `stripBinaries()` function in `js/telemetry.js` if new sensitive fields need to be blocked from telemetry.
     - Update `README.md` privacy section and `CONTRIBUTING.md` if the change affects contributor-facing guidance.
-    - Update `learn-service` validation (`src/lib/validate.js`) and docs if adding new event types or fields.
+    - Update `learn-dashboard` validation (`src/lib/validate.js`) and docs if adding new event types or fields.
     - Never send screenshots, API keys, or data that could identify the user. Feedback text the user writes may be included.
