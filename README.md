@@ -8,6 +8,10 @@
 
 We believe effective learning is personal. People learn best when the material connects to their real work, builds on what they already know, and produces something tangible. 1111 Learn exists to make that kind of education accessible to everyone — powered by AI, guided by human purpose.
 
+## Current Project
+
+**[learn-extension](https://github.com/1111philo/learn-extension)** — a browser extension that brings 1111 Learn into the tools people already use.
+
 ## Currently Supporting
 
 **[AI Leaders](https://ai-leaders.org)** — helping emerging leaders develop practical AI fluency through personalized, project-based courses.
