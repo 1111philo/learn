@@ -52,7 +52,7 @@ js/
   storage.js             chrome.storage.local + IndexedDB abstraction
   courses.js             Course loading and prerequisite checking
   api.js                 Anthropic API client
-  orchestrator.js        Agent orchestration + output validation
+  orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
 prompts/
