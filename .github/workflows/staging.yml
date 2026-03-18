@@ -98,7 +98,7 @@ jobs:
           with open("/tmp/testing_instructions.md") as f:
               testing = f.read()
 
-          prompt = f"You are a release manager for a Chrome extension called \"1111 Learn\".\n\nThis is a release candidate: {rc_version}\n\nHere are the commits included in this RC:\n{commits}\n\nWrite concise release notes summarizing what changed. Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:\n{{\"release_notes\": \"## What's New\\n\\n- bullet point summaries of changes\"}}"
+          prompt = f"You are a release manager for a Chrome extension called \"1111 Learn\".\n\nThis is release candidate: {rc_version}\n\nBelow are ALL commits on the staging branch since the last production release. Summarize everything cumulatively — these release notes should cover all changes a tester would see if upgrading from the last production version, not just what changed in this specific RC.\n\n{commits}\n\nWrite concise release notes. Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:\n{{\"release_notes\": \"## What's New\\n\\n- bullet point summaries of changes\"}}"
 
           body = json.dumps({
               "model": "claude-haiku-4-5-20251001",
