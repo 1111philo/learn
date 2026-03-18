@@ -22,7 +22,7 @@ Join us on **[Slack](https://join.slack.com/t/1111philo/shared_invite/zt-2gmnevn
 
 ## Maintained By
 
-**[11:11 Philosopher's Group](https://philosophers.group/)** and **[UIC Technology Solutions](https://it.uic.edu/)** with support of the **[UIC TS Open Source Fund](https://osf.it.uic.edu/)**
+**[11:11 Philosopher's Group](https://philosophers.group/)** and **[UIC Technology Solutions](https://it.uic.edu/)** with support of the **[UIC TS Open Source Fund](https://osf.it.uic.edu/)** and **[WordPress](https://wordpress.org)**
 
 ## License
 
