@@ -18,7 +18,7 @@ This project is free software under the [GNU General Public License v3](LICENSE)
 
 ## Maintained By
 
-**[11:11 Philosopher Group](https://philosophers.group/)**
+**[11:11 Philosopher's Group](https://philosophers.group/)** and **[UIC Technology Solutions](https://it.uic.edu/)** with support of the **[UIC TS Open Source Fund](https://osf.it.uic.edu/)**
 
 ## License
 
