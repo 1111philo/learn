@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Run tests
         run: npm test
@@ -50,9 +50,38 @@ jobs:
           # Save commit list for release notes
           git log --pretty=format:"%h %s" "$MERGE_BASE..HEAD" --grep='chore: bump version' --invert-grep > /tmp/commits.txt
 
+      - name: Write testing instructions
+        if: steps.rc.outputs.skip != 'true'
+        run: |
+          cat > /tmp/testing_instructions.md << 'INSTEOF'
+
+          ---
+
+          ## How to test this release candidate
+
+          ### New testers
+          1. Download the `.zip` file attached to this release.
+          2. Unzip it to a folder on your computer.
+          3. Open Chrome and go to `chrome://extensions`.
+          4. Enable **Developer mode** (toggle in the top-right corner).
+          5. Click **Load unpacked** and select the unzipped folder.
+          6. The 1111 Learn icon will appear in your toolbar — click it to open the side panel.
+          7. Complete the onboarding wizard (you'll need an Anthropic API key).
+
+          ### Existing testers updating to a new RC
+          1. Download the `.zip` file attached to this release.
+          2. Unzip it, replacing the contents of your existing extension folder.
+          3. Go to `chrome://extensions` and click the **reload** button (↻) on the 1111 Learn card.
+          4. Your data (courses, progress, profile) is preserved — the extension migrates data automatically.
+
+          ### What to look for
+          - Verify existing course progress and learner profile are intact after updating.
+          - Test the new changes described above.
+          - Report issues at https://github.com/1111philo/learn-extension/issues.
+          INSTEOF
+
       - name: Generate release notes
         if: steps.rc.outputs.skip != 'true'
-        id: notes
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RC_VERSION: ${{ steps.rc.outputs.rc_version }}
@@ -60,50 +89,16 @@ jobs:
           python3 << 'PYEOF'
           import json, os, urllib.request, re
 
-          TESTING_INSTRUCTIONS = """
-
----
-
-## How to test this release candidate
-
-### New testers
-1. Download the `.zip` file attached to this release.
-2. Unzip it to a folder on your computer.
-3. Open Chrome and go to `chrome://extensions`.
-4. Enable **Developer mode** (toggle in the top-right corner).
-5. Click **Load unpacked** and select the unzipped folder.
-6. The 1111 Learn icon will appear in your toolbar — click it to open the side panel.
-7. Complete the onboarding wizard (you'll need an Anthropic API key).
-
-### Existing testers updating to a new RC
-1. Download the `.zip` file attached to this release.
-2. Unzip it, replacing the contents of your existing extension folder.
-3. Go to `chrome://extensions` and click the **reload** button (↻) on the 1111 Learn card.
-4. Your data (courses, progress, profile) is preserved — the extension migrates data automatically.
-
-### What to look for
-- Verify existing course progress and learner profile are intact after updating.
-- Test the new changes described above.
-- Report issues at https://github.com/1111philo/learn-extension/issues.
-"""
-
           rc_version = os.environ["RC_VERSION"]
           api_key = os.environ["ANTHROPIC_API_KEY"]
 
           with open("/tmp/commits.txt") as f:
               commits = f.read().strip()
 
-          prompt = f"""You are a release manager for a Chrome extension called "1111 Learn".
+          with open("/tmp/testing_instructions.md") as f:
+              testing = f.read()
 
-          This is a release candidate: {rc_version}
-
-          Here are the commits included in this RC:
-          {commits}
-
-          Write concise release notes summarizing what changed. Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:
-          {{
-            "release_notes": "## What's New\\n\\n- bullet point summaries of changes"
-          }}"""
+          prompt = f"You are a release manager for a Chrome extension called \"1111 Learn\".\n\nThis is a release candidate: {rc_version}\n\nHere are the commits included in this RC:\n{commits}\n\nWrite concise release notes summarizing what changed. Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:\n{{\"release_notes\": \"## What's New\\n\\n- bullet point summaries of changes\"}}"
 
           body = json.dumps({
               "model": "claude-haiku-4-5-20251001",
@@ -126,10 +121,9 @@ jobs:
                   data = json.loads(resp.read())
           except urllib.error.HTTPError as e:
               print(f"API error {e.code}: {e.read().decode()}")
-              # Fall back to commit list if API fails
               with open("/tmp/release_notes.md", "w") as f:
                   f.write(f"## Changes\n\n{commits}\n")
-                  f.write(TESTING_INSTRUCTIONS)
+                  f.write(testing)
               raise SystemExit(0)
 
           text = data["content"][0]["text"]
@@ -139,7 +133,7 @@ jobs:
           result = json.loads(text)
           with open("/tmp/release_notes.md", "w") as f:
               f.write(result["release_notes"])
-              f.write(TESTING_INSTRUCTIONS)
+              f.write(testing)
           PYEOF
 
       - name: Update manifest.json with RC version
