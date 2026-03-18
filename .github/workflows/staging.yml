@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history for commit analysis and tag counting
+          fetch-depth: 0 # full history for merge-base and tag counting
 
       - uses: actions/setup-node@v4
         with:
@@ -24,138 +24,44 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Get current version and commits since last release
-        id: context
+      - name: Determine RC version
+        id: rc
         run: |
-          CURRENT_VERSION=$(jq -r '.version' manifest.json)
-          # Strip any 4th RC segment to get base version
-          BASE_VERSION=$(echo "$CURRENT_VERSION" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
-          echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          # Get main's version — this is the base for all RCs
+          BASE_VERSION=$(git show origin/main:manifest.json | jq -r '.version' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Find the last release tag (non-RC), or use the initial commit
-          LAST_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -v '\-RC' | head -1 || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"%h %s" HEAD)
-          else
-            COMMITS=$(git log --pretty=format:"%h %s" "${LAST_TAG}..HEAD")
-          fi
+          # Count commits on staging since it diverged from main,
+          # excluding version bump commits (which are bot noise)
+          MERGE_BASE=$(git merge-base origin/main HEAD)
+          RC_NUM=$(git log --oneline "$MERGE_BASE..HEAD" --grep='chore: bump version' --invert-grep | wc -l | tr -d ' ')
 
-          # Skip if no new commits since last tag
-          if [ -z "$COMMITS" ]; then
+          if [ "$RC_NUM" -eq 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No new commits since main — skipping RC build."
             exit 0
           fi
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "$COMMITS" > /tmp/commits.txt
-
-      - name: Ask Claude for candidate version
-        if: steps.context.outputs.skip != 'true'
-        id: claude
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CURRENT_VERSION: ${{ steps.context.outputs.base_version }}
-        run: |
-          python3 << 'PYEOF'
-          import json, os, urllib.request, re
-
-          version = os.environ["CURRENT_VERSION"]
-          api_key = os.environ["ANTHROPIC_API_KEY"]
-
-          with open("/tmp/commits.txt") as f:
-              commits = f.read().strip()
-
-          prompt = f"""You are a release manager for a Chrome extension called "1111 Learn".
-
-          Current version: {version}
-          The extension uses semantic versioning (MAJOR.MINOR.PATCH):
-          - PATCH: bug fixes, copy changes, small tweaks
-          - MINOR: new features, significant UI changes, new agent behaviors
-          - MAJOR: breaking changes, major rewrites, architecture overhauls
-
-          Chrome Web Store requires that each new version number is strictly greater than the previous one.
-
-          Here are the commits since the last release:
-          {commits}
-
-          Respond with ONLY valid JSON (no markdown fences, no explanation) in this exact format:
-          {{
-            "version": "X.Y.Z",
-            "release_notes": "## What's New\\n\\n- bullet point summaries of changes\\n\\n## Details\\n\\nBrief paragraph if needed."
-          }}"""
-
-          body = json.dumps({
-              "model": "claude-haiku-4-5-20251001",
-              "max_tokens": 1024,
-              "messages": [{"role": "user", "content": prompt}]
-          }).encode()
-
-          req = urllib.request.Request(
-              "https://api.anthropic.com/v1/messages",
-              data=body,
-              headers={
-                  "content-type": "application/json",
-                  "x-api-key": api_key,
-                  "anthropic-version": "2023-06-01",
-              },
-          )
-
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  data = json.loads(resp.read())
-          except urllib.error.HTTPError as e:
-              print(f"API error {e.code}: {e.read().decode()}")
-              raise SystemExit(1)
-
-          text = data["content"][0]["text"]
-          print(f"Claude raw response: {text}")
-
-          # Strip markdown fences if present
-          text = re.sub(r'^```json?\s*\n?', '', text.strip())
-          text = re.sub(r'\n?```\s*$', '', text.strip())
-
-          result = json.loads(text)
-          new_version = result["version"]
-          release_notes = result["release_notes"]
-
-          print(f"Claude chose candidate version: {new_version}")
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"candidate_version={new_version}\n")
-
-          with open("/tmp/release_notes.md", "w") as f:
-              f.write(release_notes)
-          PYEOF
-
-      - name: Determine RC number
-        if: steps.context.outputs.skip != 'true'
-        id: rc
-        env:
-          CANDIDATE_VERSION: ${{ steps.claude.outputs.candidate_version }}
-        run: |
-          # Count existing RC tags for this candidate version
-          RC_COUNT=$(git tag -l "v${CANDIDATE_VERSION}-RC*" | wc -l | tr -d ' ')
-          RC_NUM=$((RC_COUNT + 1))
           echo "rc_num=$RC_NUM" >> "$GITHUB_OUTPUT"
-          echo "rc_version=${CANDIDATE_VERSION}-RC${RC_NUM}" >> "$GITHUB_OUTPUT"
-          echo "RC version: ${CANDIDATE_VERSION}-RC${RC_NUM}"
+          echo "rc_version=${BASE_VERSION}-RC${RC_NUM}" >> "$GITHUB_OUTPUT"
+          echo "RC version: ${BASE_VERSION}-RC${RC_NUM}"
 
       - name: Update manifest.json with RC version
-        if: steps.context.outputs.skip != 'true'
+        if: steps.rc.outputs.skip != 'true'
         run: |
-          CANDIDATE_VERSION="${{ steps.claude.outputs.candidate_version }}"
+          BASE_VERSION="${{ steps.rc.outputs.base_version }}"
           RC_NUM="${{ steps.rc.outputs.rc_num }}"
           RC_DISPLAY="${{ steps.rc.outputs.rc_version }}"
 
           # version uses 4-segment numeric format for Chrome compatibility
-          jq --arg v "${CANDIDATE_VERSION}.${RC_NUM}" --arg vn "$RC_DISPLAY" \
+          jq --arg v "${BASE_VERSION}.${RC_NUM}" --arg vn "$RC_DISPLAY" \
             '.version = $v | .version_name = $vn' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
           echo "Updated manifest.json:"
           cat manifest.json
 
       - name: Build extension zip
-        if: steps.context.outputs.skip != 'true'
+        if: steps.rc.outputs.skip != 'true'
         run: |
           RC_VERSION="${{ steps.rc.outputs.rc_version }}"
           ZIP_NAME="1111-learn-v${RC_VERSION}.zip"
@@ -182,7 +88,7 @@ jobs:
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_ENV"
 
       - name: Commit version bump
-        if: steps.context.outputs.skip != 'true'
+        if: steps.rc.outputs.skip != 'true'
         run: |
           RC_VERSION="${{ steps.rc.outputs.rc_version }}"
           git config user.name "github-actions[bot]"
@@ -192,7 +98,7 @@ jobs:
           git push
 
       - name: Create GitHub pre-release
-        if: steps.context.outputs.skip != 'true'
+        if: steps.rc.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -200,5 +106,5 @@ jobs:
           gh release create "v${RC_VERSION}" \
             "${{ env.zip_name }}" \
             --title "v${RC_VERSION}" \
-            --notes-file /tmp/release_notes.md \
+            --notes "Release candidate ${RC_VERSION}" \
             --prerelease

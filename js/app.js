@@ -14,6 +14,7 @@ import { loadCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
 import { ApiError } from './api.js';
 import { trackEvent, flushNow } from './telemetry.js';
+import { runMigrations } from './migrations.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $main = () => $('#main-content');
@@ -178,6 +179,7 @@ const TYPE_LETTERS = { explore: 'R', apply: 'P', create: 'D', final: 'F' };
 // -- Bootstrap ----------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await runMigrations();
   await seedFromEnv();
   state.preferences = await getPreferences();
   state.courses = await loadCourses();

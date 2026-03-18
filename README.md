@@ -55,6 +55,7 @@ js/
   orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
+  migrations.js          Forward-only data migration runner
 prompts/
   course-creation.md        System prompt for Course Creation Agent
   activity-creation.md      System prompt for Activity Creation Agent
@@ -73,6 +74,7 @@ tests/
   manifest.test.js       Manifest validation tests
   courses.test.js        Course data validation tests
   validators.test.js     Output validator unit tests
+  migrations.test.js     Data migration unit tests
 package.json             Test runner config (no dependencies)
 scripts/
   setup-branch-protection.sh  One-time branch protection setup
@@ -92,13 +94,13 @@ Releases follow a two-branch workflow: **feature branches → staging → main**
 Every push to `staging` triggers the staging workflow:
 
 1. Tests run (`npm test`).
-2. Commits since the last production release are analyzed by Claude to determine the candidate semver version.
-3. An RC number is appended based on existing RC tags (e.g., `0.7.0-RC1`, `0.7.0-RC2`).
-4. `manifest.json` is updated with a 4-segment numeric `version` (e.g., `0.7.0.1`) and a human-readable `version_name` (e.g., `0.7.0-RC1`).
+2. The current version from `main`'s `manifest.json` is read as the base version (e.g., `0.6.3`).
+3. Non-bump commits on `staging` since it diverged from `main` are counted to determine the RC number.
+4. `manifest.json` is updated with a 4-segment numeric `version` (e.g., `0.6.3.2`) and a human-readable `version_name` (e.g., `0.6.3-RC2`).
 5. The extension is packaged and a **GitHub pre-release** is created with the zip attached.
 6. RC builds are **not** published to the Chrome Web Store.
 
-The RC number resets automatically when a new candidate version is determined (i.e., after a production release).
+The RC number resets automatically when `staging` is merged into `main` (the merge-base moves forward, so the commit count restarts).
 
 ### Production (main)
 
