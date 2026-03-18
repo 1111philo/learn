@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "1111 Learn",
-  "version": "0.6.3.3",
+  "version": "0.6.3.5",
   "description": "An agentic learning app by 11:11 Philosopher's Group.",
   "permissions": [
     "sidePanel",
@@ -29,5 +29,5 @@
   "background": {
     "service_worker": "background.js"
   },
-  "version_name": "0.6.3-RC3"
+  "version_name": "0.6.3-RC5"
 }
