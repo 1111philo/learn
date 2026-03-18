@@ -53,21 +53,45 @@ Activities must:
 - **Update documentation.** If your change adds, removes, or renames a feature, file, or permission, update README.md and CLAUDE.md accordingly.
 - **Test prompts.** When editing `prompts/*.md`, test with a real API key to verify the agent returns valid JSON.
 
+## Running tests
+
+Tests use Node's built-in test runner (no dependencies to install):
+
+```bash
+npm test
+```
+
+Tests validate `manifest.json` structure, `courses.json` data integrity, and the output validator functions used by the agent orchestrator. All tests must pass before merging.
+
 ## Submitting changes
 
-1. Create a branch from `main`.
+1. Create a branch from `staging`.
 2. Make focused, well-described commits.
-3. Open a pull request with a clear summary of what changed and why.
+3. Open a pull request **into `staging`** with a clear summary of what changed and why.
+4. Once merged to `staging`, a release candidate (RC) build is automatically created as a GitHub pre-release.
+5. When ready for production, open a PR from `staging` into `main`.
+
+**`main` is protected** -- direct pushes are blocked. All changes must flow through `staging` via pull request.
 
 ## Versioning and releases
 
-Versioning is fully automated. When a PR is merged (or a commit is pushed) to `main`, a GitHub Actions workflow:
-1. Analyzes the new commits with Claude to determine the semver bump (patch, minor, or major) and generate release notes.
-2. Updates the `version` field in `manifest.json`.
-3. Packages the extension into a zip and creates a GitHub Release.
-4. Uploads the zip to the Chrome Web Store and publishes it automatically.
+Versioning is fully automated across two branches:
 
-**Do not manually bump the version in `manifest.json`** -- the workflow handles this automatically.
+### Staging (release candidates)
+When commits are pushed to `staging`, a GitHub Actions workflow:
+1. Runs tests.
+2. Analyzes commits with Claude to determine the candidate semver version.
+3. Appends an RC number (e.g., `0.7.0-RC1`). The RC number increments on each push and resets when a new candidate version is determined.
+4. Creates a GitHub **pre-release** with the extension zip. RCs are not published to the Chrome Web Store.
+
+### Production (main)
+When a PR from `staging` is merged into `main`, a GitHub Actions workflow:
+1. Runs tests.
+2. Analyzes commits with Claude to determine the final semver bump and generate release notes.
+3. Updates `manifest.json` with a clean version (stripping any RC fields from staging).
+4. Packages the extension, creates a GitHub Release, and publishes to the Chrome Web Store.
+
+**Do not manually bump the version in `manifest.json`** -- the workflows handle this automatically.
 
 ## License
 

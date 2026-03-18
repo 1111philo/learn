@@ -53,6 +53,7 @@ js/
   courses.js             Course loading and prerequisite checking
   api.js                 Anthropic API client
   orchestrator.js        Agent orchestration + output validation
+  validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
 prompts/
   course-creation.md        System prompt for Course Creation Agent
@@ -68,21 +69,51 @@ assets/
   icon.png               Source icon
   icon-{16,32,48,128}.png  Resized icons for Chrome
   logo.svg               Logo for README
+tests/
+  manifest.test.js       Manifest validation tests
+  courses.test.js        Course data validation tests
+  validators.test.js     Output validator unit tests
+package.json             Test runner config (no dependencies)
+scripts/
+  setup-branch-protection.sh  One-time branch protection setup
 PRIVACY.md               Privacy policy
 .github/
   workflows/
-    release.yml          Auto-versioning and release on push to main
+    release.yml          Production release on push to main
+    staging.yml          Release candidate on push to staging
 ```
 
 ## Releases
 
-Releases are automated via GitHub Actions. Every push to `main` triggers the release workflow:
+Releases follow a two-branch workflow: **feature branches → staging → main**.
 
-1. Commits since the last release are analyzed by Claude to determine the appropriate semver bump and generate release notes.
-2. `manifest.json` is updated with the new version.
-3. The extension is packaged into a zip.
-4. A GitHub Release is created with the zip attached.
-5. The zip is uploaded to the Chrome Web Store and published automatically.
+### Staging (release candidates)
+
+Every push to `staging` triggers the staging workflow:
+
+1. Tests run (`npm test`).
+2. Commits since the last production release are analyzed by Claude to determine the candidate semver version.
+3. An RC number is appended based on existing RC tags (e.g., `0.7.0-RC1`, `0.7.0-RC2`).
+4. `manifest.json` is updated with a 4-segment numeric `version` (e.g., `0.7.0.1`) and a human-readable `version_name` (e.g., `0.7.0-RC1`).
+5. The extension is packaged and a **GitHub pre-release** is created with the zip attached.
+6. RC builds are **not** published to the Chrome Web Store.
+
+The RC number resets automatically when a new candidate version is determined (i.e., after a production release).
+
+### Production (main)
+
+When a PR from `staging` is merged into `main`, the release workflow:
+
+1. Tests run (`npm test`).
+2. Commits are analyzed by Claude to determine the final semver version and generate release notes.
+3. `manifest.json` is updated with a clean 3-segment `version`; any `version_name` from staging is removed.
+4. The extension is packaged into a zip.
+5. A GitHub Release is created with the zip attached.
+6. The zip is uploaded to the Chrome Web Store and published automatically.
+
+`main` is protected: direct pushes are blocked, and all changes must come via pull request from `staging`.
+
+### Required secrets
 
 Maintainers must add these secrets to the repository settings:
 - `ANTHROPIC_API_KEY` -- for Claude-powered version analysis

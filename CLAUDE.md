@@ -15,7 +15,7 @@ Six agents drive the learning experience:
 Agent prompts live in `prompts/*.md` and can be edited independently of code.
 
 ### Output validation
-All activity, assessment, and course plan outputs pass through deterministic validators in `js/orchestrator.js` before reaching the user. Activities are checked for: ending with "Record", max 4 steps, no platform-specific shortcuts, no multi-site instructions, no non-browser apps, viewport-sized output, and content safety. Course plans are validated for: activity count matching learning objective count exactly, no consecutive duplicate activity types, last activity being type "final", and required fields. Assessments are checked for valid score/recommendation/fields and safety. On failure, the agent call is retried once automatically.
+All activity, assessment, and course plan outputs pass through deterministic validators in `js/validators.js` (imported by `js/orchestrator.js`) before reaching the user. Activities are checked for: ending with "Record", max 4 steps, no platform-specific shortcuts, no multi-site instructions, no non-browser apps, viewport-sized output, and content safety. Course plans are validated for: activity count matching learning objective count exactly, no consecutive duplicate activity types, last activity being type "final", and required fields. Assessments are checked for valid score/recommendation/fields and safety. On failure, the agent call is retried once automatically.
 
 ### Onboarding
 On first run, a four-step wizard collects: name → personal statement → data consent → Anthropic API key. The Onboarding Profile Agent uses name + statement to create an inspiring initial learner profile. Completion is tracked via an `onboardingComplete` flag in `chrome.storage.local` (independent of the API key). In development, `.env.js` seeds the key into storage but onboarding still runs; completing or clearing the flag resets the flow.
@@ -48,15 +48,31 @@ When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `
 - Course cards show estimated time computed as `(learningObjectives.length + 1) * 5` minutes.
 
 ## CI/CD
-A GitHub Actions workflow (`.github/workflows/release.yml`) runs on every push to `main`:
-1. Collects commits since the last release tag
-2. Calls Claude (Haiku) to determine the semver bump and generate release notes
-3. Updates `manifest.json` version
-4. Packages the extension into a zip (excluding dev files)
-5. Commits the version bump and creates a GitHub Release with the zip attached
-6. Uploads the zip to the Chrome Web Store and publishes it
+Two GitHub Actions workflows handle versioning and releases across two branches:
 
-The workflow requires these secrets in the repo settings:
+### Staging workflow (`.github/workflows/staging.yml`)
+Runs on every push to `staging`:
+1. Runs tests (`npm test`)
+2. Collects commits since the last production release tag
+3. Calls Claude (Haiku) to determine the candidate semver version
+4. Appends an RC number based on existing RC tags (e.g., `0.7.0-RC1`)
+5. Updates `manifest.json` with 4-segment `version` (e.g., `0.7.0.1`) and `version_name` (e.g., `0.7.0-RC1`)
+6. Packages the extension and creates a GitHub **pre-release** (not published to Chrome Web Store)
+
+### Release workflow (`.github/workflows/release.yml`)
+Runs on every push to `main` (which should only happen via PR from `staging`):
+1. Runs tests (`npm test`)
+2. Collects commits since the last production release tag
+3. Calls Claude (Haiku) to determine the semver bump and generate release notes
+4. Updates `manifest.json` with clean 3-segment version, strips any `version_name` from staging
+5. Packages the extension into a zip (excluding dev files)
+6. Commits the version bump and creates a GitHub Release with the zip attached
+7. Uploads the zip to the Chrome Web Store and publishes it
+
+### Branch protection
+`main` is protected: direct pushes are blocked, PRs require approval and passing status checks. By convention, `main` only accepts PRs from `staging`. Branch protection is configured via `scripts/setup-branch-protection.sh`.
+
+### Required secrets
 - `ANTHROPIC_API_KEY` -- for Claude-powered version analysis
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` -- OAuth2 credentials for Chrome Web Store API
 - `CWS_EXTENSION_ID` -- the extension's Chrome Web Store ID
@@ -72,7 +88,8 @@ js/
   storage.js             chrome.storage.local + IndexedDB abstraction
   courses.js             Course loading and prerequisite checking
   api.js                 Anthropic API client (fetch wrapper)
-  orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing, output validation)
+  orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
+  validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
 prompts/
   onboarding-profile.md     System prompt for Onboarding Profile Agent
@@ -88,10 +105,18 @@ assets/
   icon.png               Source icon
   icon-{16,32,48,128}.png  Resized icons for Chrome
   logo.svg               Logo for README
+tests/
+  manifest.test.js       Manifest validation tests
+  courses.test.js        Course data validation tests
+  validators.test.js     Output validator unit tests
+package.json             Test runner config (no dependencies)
+scripts/
+  setup-branch-protection.sh  One-time branch protection setup
 PRIVACY.md               Privacy policy (GDPR-compliant)
 .github/
   workflows/
-    release.yml          Auto-versioning and release on push to main
+    release.yml          Production release on push to main
+    staging.yml          Release candidate on push to staging
 ```
 
 ## Rules for every change
@@ -103,8 +128,9 @@ PRIVACY.md               Privacy policy (GDPR-compliant)
 6. When editing agent prompts, test with a real API key to verify JSON output format.
 7. Never commit API keys or secrets.
 8. Activities must be completable entirely in the browser -- never reference desktop apps, terminals, or file system operations.
-9. Do not manually bump the version in `manifest.json` -- the CI/CD workflow handles versioning automatically on push to `main`.
-10. **Telemetry and privacy impact:** if a change adds, removes, or modifies what data is collected, sent to learn-service, or stored locally, you must:
+9. Do not manually bump the version in `manifest.json` -- the CI/CD workflows handle versioning automatically. During RC builds, `manifest.json` gains a 4-segment `version` and a `version_name` field; these are stripped on production release.
+10. Run `npm test` before submitting PRs. Tests must pass in CI on both `staging` and `main`.
+11. **Telemetry and privacy impact:** if a change adds, removes, or modifies what data is collected, sent to learn-service, or stored locally, you must:
     - Update `PRIVACY.md` (the legally binding privacy policy) to reflect the new data practices.
     - Update the consent dialog in `js/app.js` if the change affects what users are agreeing to share.
     - Update the `stripBinaries()` function in `js/telemetry.js` if new sensitive fields need to be blocked from telemetry.
