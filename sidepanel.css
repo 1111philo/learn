@@ -593,6 +593,11 @@ hr {
   justify-content: center;
   padding: var(--space);
   z-index: 1000;
+  animation: overlay-in 0.2s ease-out;
+}
+
+#modal-overlay.modal-closing {
+  animation: overlay-out 0.18s ease-in forwards;
 }
 
 #modal-overlay[hidden] { display: none; }
@@ -608,6 +613,40 @@ hr {
   display: flex;
   flex-direction: column;
   gap: var(--space);
+  animation: modal-in 0.2s ease-out;
+}
+
+.modal-closing .modal {
+  animation: modal-out 0.18s ease-in forwards;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); }
+  to   { opacity: 1; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+}
+
+@keyframes overlay-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes modal-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.95) translateY(8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #modal-overlay,
+  .modal,
+  #modal-overlay.modal-closing,
+  .modal-closing .modal {
+    animation: none;
+  }
 }
 
 .modal h2 {

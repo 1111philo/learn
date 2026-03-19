@@ -127,17 +127,26 @@ function hideModal() {
   if (!overlay || overlay.hidden) return;
   if (overlay._escHandler) { document.removeEventListener('keydown', overlay._escHandler); overlay._escHandler = null; }
   if (overlay._trapHandler) { document.removeEventListener('keydown', overlay._trapHandler); overlay._trapHandler = null; }
-  overlay.hidden = true;
-  overlay.innerHTML = '';
 
-  // Restore background landmarks
-  for (const sel of _MODAL_BG_SELECTORS) {
-    document.querySelector(sel)?.removeAttribute('aria-hidden');
-  }
+  const finish = () => {
+    overlay.hidden = true;
+    overlay.innerHTML = '';
+    overlay.classList.remove('modal-closing');
+    for (const sel of _MODAL_BG_SELECTORS) {
+      document.querySelector(sel)?.removeAttribute('aria-hidden');
+    }
+    overlay._triggerEl?.focus();
+    overlay._triggerEl = null;
+  };
 
-  // Return focus to triggering element
-  overlay._triggerEl?.focus();
-  overlay._triggerEl = null;
+  // Animate out, or finish immediately if reduced motion
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) { finish(); return; }
+
+  overlay.classList.add('modal-closing');
+  overlay.addEventListener('animationend', finish, { once: true });
+  // Safety fallback in case animationend doesn't fire
+  setTimeout(finish, 250);
 }
 
 async function logDev(type, data) {
