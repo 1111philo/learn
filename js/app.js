@@ -1848,14 +1848,51 @@ async function renderSettings() {
     <h2>Settings</h2>
 
     <div class="settings-section">
+      <h3>1111 Learn Login</h3>
+      ${loggedIn ? `
+        <p class="settings-hint">Signed in as ${esc(authUser?.email || '')}. Your data syncs across devices.</p>
+        <p class="settings-hint" id="sync-status">${lastSync ? `Last synced ${formatTimeAgo(lastSync)}` : 'Not yet synced'}</p>
+        <div class="sync-actions">
+          <button id="sync-now-btn" class="secondary-btn">Sync Now</button>
+          <button id="sign-out-btn" class="secondary-btn">Sign Out</button>
+        </div>
+        <div id="sync-feedback" role="status" aria-live="polite"></div>
+      ` : `
+        <p class="settings-hint">Sign in to sync your data with your 1111 Learn account. <a href="https://learn.philosophers.group" target="_blank" rel="noopener">Create an account</a></p>
+        <form id="login-form" class="settings-form" aria-label="1111 Learn login">
+          <label>
+            Email
+            <input type="email" name="email" required autocomplete="email">
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" required autocomplete="current-password">
+          </label>
+          <button type="submit" class="primary-btn">Sign In</button>
+          <div id="login-feedback" role="status" aria-live="polite"></div>
+        </form>
+      `}
+    </div>
+
+    <hr>
+
+    <div class="settings-section">
       <h3>API Key</h3>
-      <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
-      <div class="api-key-row">
-        <label for="api-key-input" class="sr-only">API Key</label>
-        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}">
-        <button id="save-key-btn" class="primary-btn">Save</button>
-      </div>
-      <div id="key-feedback" role="status" aria-live="polite"></div>
+      ${loggedIn ? `
+        <p class="settings-hint">Managed by your 1111 Learn account.</p>
+        <div class="api-key-row">
+          <label for="api-key-input" class="sr-only">API Key</label>
+          <input type="password" id="api-key-input" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}" disabled>
+        </div>
+      ` : `
+        <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
+        <div class="api-key-row">
+          <label for="api-key-input" class="sr-only">API Key</label>
+          <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}">
+          <button id="save-key-btn" class="primary-btn">Save</button>
+        </div>
+        <div id="key-feedback" role="status" aria-live="polite"></div>
+      `}
     </div>
 
     <hr>
@@ -1870,35 +1907,6 @@ async function renderSettings() {
         <button type="submit" class="primary-btn">Save</button>
         <div id="prefs-feedback" role="status" aria-live="polite"></div>
       </form>
-    </div>
-
-    <hr>
-
-    <div class="settings-section">
-      <h3>Cloud Sync</h3>
-      ${loggedIn ? `
-        <p class="settings-hint">Signed in as ${esc(authUser?.email || '')}</p>
-        <p class="settings-hint" id="sync-status">${lastSync ? `Last synced ${formatTimeAgo(lastSync)}` : 'Not yet synced'}</p>
-        <div class="sync-actions">
-          <button id="sync-now-btn" class="secondary-btn">Sync Now</button>
-          <button id="sign-out-btn" class="secondary-btn">Sign Out</button>
-        </div>
-        <div id="sync-feedback" role="status" aria-live="polite"></div>
-      ` : `
-        <p class="settings-hint">Sign in to sync your data across devices. Optional — everything works without an account.</p>
-        <form id="login-form" class="settings-form" aria-label="Cloud sync login">
-          <label>
-            Email
-            <input type="email" name="email" required autocomplete="email">
-          </label>
-          <label>
-            Password
-            <input type="password" name="password" required autocomplete="current-password">
-          </label>
-          <button type="submit" class="primary-btn">Sign In</button>
-          <div id="login-feedback" role="status" aria-live="polite"></div>
-        </form>
-      `}
     </div>
 
     <hr>
@@ -1930,30 +1938,32 @@ async function renderSettings() {
       </button>
     </div>`;
 
-  // API key
-  const keyInput = $('#api-key-input');
-  keyInput.addEventListener('focus', () => {
-    if (keyInput.value === '••••••••••••••••••••••••••••••••••••••••') keyInput.value = '';
-  });
-  keyInput.addEventListener('blur', async () => {
-    if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
-  });
+  // API key (only interactive when not logged in)
+  if (!loggedIn) {
+    const keyInput = $('#api-key-input');
+    keyInput.addEventListener('focus', () => {
+      if (keyInput.value === '••••••••••••••••••••••••••••••••••••••••') keyInput.value = '';
+    });
+    keyInput.addEventListener('blur', async () => {
+      if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
+    });
 
-  const saveKey = async () => {
-    const key = keyInput.value.trim();
-    if (!key || key === '••••••••••••••••••••••••••••••••••••••••') {
-      showKeyFeedback('Please enter an API key.', 'error');
-      return;
-    }
-    await saveApiKey(key);
-    keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
-    showKeyFeedback('Saved!', 'success');
-  };
+    const saveKey = async () => {
+      const key = keyInput.value.trim();
+      if (!key || key === '••••••••••••••••••••••••••••••••••••••••') {
+        showKeyFeedback('Please enter an API key.', 'error');
+        return;
+      }
+      await saveApiKey(key);
+      keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
+      showKeyFeedback('Saved!', 'success');
+    };
 
-  $('#save-key-btn').addEventListener('click', saveKey);
-  keyInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); saveKey(); }
-  });
+    $('#save-key-btn').addEventListener('click', saveKey);
+    keyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveKey(); }
+    });
+  }
 
   // Personalization
   const prefsForm = $('#prefs-form');
