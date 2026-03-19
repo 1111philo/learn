@@ -142,6 +142,29 @@ header {
 
 .user-dropdown-actions .secondary-btn { flex: 1; }
 
+.dropdown-success {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.dropdown-success-msg {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-success);
+  margin-bottom: 4px;
+}
+
+.dropdown-success-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.dropdown-feedback-error {
+  font-size: 0.8rem;
+  color: var(--color-warning);
+  margin-top: 6px;
+}
+
 /* ── Main content ───────────────────────────────────────────────────────── */
 main {
   flex: 1;
