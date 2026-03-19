@@ -135,34 +135,28 @@ header {
   margin-bottom: 8px;
 }
 
-.user-dropdown-actions {
-  display: flex;
-  gap: 8px;
-}
 
-.user-dropdown-actions .secondary-btn { flex: 1; }
-
-.dropdown-success {
+/* ── Login modal ───────────────────────────────────────────────────────── */
+.login-success-state {
   text-align: center;
-  padding: 8px 0;
+  padding: 16px 0;
 }
 
-.dropdown-success-msg {
+.login-success-msg {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: var(--color-success);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
-.dropdown-success-hint {
-  font-size: 0.8rem;
+.login-success-hint {
+  font-size: 0.85rem;
   color: var(--color-text-secondary);
 }
 
-.dropdown-feedback-error {
-  font-size: 0.8rem;
+.login-error-msg {
+  font-size: 0.85rem;
   color: var(--color-warning);
-  margin-top: 6px;
 }
 
 /* ── Main content ───────────────────────────────────────────────────────── */
@@ -929,20 +923,6 @@ hr {
 .key-feedback-success { color: var(--color-success); }
 .key-feedback-error { color: var(--color-warning); }
 
-.login-success {
-  color: var(--color-success);
-  font-weight: 600;
-}
-
-.sync-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.form-feedback-error {
-  color: var(--color-warning);
-}
 
 .settings-actions {
   display: flex;
