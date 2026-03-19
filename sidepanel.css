@@ -817,6 +817,16 @@ hr {
 .key-feedback-success { color: var(--color-success); }
 .key-feedback-error { color: var(--color-warning); }
 
+.sync-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.form-feedback-error {
+  color: var(--color-warning);
+}
+
 .settings-actions {
   display: flex;
   flex-direction: column;

@@ -28,6 +28,7 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 - **JSON export** -- export all saved data (metadata + screenshots + dev logs) at any time
 - **Keyboard shortcuts** -- Enter submits inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs
 - **Fully local** -- screenshots are stored in IndexedDB; metadata in `chrome.storage.local`. Only API calls to Anthropic are made (with the user's own key).
+- **Cloud sync** (optional) -- sign in via learn-service to sync your profile, preferences, progress, and portfolio across devices. Login is never required; everything works without an account. Admins can pre-assign API keys that auto-install on login.
 - **Accessible** -- keyboard-operable, screen-reader-friendly, respects `prefers-reduced-motion` and `forced-colors`
 - **Lightweight** -- vanilla JS, no frameworks, no local build step; designed for Chromebooks and Android tablets
 
@@ -163,6 +164,7 @@ Each course in `data/courses.json` has:
 |-----------------------------|----------------------------------------|
 | `https://api.anthropic.com/*` | Send requests to the Claude API with the user's own key |
 | `https://learn-dashboard.philosophers.group/*` | Send anonymous telemetry when data sharing is enabled |
+| `https://learn.philosophers.group/*` | Cloud sync and authentication (optional, only when signed in) |
 
 ## Privacy
 
@@ -170,7 +172,8 @@ Each course in `data/courses.json` has:
 
 - **Local by default**: course progress, screenshots, learner profile, and API key never leave your device.
 - **Opt-in telemetry**: "Share data with 11:11" in Settings sends anonymous usage data (agent I/O, feedback text, scores). Screenshots and API keys are never sent.
-- **Anonymous**: data is tied to a random ID, not your identity.
+- **Cloud sync** (optional): signing in via learn-service syncs your profile, preferences, progress, and portfolio to the cloud. Screenshots are never synced. Auth tokens are stored locally and refresh automatically.
+- **Anonymous**: telemetry data is tied to a random ID, not your identity.
 - **90-day retention**: telemetry is automatically deleted.
 - **Your rights**: withdraw consent anytime, request deletion via [1111@philosophers.group](mailto:1111@philosophers.group) or [open an issue](https://github.com/1111philo/learn-extension/issues).
 

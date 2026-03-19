@@ -21,7 +21,8 @@
   },
   "host_permissions": [
     "https://api.anthropic.com/*",
-    "https://learn-dashboard.philosophers.group/*"
+    "https://learn-dashboard.philosophers.group/*",
+    "https://learn.philosophers.group/*"
   ],
   "optional_host_permissions": [
     "<all_urls>"

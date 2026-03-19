@@ -10,7 +10,7 @@
 
 1111 Learn is a Chrome extension that guides learners through courses using AI agents powered by the Claude API. This privacy policy explains what data is collected, how it is used, and your rights regarding that data.
 
-**In short:** your learning data stays on your device by default. We only collect anonymous telemetry if you explicitly opt in.
+**In short:** your learning data stays on your device by default. We only collect anonymous telemetry if you explicitly opt in. Optional cloud sync (via sign-in) stores your learning data on our servers for cross-device access.
 
 ## 2. Data Stored Locally (Never Shared)
 
@@ -98,7 +98,49 @@ We do not sell, share, or transfer telemetry data to any third party. We do not 
 
 Our legal basis for processing telemetry data is **consent** (Article 6(1)(a) of the GDPR). You provide this consent by enabling data sharing and confirming the consent dialog.
 
-## 5. Your Rights
+## 5. Optional Cloud Sync
+
+### 5.1 What Cloud Sync Does
+
+You may optionally sign in to a learn-service account (provided by your administrator via invite) to sync learning data across devices. Cloud sync is **off by default** and is not required to use the extension.
+
+### 5.2 What Is Synced
+
+When signed in, the following data is synced to our server:
+
+| Data | Purpose |
+|------|---------|
+| Learner profile (strengths, weaknesses, preferences, goal) | Restore your profile on another device |
+| Learner profile summary | Restore your profile display |
+| Preferences (name) | Personalization across devices |
+| Course progress (activity history, drafts metadata, scores) | Continue courses on another device |
+| Work products (completed course references) | Portfolio across devices |
+
+### 5.3 What Is Never Synced
+
+| Data | Why |
+|------|-----|
+| Screenshots | Too large; stored only in local IndexedDB |
+| Your Anthropic API key | Security; stored only locally (unless admin-assigned via the service) |
+
+### 5.4 Authentication Data
+
+When you sign in, the extension stores JWT tokens locally to maintain your session:
+
+- **Access token** (expires after 15 minutes, refreshed automatically)
+- **Refresh token** (expires after 30 days, rotated on each use)
+- **User object** (email, name, role)
+
+These are stored in `chrome.storage.local` and cleared on sign-out or when you delete all data.
+
+### 5.5 Cloud Data Storage
+
+- **Server:** sync data is stored in AWS DynamoDB in the us-east-2 (Ohio) region.
+- **Encryption:** all data is encrypted in transit (TLS) and at rest (AWS-managed encryption).
+- **Access:** only 11:11 Philosopher's Group administrators can manage user accounts and data.
+- **Deletion:** signing out removes local tokens. To delete cloud data, contact your administrator or use the contact methods in Section 9.
+
+## 6. Your Rights
 
 Under the GDPR and similar privacy regulations, you have the following rights:
 
@@ -115,15 +157,15 @@ Under the GDPR and similar privacy regulations, you have the following rights:
 
 Note: because telemetry data is anonymous (tied to a random ID, not your identity), we may not be able to identify which data belongs to you without additional information. Your anonymous ID is stored locally on your device under `chrome.storage.local`.
 
-## 6. Children's Privacy
+## 7. Children's Privacy
 
 1111 Learn is an educational tool. We do not knowingly collect personal information from children under 13. Since telemetry is anonymous and opt-in, and we collect no personally identifying information, no additional parental consent mechanisms are required. If you believe a child has shared personal information with us through feedback text, please contact us.
 
-## 7. Changes to This Policy
+## 8. Changes to This Policy
 
 We may update this privacy policy from time to time. Changes will be reflected in this document with an updated "Last Updated" date. For significant changes to data practices, we will update the consent dialog in the extension.
 
-## 8. Contact
+## 9. Contact
 
 If you have questions, concerns, or requests regarding your data or this privacy policy:
 

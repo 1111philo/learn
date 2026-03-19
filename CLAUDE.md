@@ -1,7 +1,7 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using six AI agents powered by the Claude API. The user provides their own Anthropic API key via a first-run onboarding wizard. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots).
+1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using six AI agents powered by the Claude API. The user provides their own Anthropic API key via a first-run onboarding wizard. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots). Optional cloud sync via `learn-service` enables cross-device data persistence for logged-in users.
 
 ## Architecture
 Six agents drive the learning experience:
@@ -36,6 +36,15 @@ Time-based telemetry tracks three dimensions:
 - **Time on task:** `activity_started` fires when a learner first sees an activity; `activity_completed` includes `durationMs` measuring how long they spent.
 - **Time in system:** `session_end` fires on `visibilitychange` (panel hidden) with `durationMs` since page load. Paired with `session_start` for session duration.
 - **Page hopping:** `navigation` events fire on every view transition with `fromView`/`toView` fields.
+
+### Cloud sync
+Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the extension works fully offline/locally. When logged in, data is synced to the cloud after significant operations (draft submission, course completion, profile updates, settings changes).
+
+- **Auth:** `js/auth.js` handles login/logout/token refresh via JWT access tokens (15 min) + refresh tokens (30 day, rotated on use). Tokens are stored in `chrome.storage.local` under `authAccessToken`, `authRefreshToken`, `authUser`.
+- **Sync:** `js/sync.js` pushes/pulls data to/from `/v1/sync` endpoints on `learn-service`. Uses optimistic locking (version numbers) with automatic conflict resolution. Sync keys: `profile`, `profileSummary`, `preferences`, `work`, `progress:{courseId}`.
+- **API key provisioning:** On login, if no local API key exists, the extension checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it.
+- **Merge strategy:** Profile uses array union (same as `mergeProfile()`), work products union by courseId, course progress prefers the more advanced version.
+- **Settings UI:** "Cloud Sync" section in Settings shows login form (when signed out) or account info + Sync Now / Sign Out (when signed in).
 
 ## Key conventions
 - All source is vanilla JS (ES modules), CSS, and HTML -- no local build step, no frameworks. CI packages the extension into a zip on push to `main`.
@@ -99,6 +108,8 @@ js/
   orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
+  auth.js                Authentication module for learn-service (login, logout, token refresh)
+  sync.js                Cloud data sync (push/pull with optimistic locking)
   migrations.js          Forward-only data migration runner
 prompts/
   onboarding-profile.md     System prompt for Onboarding Profile Agent

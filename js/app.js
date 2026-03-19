@@ -8,13 +8,16 @@ import {
   getLearnerProfile, saveLearnerProfile,
   getLearnerProfileSummary, saveLearnerProfileSummary,
   getDevMode, saveDevMode, appendDevLog,
-  getOnboardingComplete, saveOnboardingComplete
+  getOnboardingComplete, saveOnboardingComplete,
+  getLastSync
 } from './storage.js';
 import { loadCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
 import { ApiError } from './api.js';
 import { trackEvent, flushNow } from './telemetry.js';
 import { runMigrations } from './migrations.js';
+import * as auth from './auth.js';
+import * as sync from './sync.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $main = () => $('#main-content');
@@ -226,6 +229,16 @@ async function seedFromEnv() {
       await savePreferences({ ...prefs, name: ENV.name });
     }
   } catch { /* .env.js not present — expected in production */ }
+}
+
+/** Push data to cloud in background. No-op if not logged in. */
+function syncInBackground(...syncKeys) {
+  Promise.resolve().then(async () => {
+    if (!await auth.isLoggedIn()) return;
+    for (const key of syncKeys) {
+      try { await sync.pushData(key); } catch { /* silent */ }
+    }
+  });
 }
 
 function bindNav() {
@@ -458,6 +471,7 @@ async function startOrResumeCourse(courseId) {
 
       await saveCourseProgress(courseId, newProgress);
       state.allProgress[courseId] = newProgress;
+      syncInBackground(`progress:${courseId}`);
       // Clear diagnostic state now that the plan has been generated
       state.pendingDiagnosticResult = null;
       state.skipDiagnosticFor = null;
@@ -546,6 +560,7 @@ async function renderCourse() {
       };
 
       await saveCourseProgress(p.courseId, p);
+      syncInBackground(`progress:${p.courseId}`);
     })();
 
     state.generating = { courseId: p.courseId, promise };
@@ -700,6 +715,7 @@ async function renderCourse() {
     nextBtn.addEventListener('click', async () => {
       p.currentActivityIndex++;
       await saveCourseProgress(p.courseId, p);
+      syncInBackground(`progress:${p.courseId}`);
       animateMain('view-slide-left');
       render();
     });
@@ -782,6 +798,7 @@ async function regenerateCurrentActivity(course, p) {
     };
 
     await saveCourseProgress(p.courseId, p);
+    syncInBackground(`progress:${p.courseId}`);
     trackEvent('activity_regenerated', {
       courseId: course.courseId,
       activityIndex: p.currentActivityIndex,
@@ -914,6 +931,8 @@ async function submitDispute(course, p, activity, draft) {
 
     await saveCourseProgress(p.courseId, p);
     state.allProgress[p.courseId] = p;
+    syncInBackground(`progress:${p.courseId}`);
+    if (justCompleted) syncInBackground('work');
     render();
 
     // Update learner profile in background
@@ -1047,6 +1066,8 @@ async function recordDraft(activity) {
 
     await saveCourseProgress(p.courseId, p);
     state.allProgress[p.courseId] = p;
+    syncInBackground(`progress:${p.courseId}`);
+    if (justCompleted) syncInBackground('work');
     render();
 
     // Update learner profile in background (non-blocking)
@@ -1104,6 +1125,7 @@ async function saveProfileResult(existing, result) {
   const merged = mergeProfile(existing, result.profile);
   await saveLearnerProfile(merged);
   await saveLearnerProfileSummary(result.summary);
+  syncInBackground('profile', 'profileSummary');
 }
 
 async function updateProfileInBackground(assessmentResult, course, activity) {
@@ -1352,6 +1374,7 @@ async function completeOnboarding() {
     result.profile.updatedAt = Date.now();
     await saveLearnerProfile(result.profile);
     await saveLearnerProfileSummary(result.summary);
+    syncInBackground('profile', 'profileSummary');
   } catch (e) {
     console.warn('Profile initialization failed (non-blocking):', e);
   }
@@ -1817,6 +1840,9 @@ async function renderSettings() {
   const hasKey = await orchestrator.isReady();
   const profileSummary = await getLearnerProfileSummary();
   const devModeOn = await getDevMode();
+  const loggedIn = await auth.isLoggedIn();
+  const authUser = loggedIn ? await auth.getCurrentUser() : null;
+  const lastSync = await getLastSync();
 
   main.innerHTML = `
     <h2>Settings</h2>
@@ -1844,6 +1870,35 @@ async function renderSettings() {
         <button type="submit" class="primary-btn">Save</button>
         <div id="prefs-feedback" role="status" aria-live="polite"></div>
       </form>
+    </div>
+
+    <hr>
+
+    <div class="settings-section">
+      <h3>Cloud Sync</h3>
+      ${loggedIn ? `
+        <p class="settings-hint">Signed in as ${esc(authUser?.email || '')}</p>
+        <p class="settings-hint" id="sync-status">${lastSync ? `Last synced ${formatTimeAgo(lastSync)}` : 'Not yet synced'}</p>
+        <div class="sync-actions">
+          <button id="sync-now-btn" class="secondary-btn">Sync Now</button>
+          <button id="sign-out-btn" class="secondary-btn">Sign Out</button>
+        </div>
+        <div id="sync-feedback" role="status" aria-live="polite"></div>
+      ` : `
+        <p class="settings-hint">Sign in to sync your data across devices. Optional — everything works without an account.</p>
+        <form id="login-form" class="settings-form" aria-label="Cloud sync login">
+          <label>
+            Email
+            <input type="email" name="email" required autocomplete="email">
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" required autocomplete="current-password">
+          </label>
+          <button type="submit" class="primary-btn">Sign In</button>
+          <div id="login-feedback" role="status" aria-live="polite"></div>
+        </form>
+      `}
     </div>
 
     <hr>
@@ -1907,8 +1962,76 @@ async function renderSettings() {
     const fd = new FormData(e.target);
     state.preferences = { name: fd.get('name') };
     await savePreferences(state.preferences);
+    syncInBackground('preferences');
     showFormFeedback('prefs-feedback', 'Saved!');
   });
+
+  // Cloud Sync
+  if (loggedIn) {
+    $('#sync-now-btn').addEventListener('click', async () => {
+      const btn = $('#sync-now-btn');
+      btn.disabled = true;
+      btn.textContent = 'Syncing...';
+      try {
+        await sync.syncAll();
+        state.allProgress = await getAllProgress();
+        state.preferences = await getPreferences();
+        announce('Sync complete');
+        renderSettings();
+      } catch (e) {
+        showFormFeedback('sync-feedback', e.message || 'Sync failed');
+        btn.disabled = false;
+        btn.textContent = 'Sync Now';
+      }
+    });
+    $('#sign-out-btn').addEventListener('click', async () => {
+      await auth.logout();
+      announce('Signed out');
+      renderSettings();
+    });
+  } else {
+    const loginForm = $('#login-form');
+    if (loginForm) {
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const email = fd.get('email').trim();
+        const password = fd.get('password');
+        const btn = loginForm.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.textContent = 'Signing in...';
+        try {
+          await auth.login(email, password);
+          announce('Signed in');
+          // Check if the service has an API key for this user
+          if (!await getApiKey()) {
+            try {
+              const assignedKey = await auth.getAssignedApiKey();
+              if (assignedKey) {
+                await saveApiKey(assignedKey);
+                announce('API key installed from your account');
+              }
+            } catch { /* non-critical */ }
+          }
+          // Initial sync
+          try {
+            await sync.syncAll();
+            state.allProgress = await getAllProgress();
+            state.preferences = await getPreferences();
+          } catch { /* sync failure is non-blocking */ }
+          renderSettings();
+        } catch (e) {
+          const fb = $('#login-feedback');
+          if (fb) {
+            fb.textContent = e.message || 'Login failed';
+            fb.className = 'form-feedback form-feedback-error';
+          }
+          btn.disabled = false;
+          btn.textContent = 'Sign In';
+        }
+      });
+    }
+  }
 
   // Learner profile feedback
   $('#profile-feedback-btn').addEventListener('click', () => showProfileFeedback());
@@ -2149,6 +2272,12 @@ function formatDuration(ms) {
   if (hrs < 24) return `${hrs} hr${hrs !== 1 ? 's' : ''}`;
   const days = Math.round(ms / 86400000);
   return `${Math.max(1, days)} day${days !== 1 ? 's' : ''}`;
+}
+
+function formatTimeAgo(timestamp) {
+  const diff = Date.now() - timestamp;
+  if (diff < 60000) return 'just now';
+  return formatDuration(diff) + ' ago';
 }
 
 function completionSummary(course, p) {
