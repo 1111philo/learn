@@ -381,7 +381,19 @@ function bindUserMenu() {
   btn.addEventListener('click', async () => {
     const loggedIn = await auth.isLoggedIn();
     if (!loggedIn) {
-      showLoginModal();
+      showLoginModal(async () => {
+        state.preferences = await getPreferences();
+        state.allProgress = await getAllProgress();
+        state.courses = await loadCourses();
+        const activeCourse = Object.entries(state.allProgress)
+          .find(([, p]) => p.status === 'in_progress');
+        if (activeCourse) {
+          state.activeCourseId = activeCourse[0];
+          state.progress = activeCourse[1];
+          state.view = 'course';
+        }
+        render();
+      });
       return;
     }
     // Toggle dropdown for signed-in users
