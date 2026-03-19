@@ -1383,76 +1383,68 @@ async function renderOnboarding() {
   ).join('');
 
   if (_onboardingStep === 1) {
-    const mode = _onboardingData.connectMode || 'login';
+    main.innerHTML = `
+      <div class="onboarding">
+        <h2>Welcome to Learn</h2>
+        <p class="onboarding-lead">An agentic learning app that builds around you.</p>
+        <div class="onboarding-choice">
+          <button id="onboarding-login" class="primary-btn onboarding-choice-btn">Login to Learn</button>
+          <button id="onboarding-local" class="secondary-btn onboarding-choice-btn">Use Locally</button>
+        </div>
+      </div>`;
 
+    $('#onboarding-login').addEventListener('click', () => {
+      showLoginModal(async () => {
+        state.preferences = await getPreferences();
+        state.allProgress = await getAllProgress();
+        state.courses = await loadCourses();
+        await saveOnboardingComplete();
+        await updateUserMenu();
+        _onboardingStep = 1;
+        _onboardingData = {};
+        const activeCourse = Object.entries(state.allProgress)
+          .find(([, p]) => p.status === 'in_progress');
+        if (activeCourse) {
+          state.activeCourseId = activeCourse[0];
+          state.progress = activeCourse[1];
+          state.view = 'course';
+        } else {
+          state.view = 'courses';
+        }
+        render();
+      });
+    });
+
+    $('#onboarding-local').addEventListener('click', () => {
+      _onboardingStep = 2;
+      animateMain('view-slide-left');
+      renderOnboarding();
+    });
+
+  } else if (_onboardingStep === 2) {
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 1 of 4" aria-valuenow="1" aria-valuemin="1" aria-valuemax="4">${dots(1)}</div>
         <span class="onboarding-step-label">Step 1 of 4</span>
-        <h2>Welcome to Learn</h2>
-        <p class="onboarding-lead">An agentic learning app that builds around you.</p>
-        <label for="onboarding-mode" class="sr-only">Connection method</label>
-        <select id="onboarding-mode" class="onboarding-mode-select">
-          <option value="login" ${mode === 'login' ? 'selected' : ''}>Login to Learn</option>
-          <option value="local" ${mode === 'local' ? 'selected' : ''}>Run Locally</option>
-        </select>
-        <div id="onboarding-connect-fields"></div>
+        <h2>What's your name?</h2>
+        <p class="onboarding-lead">Let's start with your name.</p>
+        <label for="onboarding-name" class="sr-only">Your name</label>
+        <input type="text" id="onboarding-name" placeholder="Your name" autocomplete="given-name" value="${esc(_onboardingData.name || '')}">
+        <div class="action-bar">
+          <button id="onboarding-back" class="secondary-btn">Back</button>
+          <button id="onboarding-next" class="primary-btn">Continue</button>
+        </div>
       </div>`;
 
-    const renderConnectFields = (m) => {
-      const container = $('#onboarding-connect-fields');
-      if (m === 'login') {
-        container.innerHTML = `
-          <p class="onboarding-lead">Sign in to your <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a> account to sync your data and get started.</p>
-          <button id="onboarding-login-btn" class="primary-btn" style="width:100%">Sign In</button>`;
-        $('#onboarding-login-btn').addEventListener('click', () => {
-          showLoginModal(async () => {
-            // Login succeeded — sync pulled all data (profile, prefs, progress, work)
-            state.preferences = await getPreferences();
-            state.allProgress = await getAllProgress();
-            state.courses = await loadCourses();
-            await saveOnboardingComplete();
-            await updateUserMenu();
-            _onboardingStep = 1;
-            _onboardingData = {};
-            // Resume where they left off — find any in-progress course
-            const activeCourse = Object.entries(state.allProgress)
-              .find(([, p]) => p.status === 'in_progress');
-            if (activeCourse) {
-              state.activeCourseId = activeCourse[0];
-              state.progress = activeCourse[1];
-              state.view = 'course';
-            } else {
-              state.view = 'courses';
-            }
-            render();
-          });
-        });
-      } else {
-        container.innerHTML = `
-          <p class="onboarding-lead">Let's start with your name.</p>
-          <label for="onboarding-name" class="sr-only">Your name</label>
-          <input type="text" id="onboarding-name" placeholder="Your name" autocomplete="given-name" value="${esc(_onboardingData.name || '')}">
-          <div class="action-bar">
-            <button id="onboarding-next" class="primary-btn">Continue</button>
-          </div>`;
-        const input = $('#onboarding-name');
-        input?.focus();
-        input?.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') { e.preventDefault(); advanceOnboarding(1); }
-        });
-        $('#onboarding-next')?.addEventListener('click', () => advanceOnboarding(1));
-      }
-    };
-
-    renderConnectFields(mode);
-
-    $('#onboarding-mode').addEventListener('change', (e) => {
-      _onboardingData.connectMode = e.target.value;
-      renderConnectFields(e.target.value);
+    const input = $('#onboarding-name');
+    input.focus();
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); advanceOnboarding(2); }
     });
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 1; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
 
-  } else if (_onboardingStep === 2) {
+  } else if (_onboardingStep === 3) {
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 2 of 4" aria-valuenow="2" aria-valuemin="1" aria-valuemax="4">${dots(2)}</div>
@@ -1471,12 +1463,12 @@ async function renderOnboarding() {
     const textarea = $('#onboarding-statement');
     textarea.focus();
     textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); advanceOnboarding(2); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); advanceOnboarding(3); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 1; animateMain('view-slide-right'); renderOnboarding(); });
-    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 2; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(3));
 
-  } else if (_onboardingStep === 3) {
+  } else if (_onboardingStep === 4) {
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 3 of 4" aria-valuenow="3" aria-valuemin="1" aria-valuemax="4">${dots(3)}</div>
@@ -1509,18 +1501,18 @@ async function renderOnboarding() {
 
     $('#onboarding-skip').addEventListener('click', () => {
       _onboardingData.dataSharing = false;
-      _onboardingStep = 4;
+      _onboardingStep = 5;
       animateMain('view-slide-left');
       renderOnboarding();
     });
     $('#onboarding-consent').addEventListener('click', () => {
       _onboardingData.dataSharing = true;
-      _onboardingStep = 4;
+      _onboardingStep = 5;
       animateMain('view-slide-left');
       renderOnboarding();
     });
 
-  } else if (_onboardingStep === 4) {
+  } else if (_onboardingStep === 5) {
     const hasKey = !!(await getApiKey());
 
     main.innerHTML = `
@@ -1552,22 +1544,22 @@ async function renderOnboarding() {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 3; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 4; animateMain('view-slide-right'); renderOnboarding(); });
     $('#onboarding-finish').addEventListener('click', () => completeOnboarding());
   }
 }
 
 function advanceOnboarding(fromStep) {
-  if (fromStep === 1) {
+  if (fromStep === 2) {
     const name = $('#onboarding-name')?.value?.trim();
     if (!name) { $('#onboarding-name').focus(); return; }
     _onboardingData.name = name;
-    _onboardingStep = 2;
-  } else if (fromStep === 2) {
+    _onboardingStep = 3;
+  } else if (fromStep === 3) {
     const statement = $('#onboarding-statement')?.value?.trim();
     if (!statement) { $('#onboarding-statement').focus(); return; }
     _onboardingData.statement = statement;
-    _onboardingStep = 3;
+    _onboardingStep = 4;
   }
   animateMain('view-slide-left');
   renderOnboarding();

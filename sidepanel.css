@@ -1602,25 +1602,17 @@ hr {
   min-height: 1.3em;
 }
 
-.onboarding-login-ok {
-  color: var(--color-success);
-  font-weight: 600;
+.onboarding-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
 }
 
-.onboarding-mode-select {
-  font: inherit;
-  font-size: 0.9rem;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
+.onboarding-choice-btn {
   width: 100%;
-  margin-bottom: 8px;
-}
-
-.onboarding-mode-select:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  padding: 12px;
+  font-size: 0.95rem;
 }
 
 .settings-managed-note {
