@@ -58,6 +58,7 @@ header {
 /* ── User menu (header dropdown) ───────────────────────────────────────── */
 .user-menu {
   position: relative;
+  min-width: 0; /* allow shrinking */
 }
 
 .user-menu-btn {
@@ -68,25 +69,27 @@ header {
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: var(--radius);
   color: var(--color-primary-text);
-  padding: 4px 8px;
+  padding: 4px 10px;
   font: inherit;
   font-size: 0.8rem;
   cursor: pointer;
   transition: background 0.15s;
+  max-width: 180px;
+  min-width: 0;
 }
 
-.user-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
+.user-menu-btn:hover { background: rgba(255, 255, 255, 0.1); }
 
 .user-menu-btn:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
 
-.user-icon { flex-shrink: 0; }
-
-.user-menu-name:empty { display: none; }
+#user-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .user-dropdown {
   position: absolute;
@@ -104,32 +107,40 @@ header {
 
 .user-dropdown[hidden] { display: none; }
 
-.user-dropdown .settings-form label {
-  font-size: 0.8rem;
-}
+.user-dropdown .settings-form label { font-size: 0.8rem; }
 
 .user-dropdown .settings-form input {
   font-size: 0.85rem;
   padding: 6px 8px;
 }
 
-.user-dropdown-status {
+.user-dropdown-hint {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
+.user-dropdown-hint a { color: var(--color-accent); }
+
 .user-dropdown-email {
   font-weight: 600;
   font-size: 0.85rem;
+  word-break: break-all;
   margin-bottom: 4px;
+}
+
+.user-dropdown-sync {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
 }
 
 .user-dropdown-actions {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
 }
+
+.user-dropdown-actions .secondary-btn { flex: 1; }
 
 /* ── Main content ───────────────────────────────────────────────────────── */
 main {

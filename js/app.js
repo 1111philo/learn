@@ -252,21 +252,20 @@ function bindNav() {
 // -- Header user menu ---------------------------------------------------------
 
 async function updateUserMenu() {
-  const nameEl = $('#user-menu-name');
+  const label = $('#user-menu-label');
   const loggedIn = await auth.isLoggedIn();
   const user = loggedIn ? await auth.getCurrentUser() : null;
-  nameEl.textContent = user?.name || '';
+  label.textContent = loggedIn ? (user?.email || 'Account') : 'Login';
   renderUserDropdown(loggedIn, user);
 }
 
 function renderUserDropdown(loggedIn, user) {
   const dropdown = $('#user-dropdown');
-  const lastSyncTs = null; // will be read on open
 
   if (loggedIn) {
     dropdown.innerHTML = `
       <p class="user-dropdown-email">${esc(user?.email || '')}</p>
-      <p class="user-dropdown-status" id="dropdown-sync-status">Loading...</p>
+      <p class="user-dropdown-sync" id="dropdown-sync-status"></p>
       <div class="user-dropdown-actions">
         <button id="dropdown-sync-btn" class="secondary-btn">Sync Now</button>
         <button id="dropdown-sign-out-btn" class="secondary-btn">Sign Out</button>
@@ -274,7 +273,7 @@ function renderUserDropdown(loggedIn, user) {
       <div id="dropdown-feedback" role="status" aria-live="polite"></div>`;
   } else {
     dropdown.innerHTML = `
-      <p class="user-dropdown-status">Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
+      <p class="user-dropdown-hint">Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
       <form id="dropdown-login-form" class="settings-form" aria-label="Learn login">
         <label>
           Email
