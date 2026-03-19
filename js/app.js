@@ -1848,9 +1848,9 @@ async function renderSettings() {
     <h2>Settings</h2>
 
     <div class="settings-section">
-      <h3>1111 Learn Login</h3>
+      <h3>Learn Login</h3>
       ${loggedIn ? `
-        <p class="settings-hint">Signed in as ${esc(authUser?.email || '')}. Your data syncs across devices.</p>
+        <p class="settings-hint login-success">Signed in as ${esc(authUser?.email || '')}</p>
         <p class="settings-hint" id="sync-status">${lastSync ? `Last synced ${formatTimeAgo(lastSync)}` : 'Not yet synced'}</p>
         <div class="sync-actions">
           <button id="sync-now-btn" class="secondary-btn">Sync Now</button>
@@ -1858,8 +1858,8 @@ async function renderSettings() {
         </div>
         <div id="sync-feedback" role="status" aria-live="polite"></div>
       ` : `
-        <p class="settings-hint">Sign in to sync your data with your 1111 Learn account. <a href="https://learn.philosophers.group" target="_blank" rel="noopener">Create an account</a></p>
-        <form id="login-form" class="settings-form" aria-label="1111 Learn login">
+        <p class="settings-hint">Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
+        <form id="login-form" class="settings-form" aria-label="Learn login">
           <label>
             Email
             <input type="email" name="email" required autocomplete="email">

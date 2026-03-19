@@ -817,6 +817,11 @@ hr {
 .key-feedback-success { color: var(--color-success); }
 .key-feedback-error { color: var(--color-warning); }
 
+.login-success {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
 .sync-actions {
   display: flex;
   gap: 8px;
