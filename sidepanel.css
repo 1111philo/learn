@@ -1645,9 +1645,24 @@ hr {
   border-color: #15803d;
 }
 
-.settings-managed-note {
-  color: var(--color-accent);
-  font-weight: 600;
+.settings-managed-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  color: #1e40af;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.settings-managed-banner svg {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .settings-action-btn:disabled,

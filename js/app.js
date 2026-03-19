@@ -424,18 +424,30 @@ function bindDropdownActions() {
       $('#user-menu-btn').setAttribute('aria-expanded', 'false');
       showModal(`
   <h2>Sign Out?</h2>
-  <p>Your data will stay on this device but will no longer sync to the cloud.</p>
+  <p>This will clear all local data and return you to the welcome screen.</p>
   <div class="action-bar">
     <button id="cancel-signout-btn" class="secondary-btn">Cancel</button>
-    <button id="confirm-signout-btn" class="primary-btn">Sign Out</button>
+    <button id="confirm-signout-btn" class="danger-btn">Sign Out</button>
   </div>`, 'alertdialog', 'Confirm sign out');
       $('#cancel-signout-btn').addEventListener('click', hideModal);
       $('#confirm-signout-btn').addEventListener('click', async () => {
         hideModal();
         await auth.logout();
-        announce('Signed out');
+        await chrome.storage.local.clear();
+        try {
+          const dbs = await indexedDB.databases();
+          for (const db of dbs) { if (db.name) indexedDB.deleteDatabase(db.name); }
+        } catch { /* not supported in all contexts */ }
+        state.preferences = { name: '' };
+        state.allProgress = {};
+        state.progress = null;
+        state.activeCourseId = null;
+        _onboardingStep = 1;
+        _onboardingData = {};
         await updateUserMenu();
-        if (state.view === 'settings') render();
+        announce('Signed out');
+        state.view = 'onboarding';
+        render();
       });
     };
   }
@@ -2133,7 +2145,7 @@ async function renderSettings() {
     <hr>
     <div class="settings-section">
       <h3>Data Management</h3>
-      ${loggedIn ? `<p class="settings-hint settings-managed-note">Your data is managed by your 1111 Learn account. Sign out to manage data locally.</p>` : ''}
+      ${loggedIn ? `<div class="settings-managed-banner" role="status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 10.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM8.75 7a.75.75 0 0 1-1.5 0V4.5a.75.75 0 0 1 1.5 0V7Z" fill="currentColor"/></svg>Your data is managed by your 1111 Learn account. Sign out to manage data locally.</div>` : ''}
       <div class="toggle-row">
         <label for="dev-mode-toggle">Share data with 11:11</label>
         <input type="checkbox" id="dev-mode-toggle" role="switch" ${devModeOn ? 'checked' : ''} ${loggedIn ? 'disabled' : ''}>
