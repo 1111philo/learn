@@ -1389,7 +1389,7 @@ async function renderOnboarding() {
         <p class="onboarding-lead">An agentic learning app that builds around you.</p>
         <div class="onboarding-choice">
           <button id="onboarding-login" class="primary-btn onboarding-choice-btn">Login to Learn</button>
-          <button id="onboarding-local" class="secondary-btn onboarding-choice-btn">Use Locally</button>
+          <button id="onboarding-skip-login" class="onboarding-skip-btn">Continue without logging in...</button>
         </div>
       </div>`;
 
@@ -1415,10 +1415,21 @@ async function renderOnboarding() {
       });
     });
 
-    $('#onboarding-local').addEventListener('click', () => {
-      _onboardingStep = 2;
-      animateMain('view-slide-left');
-      renderOnboarding();
+    $('#onboarding-skip-login').addEventListener('click', () => {
+      showModal(`
+  <h2>Continue without logging in?</h2>
+  <p>By not logging in, credit for your work will not be given and changes won't be saved to the cloud.</p>
+  <div class="action-bar">
+    <button id="skip-login-back" class="secondary-btn">Go Back</button>
+    <button id="skip-login-continue" class="primary-btn btn-success">Continue</button>
+  </div>`, 'alertdialog', 'Continue without login');
+      $('#skip-login-back').addEventListener('click', hideModal);
+      $('#skip-login-continue').addEventListener('click', () => {
+        hideModal();
+        _onboardingStep = 2;
+        animateMain('view-slide-left');
+        renderOnboarding();
+      });
     });
 
   } else if (_onboardingStep === 2) {
