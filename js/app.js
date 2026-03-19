@@ -288,7 +288,7 @@ async function updateUserMenu() {
   }
 }
 
-function showLoginModal() {
+function showLoginModal(onSuccess) {
   showModal(`
   <h2>Sign In</h2>
   <p>Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
@@ -359,7 +359,10 @@ function showLoginModal() {
       await updateUserMenu();
       if (state.view === 'settings') render();
 
-      setTimeout(hideModal, 1200);
+      setTimeout(() => {
+        hideModal();
+        if (onSuccess) onSuccess();
+      }, 1200);
     } catch (err) {
       if (fb) {
         fb.textContent = err.message || 'Invalid email or password';
@@ -1372,7 +1375,7 @@ async function updateProfileOnCourseCompletionInBackground(course, progress) {
 
 // -- Onboarding ---------------------------------------------------------------
 
-function renderOnboarding() {
+async function renderOnboarding() {
   const main = $main();
 
   const dots = (active) => [1, 2, 3, 4].map(i =>
@@ -1469,14 +1472,25 @@ function renderOnboarding() {
     });
 
   } else if (_onboardingStep === 4) {
+    const loggedIn = await auth.isLoggedIn();
+    const hasKey = !!(await getApiKey());
+    const mode = loggedIn ? 'login' : (_onboardingData.connectMode || 'login');
+
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 4 of 4" aria-valuenow="4" aria-valuemin="1" aria-valuemax="4">${dots(4)}</div>
         <span class="onboarding-step-label">Step 4 of 4</span>
         <h2>Connect your AI.</h2>
-        <p class="onboarding-lead">1111 Learn is powered by Claude. Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.</p>
-        <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
-        <input type="password" id="onboarding-apikey" placeholder="sk-ant-..." autocomplete="off">
+        ${loggedIn ? `
+          <p class="onboarding-lead onboarding-login-ok">Signed in — your account is connected.</p>
+        ` : `
+          <label for="onboarding-mode" class="sr-only">Connection method</label>
+          <select id="onboarding-mode" class="onboarding-mode-select">
+            <option value="login" ${mode === 'login' ? 'selected' : ''}>Login to Learn</option>
+            <option value="local" ${mode === 'local' ? 'selected' : ''}>Run Locally</option>
+          </select>
+          <div id="onboarding-connect-fields"></div>
+        `}
         <div id="onboarding-key-error" role="alert" aria-live="polite" class="onboarding-error"></div>
         <div class="action-bar">
           <button id="onboarding-back" class="secondary-btn">Back</button>
@@ -1484,23 +1498,49 @@ function renderOnboarding() {
         </div>
       </div>`;
 
-    const input = $('#onboarding-apikey');
-    input.focus();
-    // Pre-fill with placeholder bullets if a key is already seeded (e.g. from .env.js)
-    getApiKey().then(existing => {
-      if (existing && !input.value) {
-        input.value = '••••••••••••••••••••••••••••••••••••••••';
-        input.addEventListener('focus', () => {
-          if (input.value === '••••••••••••••••••••••••••••••••••••••••') input.value = '';
-        });
-        input.addEventListener('blur', async () => {
-          if (!input.value) input.value = '••••••••••••••••••••••••••••••••••••••••';
-        });
-      }
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
-    });
+    if (!loggedIn) {
+      const renderConnectFields = (m) => {
+        const container = $('#onboarding-connect-fields');
+        if (m === 'login') {
+          container.innerHTML = `
+            <p class="onboarding-lead">Sign in to sync your data and connect your API key via <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
+            <button id="onboarding-login-btn" class="primary-btn" style="width:100%">Sign In</button>`;
+          $('#onboarding-login-btn').addEventListener('click', () => {
+            showLoginModal(() => renderOnboarding());
+          });
+        } else {
+          container.innerHTML = `
+            <p class="onboarding-lead">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> — it stays on your device.</p>
+            <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
+            <input type="password" id="onboarding-apikey" placeholder="sk-ant-..." autocomplete="off">`;
+          const input = $('#onboarding-apikey');
+          if (hasKey && input) {
+            input.value = '••••••••••••••••••••••••••••••••••••••••';
+            input.addEventListener('focus', () => {
+              if (input.value === '••••••••••••••••••••••••••••••••••••••••') input.value = '';
+            });
+            input.addEventListener('blur', async () => {
+              if (!input.value && await getApiKey()) input.value = '••••••••••••••••••••••••••••••••••••••••';
+            });
+          }
+          input?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
+          });
+          input?.focus();
+        }
+      };
+
+      renderConnectFields(mode);
+
+      $('#onboarding-mode').addEventListener('change', (e) => {
+        _onboardingData.connectMode = e.target.value;
+        renderConnectFields(e.target.value);
+        // Clear any previous error
+        const err = $('#onboarding-key-error');
+        if (err) err.textContent = '';
+      });
+    }
+
     $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 3; animateMain('view-slide-right'); renderOnboarding(); });
     $('#onboarding-finish').addEventListener('click', () => completeOnboarding());
   }
@@ -1523,20 +1563,22 @@ function advanceOnboarding(fromStep) {
 }
 
 async function completeOnboarding() {
-  const keyInput = $('#onboarding-apikey');
-  const rawValue = keyInput?.value?.trim();
-  const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
-  // If placeholder bullets shown, the seeded key is already in storage — keep it
-  const existingKey = rawValue === PLACEHOLDER ? await getApiKey() : null;
-  const key = existingKey || rawValue;
-  if (!key) {
-    const err = $('#onboarding-key-error');
-    if (err) err.textContent = 'Please enter your API key.';
-    keyInput?.focus();
-    return;
-  }
+  const loggedIn = await auth.isLoggedIn();
 
-  await saveApiKey(key);
+  if (!loggedIn) {
+    const keyInput = $('#onboarding-apikey');
+    const rawValue = keyInput?.value?.trim();
+    const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
+    const existingKey = rawValue === PLACEHOLDER ? await getApiKey() : null;
+    const key = existingKey || rawValue;
+    if (!key) {
+      const err = $('#onboarding-key-error');
+      if (err) err.textContent = 'Please enter your API key or sign in.';
+      keyInput?.focus();
+      return;
+    }
+    await saveApiKey(key);
+  }
   state.preferences = { ...(state.preferences || {}), name: _onboardingData.name };
   await savePreferences(state.preferences);
 
@@ -2081,18 +2123,19 @@ async function renderSettings() {
     <hr>
     <div class="settings-section">
       <h3>Data Management</h3>
+      ${loggedIn ? `<p class="settings-hint settings-managed-note">Your data is managed by your 1111 Learn account. Sign out to manage data locally.</p>` : ''}
       <div class="toggle-row">
         <label for="dev-mode-toggle">Share data with 11:11</label>
-        <input type="checkbox" id="dev-mode-toggle" role="switch" ${devModeOn ? 'checked' : ''}>
+        <input type="checkbox" id="dev-mode-toggle" role="switch" ${devModeOn ? 'checked' : ''} ${loggedIn ? 'disabled' : ''}>
       </div>
       <p class="settings-hint">Logs agent interactions locally and sends anonymous telemetry to help improve the extension. Screenshots and API keys are never sent, but feedback text you write may be included. You can disable this at any time.</p>
     </div>
     <div class="settings-actions">
-      <button id="export-btn" class="settings-action-btn">
+      <button id="export-btn" class="settings-action-btn" ${loggedIn ? 'disabled' : ''}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3 3-3M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Export data as JSON
       </button>
-      <button id="delete-all-btn" class="settings-action-btn settings-action-danger">
+      <button id="delete-all-btn" class="settings-action-btn settings-action-danger" ${loggedIn ? 'disabled' : ''}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 0 1 1.34-1.34h2.66a1.33 1.33 0 0 1 1.34 1.34V4m2 0v9.33a1.33 1.33 0 0 1-1.34 1.34H4.67a1.33 1.33 0 0 1-1.34-1.34V4h9.34Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Delete all data
       </button>
