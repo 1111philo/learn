@@ -193,6 +193,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   state.courses = await loadCourses();
   state.allProgress = await getAllProgress();
   bindNav();
+  bindUserMenu();
+  await updateUserMenu();
 
   // First-run: show onboarding if it hasn't been completed yet
   const onboardingDone = await getOnboardingComplete();
@@ -245,6 +247,166 @@ function bindNav() {
   document.querySelectorAll('[data-nav]').forEach((btn) => {
     btn.addEventListener('click', () => navigate(btn.dataset.nav));
   });
+}
+
+// -- Header user menu ---------------------------------------------------------
+
+async function updateUserMenu() {
+  const nameEl = $('#user-menu-name');
+  const loggedIn = await auth.isLoggedIn();
+  const user = loggedIn ? await auth.getCurrentUser() : null;
+  nameEl.textContent = user?.name || '';
+  renderUserDropdown(loggedIn, user);
+}
+
+function renderUserDropdown(loggedIn, user) {
+  const dropdown = $('#user-dropdown');
+  const lastSyncTs = null; // will be read on open
+
+  if (loggedIn) {
+    dropdown.innerHTML = `
+      <p class="user-dropdown-email">${esc(user?.email || '')}</p>
+      <p class="user-dropdown-status" id="dropdown-sync-status">Loading...</p>
+      <div class="user-dropdown-actions">
+        <button id="dropdown-sync-btn" class="secondary-btn">Sync Now</button>
+        <button id="dropdown-sign-out-btn" class="secondary-btn">Sign Out</button>
+      </div>
+      <div id="dropdown-feedback" role="status" aria-live="polite"></div>`;
+  } else {
+    dropdown.innerHTML = `
+      <p class="user-dropdown-status">Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
+      <form id="dropdown-login-form" class="settings-form" aria-label="Learn login">
+        <label>
+          Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" required autocomplete="current-password">
+        </label>
+        <button type="submit" class="primary-btn">Sign In</button>
+        <div id="dropdown-login-feedback" role="status" aria-live="polite"></div>
+      </form>`;
+  }
+}
+
+function bindUserMenu() {
+  const btn = $('#user-menu-btn');
+  const dropdown = $('#user-dropdown');
+
+  btn.addEventListener('click', async () => {
+    const open = dropdown.hidden;
+    dropdown.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      // Update sync status each time the dropdown opens
+      const loggedIn = await auth.isLoggedIn();
+      if (loggedIn) {
+        const ls = await getLastSync();
+        const statusEl = $('#dropdown-sync-status');
+        if (statusEl) statusEl.textContent = ls ? `Last synced ${formatTimeAgo(ls)}` : 'Not yet synced';
+      }
+      bindDropdownActions();
+    }
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!dropdown.hidden && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !dropdown.hidden) {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      btn.focus();
+    }
+  });
+}
+
+function bindDropdownActions() {
+  // Signed-in actions
+  const syncBtn = $('#dropdown-sync-btn');
+  if (syncBtn) {
+    syncBtn.onclick = async () => {
+      syncBtn.disabled = true;
+      syncBtn.textContent = 'Syncing...';
+      try {
+        await sync.syncAll();
+        state.allProgress = await getAllProgress();
+        state.preferences = await getPreferences();
+        const statusEl = $('#dropdown-sync-status');
+        if (statusEl) statusEl.textContent = 'Just synced';
+        announce('Sync complete');
+      } catch (e) {
+        const fb = $('#dropdown-feedback');
+        if (fb) fb.textContent = e.message || 'Sync failed';
+      }
+      syncBtn.disabled = false;
+      syncBtn.textContent = 'Sync Now';
+    };
+  }
+
+  const signOutBtn = $('#dropdown-sign-out-btn');
+  if (signOutBtn) {
+    signOutBtn.onclick = async () => {
+      await auth.logout();
+      announce('Signed out');
+      await updateUserMenu();
+      $('#user-dropdown').hidden = true;
+      $('#user-menu-btn').setAttribute('aria-expanded', 'false');
+      // Re-render settings if we're on that view to update API key state
+      if (state.view === 'settings') render();
+    };
+  }
+
+  // Signed-out login form
+  const loginForm = $('#dropdown-login-form');
+  if (loginForm) {
+    loginForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const email = fd.get('email').trim();
+      const password = fd.get('password');
+      const btn = loginForm.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      try {
+        await auth.login(email, password);
+        announce('Signed in');
+        // Check for admin-assigned API key
+        if (!await getApiKey()) {
+          try {
+            const assignedKey = await auth.getAssignedApiKey();
+            if (assignedKey) await saveApiKey(assignedKey);
+          } catch { /* non-critical */ }
+        }
+        // Initial sync
+        try {
+          await sync.syncAll();
+          state.allProgress = await getAllProgress();
+          state.preferences = await getPreferences();
+        } catch { /* non-blocking */ }
+        await updateUserMenu();
+        $('#user-dropdown').hidden = true;
+        $('#user-menu-btn').setAttribute('aria-expanded', 'false');
+        // Re-render settings if we're on that view to update API key state
+        if (state.view === 'settings') render();
+      } catch (err) {
+        const fb = $('#dropdown-login-feedback');
+        if (fb) {
+          fb.textContent = err.message || 'Login failed';
+          fb.className = 'form-feedback form-feedback-error';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    };
+  }
 }
 
 // View depth for determining transition direction
@@ -1841,40 +2003,9 @@ async function renderSettings() {
   const profileSummary = await getLearnerProfileSummary();
   const devModeOn = await getDevMode();
   const loggedIn = await auth.isLoggedIn();
-  const authUser = loggedIn ? await auth.getCurrentUser() : null;
-  const lastSync = await getLastSync();
 
   main.innerHTML = `
     <h2>Settings</h2>
-
-    <div class="settings-section">
-      <h3>Learn Login</h3>
-      ${loggedIn ? `
-        <p class="settings-hint login-success">Signed in as ${esc(authUser?.email || '')}</p>
-        <p class="settings-hint" id="sync-status">${lastSync ? `Last synced ${formatTimeAgo(lastSync)}` : 'Not yet synced'}</p>
-        <div class="sync-actions">
-          <button id="sync-now-btn" class="secondary-btn">Sync Now</button>
-          <button id="sign-out-btn" class="secondary-btn">Sign Out</button>
-        </div>
-        <div id="sync-feedback" role="status" aria-live="polite"></div>
-      ` : `
-        <p class="settings-hint">Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
-        <form id="login-form" class="settings-form" aria-label="Learn login">
-          <label>
-            Email
-            <input type="email" name="email" required autocomplete="email">
-          </label>
-          <label>
-            Password
-            <input type="password" name="password" required autocomplete="current-password">
-          </label>
-          <button type="submit" class="primary-btn">Sign In</button>
-          <div id="login-feedback" role="status" aria-live="polite"></div>
-        </form>
-      `}
-    </div>
-
-    <hr>
 
     <div class="settings-section">
       <h3>API Key</h3>
@@ -1975,73 +2106,6 @@ async function renderSettings() {
     syncInBackground('preferences');
     showFormFeedback('prefs-feedback', 'Saved!');
   });
-
-  // Cloud Sync
-  if (loggedIn) {
-    $('#sync-now-btn').addEventListener('click', async () => {
-      const btn = $('#sync-now-btn');
-      btn.disabled = true;
-      btn.textContent = 'Syncing...';
-      try {
-        await sync.syncAll();
-        state.allProgress = await getAllProgress();
-        state.preferences = await getPreferences();
-        announce('Sync complete');
-        renderSettings();
-      } catch (e) {
-        showFormFeedback('sync-feedback', e.message || 'Sync failed');
-        btn.disabled = false;
-        btn.textContent = 'Sync Now';
-      }
-    });
-    $('#sign-out-btn').addEventListener('click', async () => {
-      await auth.logout();
-      announce('Signed out');
-      renderSettings();
-    });
-  } else {
-    const loginForm = $('#login-form');
-    if (loginForm) {
-      loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const email = fd.get('email').trim();
-        const password = fd.get('password');
-        const btn = loginForm.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.textContent = 'Signing in...';
-        try {
-          await auth.login(email, password);
-          announce('Signed in');
-          // Check if the service has an API key for this user
-          if (!await getApiKey()) {
-            try {
-              const assignedKey = await auth.getAssignedApiKey();
-              if (assignedKey) {
-                await saveApiKey(assignedKey);
-                announce('API key installed from your account');
-              }
-            } catch { /* non-critical */ }
-          }
-          // Initial sync
-          try {
-            await sync.syncAll();
-            state.allProgress = await getAllProgress();
-            state.preferences = await getPreferences();
-          } catch { /* sync failure is non-blocking */ }
-          renderSettings();
-        } catch (e) {
-          const fb = $('#login-feedback');
-          if (fb) {
-            fb.textContent = e.message || 'Login failed';
-            fb.className = 'form-feedback form-feedback-error';
-          }
-          btn.disabled = false;
-          btn.textContent = 'Sign In';
-        }
-      });
-    }
-  }
 
   // Learner profile feedback
   $('#profile-feedback-btn').addEventListener('click', () => showProfileFeedback());
