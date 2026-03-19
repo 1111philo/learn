@@ -163,6 +163,11 @@ let state = {
   skipDiagnosticFor: null         // courseId — bypass diagnostic
 };
 
+// -- Time tracking state ------------------------------------------------------
+const _sessionStartMs = Date.now();
+let _activityStartMs = null;   // set when an activity view renders
+let _activityStartMeta = null; // { courseId, activityIndex } for the current activity
+
 // Onboarding wizard state (persists across re-renders within a session)
 let _onboardingStep = 1;
 let _onboardingData = {};
@@ -202,6 +207,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// -- Session end tracking -----------------------------------------------------
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    trackEvent('session_end', { durationMs: Date.now() - _sessionStartMs });
+    flushNow();
+  }
+});
+
 async function seedFromEnv() {
   try {
     const { ENV } = await import('../.env.js');
@@ -237,6 +250,10 @@ function navigate(view, data) {
   const prev = state.view;
   state.view = view;
   if (data) Object.assign(state, data);
+
+  if (prev !== view) {
+    trackEvent('navigation', { fromView: prev, toView: view });
+  }
 
   const fromDepth = VIEW_DEPTH[prev] ?? 0;
   const toDepth = VIEW_DEPTH[view] ?? 0;
@@ -547,6 +564,20 @@ async function renderCourse() {
   }
 
   const activity = p.activities[p.currentActivityIndex];
+
+  // Track activity start time (only if we're on a new activity)
+  const actMeta = { courseId: p.courseId, activityIndex: p.currentActivityIndex };
+  if (!_activityStartMeta || _activityStartMeta.courseId !== actMeta.courseId || _activityStartMeta.activityIndex !== actMeta.activityIndex) {
+    _activityStartMs = Date.now();
+    _activityStartMeta = actMeta;
+    trackEvent('activity_started', {
+      courseId: p.courseId,
+      activityIndex: p.currentActivityIndex,
+      activityType: activity.type,
+      activityGoal: activity.goal || '',
+    });
+  }
+
   const draftsForActivity = p.drafts.filter((d) => d.activityId === activity.id);
   const hasDrafts = draftsForActivity.length > 0;
   const lastDraft = hasDrafts ? draftsForActivity[draftsForActivity.length - 1] : null;
@@ -1002,11 +1033,16 @@ async function recordDraft(activity) {
     }
 
     if (result.recommendation === 'advance') {
+      const actDurationMs = _activityStartMs ? Date.now() - _activityStartMs : null;
       trackEvent('activity_completed', {
         courseId: p.courseId, activityType: activity.type,
+        activityIndex: p.currentActivityIndex,
         score: result.score, recommendation: result.recommendation,
         draftCount: attemptNumber,
+        durationMs: actDurationMs,
       });
+      _activityStartMs = null;
+      _activityStartMeta = null;
     }
 
     await saveCourseProgress(p.courseId, p);

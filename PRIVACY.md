@@ -2,7 +2,7 @@
 
 **1111 Learn** -- Chrome Extension
 **Data Controller:** 11:11 Philosopher's Group
-**Last Updated:** 2026-03-08
+**Last Updated:** 2026-03-19
 
 ---
 
@@ -52,6 +52,9 @@ When data sharing is enabled, the following is sent to our telemetry server:
 | Feedback text you write (e.g., activity complaints, dispute text) | Understand why users disagree with AI outputs |
 | Assessment scores and recommendations | Track assessment accuracy |
 | Activity metadata (course ID, activity type, activity goal) | Contextualize feedback patterns |
+| Activity timing (when you start and complete each activity, duration) | Measure time on task to calibrate activity difficulty |
+| Session timing (session start/end, duration) | Understand time spent in the extension |
+| Navigation events (which views you visit, transitions between views) | Identify UX friction and navigation patterns |
 | Validation failures and error messages | Fix bugs and improve reliability |
 | Extension version | Attribute issues to specific releases |
 | Browser platform (e.g., "MacIntel", "Linux x86_64") | Understand device compatibility |

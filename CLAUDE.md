@@ -32,6 +32,11 @@ The profile updates after assessments, diagnostic results, learner feedback, and
 ### Telemetry
 When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `js/telemetry.js` buffers usage events and sends them to `learn-dashboard` (separate repo). Events include full agent I/O (prompts, responses, feedback) for debugging and improvement. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent notice is shown when enabling data sharing. The telemetry client is fire-and-forget and never blocks the UI. Service credentials are stored in `chrome.storage.local` under `serviceCredentials`.
 
+Time-based telemetry tracks three dimensions:
+- **Time on task:** `activity_started` fires when a learner first sees an activity; `activity_completed` includes `durationMs` measuring how long they spent.
+- **Time in system:** `session_end` fires on `visibilitychange` (panel hidden) with `durationMs` since page load. Paired with `session_start` for session duration.
+- **Page hopping:** `navigation` events fire on every view transition with `fromView`/`toView` fields.
+
 ## Key conventions
 - All source is vanilla JS (ES modules), CSS, and HTML -- no local build step, no frameworks. CI packages the extension into a zip on push to `main`.
 - Course definitions live in `data/courses.json`.
