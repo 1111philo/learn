@@ -407,13 +407,24 @@ function bindDropdownActions() {
 
   const signOutBtn = $('#dropdown-sign-out-btn');
   if (signOutBtn) {
-    signOutBtn.onclick = async () => {
-      await auth.logout();
-      announce('Signed out');
-      await updateUserMenu();
+    signOutBtn.onclick = () => {
       dropdown.hidden = true;
       $('#user-menu-btn').setAttribute('aria-expanded', 'false');
-      if (state.view === 'settings') render();
+      showModal(`
+  <h2>Sign Out?</h2>
+  <p>Your data will stay on this device but will no longer sync to the cloud.</p>
+  <div class="action-bar">
+    <button id="cancel-signout-btn" class="secondary-btn">Cancel</button>
+    <button id="confirm-signout-btn" class="primary-btn">Sign Out</button>
+  </div>`, 'alertdialog', 'Confirm sign out');
+      $('#cancel-signout-btn').addEventListener('click', hideModal);
+      $('#confirm-signout-btn').addEventListener('click', async () => {
+        hideModal();
+        await auth.logout();
+        announce('Signed out');
+        await updateUserMenu();
+        if (state.view === 'settings') render();
+      });
     };
   }
 }
