@@ -1383,25 +1383,74 @@ async function renderOnboarding() {
   ).join('');
 
   if (_onboardingStep === 1) {
+    const mode = _onboardingData.connectMode || 'login';
+
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 1 of 4" aria-valuenow="1" aria-valuemin="1" aria-valuemax="4">${dots(1)}</div>
         <span class="onboarding-step-label">Step 1 of 4</span>
         <h2>Welcome to Learn</h2>
-        <p class="onboarding-lead">An agentic learning app that builds around you. Let's start with your name.</p>
-        <label for="onboarding-name" class="sr-only">Your name</label>
-        <input type="text" id="onboarding-name" placeholder="Your name" autocomplete="given-name" value="${esc(_onboardingData.name || '')}">
-        <div class="action-bar">
-          <button id="onboarding-next" class="primary-btn">Continue</button>
-        </div>
+        <p class="onboarding-lead">An agentic learning app that builds around you.</p>
+        <label for="onboarding-mode" class="sr-only">Connection method</label>
+        <select id="onboarding-mode" class="onboarding-mode-select">
+          <option value="login" ${mode === 'login' ? 'selected' : ''}>Login to Learn</option>
+          <option value="local" ${mode === 'local' ? 'selected' : ''}>Run Locally</option>
+        </select>
+        <div id="onboarding-connect-fields"></div>
       </div>`;
 
-    const input = $('#onboarding-name');
-    input.focus();
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); advanceOnboarding(1); }
+    const renderConnectFields = (m) => {
+      const container = $('#onboarding-connect-fields');
+      if (m === 'login') {
+        container.innerHTML = `
+          <p class="onboarding-lead">Sign in to your <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a> account to sync your data and get started.</p>
+          <button id="onboarding-login-btn" class="primary-btn" style="width:100%">Sign In</button>`;
+        $('#onboarding-login-btn').addEventListener('click', () => {
+          showLoginModal(async () => {
+            // Login succeeded — sync pulled all data (profile, prefs, progress, work)
+            state.preferences = await getPreferences();
+            state.allProgress = await getAllProgress();
+            state.courses = await loadCourses();
+            await saveOnboardingComplete();
+            await updateUserMenu();
+            _onboardingStep = 1;
+            _onboardingData = {};
+            // Resume where they left off — find any in-progress course
+            const activeCourse = Object.entries(state.allProgress)
+              .find(([, p]) => p.status === 'in_progress');
+            if (activeCourse) {
+              state.activeCourseId = activeCourse[0];
+              state.progress = activeCourse[1];
+              state.view = 'course';
+            } else {
+              state.view = 'courses';
+            }
+            render();
+          });
+        });
+      } else {
+        container.innerHTML = `
+          <p class="onboarding-lead">Let's start with your name.</p>
+          <label for="onboarding-name" class="sr-only">Your name</label>
+          <input type="text" id="onboarding-name" placeholder="Your name" autocomplete="given-name" value="${esc(_onboardingData.name || '')}">
+          <div class="action-bar">
+            <button id="onboarding-next" class="primary-btn">Continue</button>
+          </div>`;
+        const input = $('#onboarding-name');
+        input?.focus();
+        input?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); advanceOnboarding(1); }
+        });
+        $('#onboarding-next')?.addEventListener('click', () => advanceOnboarding(1));
+      }
+    };
+
+    renderConnectFields(mode);
+
+    $('#onboarding-mode').addEventListener('change', (e) => {
+      _onboardingData.connectMode = e.target.value;
+      renderConnectFields(e.target.value);
     });
-    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(1));
 
   } else if (_onboardingStep === 2) {
     main.innerHTML = `
@@ -1472,25 +1521,16 @@ async function renderOnboarding() {
     });
 
   } else if (_onboardingStep === 4) {
-    const loggedIn = await auth.isLoggedIn();
     const hasKey = !!(await getApiKey());
-    const mode = loggedIn ? 'login' : (_onboardingData.connectMode || 'login');
 
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 4 of 4" aria-valuenow="4" aria-valuemin="1" aria-valuemax="4">${dots(4)}</div>
         <span class="onboarding-step-label">Step 4 of 4</span>
         <h2>Connect your AI.</h2>
-        ${loggedIn ? `
-          <p class="onboarding-lead onboarding-login-ok">Signed in — your account is connected.</p>
-        ` : `
-          <label for="onboarding-mode" class="sr-only">Connection method</label>
-          <select id="onboarding-mode" class="onboarding-mode-select">
-            <option value="login" ${mode === 'login' ? 'selected' : ''}>Login to Learn</option>
-            <option value="local" ${mode === 'local' ? 'selected' : ''}>Run Locally</option>
-          </select>
-          <div id="onboarding-connect-fields"></div>
-        `}
+        <p class="onboarding-lead">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.</p>
+        <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
+        <input type="password" id="onboarding-apikey" placeholder="sk-ant-..." autocomplete="off">
         <div id="onboarding-key-error" role="alert" aria-live="polite" class="onboarding-error"></div>
         <div class="action-bar">
           <button id="onboarding-back" class="secondary-btn">Back</button>
@@ -1498,49 +1538,20 @@ async function renderOnboarding() {
         </div>
       </div>`;
 
-    if (!loggedIn) {
-      const renderConnectFields = (m) => {
-        const container = $('#onboarding-connect-fields');
-        if (m === 'login') {
-          container.innerHTML = `
-            <p class="onboarding-lead">Sign in to sync your data and connect your API key via <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
-            <button id="onboarding-login-btn" class="primary-btn" style="width:100%">Sign In</button>`;
-          $('#onboarding-login-btn').addEventListener('click', () => {
-            showLoginModal(() => renderOnboarding());
-          });
-        } else {
-          container.innerHTML = `
-            <p class="onboarding-lead">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> — it stays on your device.</p>
-            <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
-            <input type="password" id="onboarding-apikey" placeholder="sk-ant-..." autocomplete="off">`;
-          const input = $('#onboarding-apikey');
-          if (hasKey && input) {
-            input.value = '••••••••••••••••••••••••••••••••••••••••';
-            input.addEventListener('focus', () => {
-              if (input.value === '••••••••••••••••••••••••••••••••••••••••') input.value = '';
-            });
-            input.addEventListener('blur', async () => {
-              if (!input.value && await getApiKey()) input.value = '••••••••••••••••••••••••••••••••••••••••';
-            });
-          }
-          input?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
-          });
-          input?.focus();
-        }
-      };
-
-      renderConnectFields(mode);
-
-      $('#onboarding-mode').addEventListener('change', (e) => {
-        _onboardingData.connectMode = e.target.value;
-        renderConnectFields(e.target.value);
-        // Clear any previous error
-        const err = $('#onboarding-key-error');
-        if (err) err.textContent = '';
+    const input = $('#onboarding-apikey');
+    input.focus();
+    if (hasKey) {
+      input.value = '••••••••••••••••••••••••••••••••••••••••';
+      input.addEventListener('focus', () => {
+        if (input.value === '••••••••••••••••••••••••••••••••••••••••') input.value = '';
+      });
+      input.addEventListener('blur', async () => {
+        if (!input.value && await getApiKey()) input.value = '••••••••••••••••••••••••••••••••••••••••';
       });
     }
-
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
+    });
     $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 3; animateMain('view-slide-right'); renderOnboarding(); });
     $('#onboarding-finish').addEventListener('click', () => completeOnboarding());
   }
@@ -1563,22 +1574,18 @@ function advanceOnboarding(fromStep) {
 }
 
 async function completeOnboarding() {
-  const loggedIn = await auth.isLoggedIn();
-
-  if (!loggedIn) {
-    const keyInput = $('#onboarding-apikey');
-    const rawValue = keyInput?.value?.trim();
-    const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
-    const existingKey = rawValue === PLACEHOLDER ? await getApiKey() : null;
-    const key = existingKey || rawValue;
-    if (!key) {
-      const err = $('#onboarding-key-error');
-      if (err) err.textContent = 'Please enter your API key or sign in.';
-      keyInput?.focus();
-      return;
-    }
-    await saveApiKey(key);
+  const keyInput = $('#onboarding-apikey');
+  const rawValue = keyInput?.value?.trim();
+  const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
+  const existingKey = rawValue === PLACEHOLDER ? await getApiKey() : null;
+  const key = existingKey || rawValue;
+  if (!key) {
+    const err = $('#onboarding-key-error');
+    if (err) err.textContent = 'Please enter your API key.';
+    keyInput?.focus();
+    return;
   }
+  await saveApiKey(key);
   state.preferences = { ...(state.preferences || {}), name: _onboardingData.name };
   await savePreferences(state.preferences);
 
