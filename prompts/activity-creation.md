@@ -25,25 +25,37 @@ The learner is taking this course because they DON'T know the subject yet. Never
 
 Every activity is a learning opportunity: point the learner toward a resource, concept, or skill, then ask them to capture what they discovered in their own words in the work product. The act of researching and creating IS the learning.
 
+## Give the learner a starting point
+
+The learner doesn't know the subject yet. When an activity requires domain knowledge (facts, concepts, history, terminology), you MUST give the learner a way to acquire it. Use one of these approaches:
+
+1. **Provide a URL** to a specific page where the information lives. Use well-known, stable URLs (e.g. official project pages, Wikipedia articles, MDN docs). One step should direct them to visit and read it, and the next step should ask them to write about what they learned in their work product.
+2. **State the key facts in the instruction** so the learner has something to work with. For example, if the activity is about WordPress freedoms, list what the four freedoms are. The learner's job is then to reflect on, interpret, or apply those facts — not to parrot them.
+3. **Direct them to search the web** with a specific query. Don't just say "research X" — say "Search the web for [specific topic]" so they know what to look for.
+
+NEVER assume the learner already knows the material. NEVER ask them to produce content about a topic without first giving them a way to learn about it in the same activity.
+
 ## Guide, don't dictate
 
 Tell the learner WHAT to learn and WHERE to put it — never tell them WHAT to write or HOW to structure it.
 
 NEVER do these:
 - Prescribe headings, section titles, or structure
-- Tell the learner specific facts to write down
 - Provide bullet points, templates, or outlines to copy
 - Say "add three bullet points about X" or "write a paragraph explaining Y"
 - Create "setup" activities that build empty scaffolding
+- Ask the learner to write about a topic without providing a URL, key facts, or a search query first
 
 ALWAYS do these:
-- Point to a topic or resource to explore
+- Provide a specific URL, state key facts, or give a search query before asking the learner to write
 - Ask the learner to write what they found or understood in their own words
 - Let the work product's structure emerge from the learner's thinking
 - Frame it as discovery: "find out about...", "research...", "explore..."
 
-Good: "Research common web accessibility barriers and write about what you found in your work product."
-Bad: "Add a section titled 'Common Barriers' with bullet points covering visual, motor, and cognitive disabilities."
+Good: "Visit wordpress.org/about/philosophy and read about the four freedoms. In your post, write about what these freedoms mean to you as a new user."
+Good: "The four WordPress freedoms are: (1) use the software for any purpose, (2) study and modify it, (3) redistribute copies, (4) distribute modified copies. In your post, pick the freedom that matters most to you and explain why."
+Good: "Search the web for 'WordPress major milestones timeline'. In your post, write about three milestones that surprised you or stood out."
+Bad: "Research the WordPress freedoms and write about them in your post." (no starting point — the learner doesn't know where to look or what the freedoms are)
 
 ## Platform rule
 
@@ -79,7 +91,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 ## Example
 
-"Research common types of web accessibility barriers and start your document.\n\n1. Create a new [workProductTool] called '[workProduct]'.\n2. Search the web for common accessibility barriers that affect real users.\n3. Write about what you found in your own words — what surprised you or stood out.\n4. Hit Record to capture your screen."
+"Learn about common web accessibility barriers and start your document.\n\n1. Create a new [workProductTool] called '[workProduct]'.\n2. Visit https://www.w3.org/WAI/people-use-web/abilities-barriers/ and read about the types of barriers people face.\n3. In your document, write about the barriers that surprised you or stood out — in your own words.\n4. Hit Record to capture your screen."
 
 Respond with ONLY valid JSON, no markdown fencing:
 

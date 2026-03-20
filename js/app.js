@@ -8,12 +8,16 @@ import {
   getLearnerProfile, saveLearnerProfile,
   getLearnerProfileSummary, saveLearnerProfileSummary,
   getDevMode, saveDevMode, appendDevLog,
-  getOnboardingComplete, saveOnboardingComplete
+  getOnboardingComplete, saveOnboardingComplete,
+  getLastSync
 } from './storage.js';
 import { loadCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
 import { ApiError } from './api.js';
 import { trackEvent, flushNow } from './telemetry.js';
+import { runMigrations } from './migrations.js';
+import * as auth from './auth.js';
+import * as sync from './sync.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $main = () => $('#main-content');
@@ -123,17 +127,26 @@ function hideModal() {
   if (!overlay || overlay.hidden) return;
   if (overlay._escHandler) { document.removeEventListener('keydown', overlay._escHandler); overlay._escHandler = null; }
   if (overlay._trapHandler) { document.removeEventListener('keydown', overlay._trapHandler); overlay._trapHandler = null; }
-  overlay.hidden = true;
-  overlay.innerHTML = '';
 
-  // Restore background landmarks
-  for (const sel of _MODAL_BG_SELECTORS) {
-    document.querySelector(sel)?.removeAttribute('aria-hidden');
-  }
+  const finish = () => {
+    overlay.hidden = true;
+    overlay.innerHTML = '';
+    overlay.classList.remove('modal-closing');
+    for (const sel of _MODAL_BG_SELECTORS) {
+      document.querySelector(sel)?.removeAttribute('aria-hidden');
+    }
+    overlay._triggerEl?.focus();
+    overlay._triggerEl = null;
+  };
 
-  // Return focus to triggering element
-  overlay._triggerEl?.focus();
-  overlay._triggerEl = null;
+  // Animate out, or finish immediately if reduced motion
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) { finish(); return; }
+
+  overlay.classList.add('modal-closing');
+  overlay.addEventListener('animationend', finish, { once: true });
+  // Safety fallback in case animationend doesn't fire
+  setTimeout(finish, 250);
 }
 
 async function logDev(type, data) {
@@ -162,6 +175,11 @@ let state = {
   skipDiagnosticFor: null         // courseId — bypass diagnostic
 };
 
+// -- Time tracking state ------------------------------------------------------
+const _sessionStartMs = Date.now();
+let _activityStartMs = null;   // set when an activity view renders
+let _activityStartMeta = null; // { courseId, activityIndex } for the current activity
+
 // Onboarding wizard state (persists across re-renders within a session)
 let _onboardingStep = 1;
 let _onboardingData = {};
@@ -178,11 +196,14 @@ const TYPE_LETTERS = { explore: 'R', apply: 'P', create: 'D', final: 'F' };
 // -- Bootstrap ----------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await runMigrations();
   await seedFromEnv();
   state.preferences = await getPreferences();
   state.courses = await loadCourses();
   state.allProgress = await getAllProgress();
   bindNav();
+  bindUserMenu();
+  await updateUserMenu();
 
   // First-run: show onboarding if it hasn't been completed yet
   const onboardingDone = await getOnboardingComplete();
@@ -200,6 +221,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// -- Session end tracking -----------------------------------------------------
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    trackEvent('session_end', { durationMs: Date.now() - _sessionStartMs });
+    flushNow();
+  }
+});
+
 async function seedFromEnv() {
   try {
     const { ENV } = await import('../.env.js');
@@ -213,10 +242,227 @@ async function seedFromEnv() {
   } catch { /* .env.js not present — expected in production */ }
 }
 
+/** Push data to cloud in background. No-op if not logged in. */
+function syncInBackground(...syncKeys) {
+  Promise.resolve().then(async () => {
+    if (!await auth.isLoggedIn()) return;
+    for (const key of syncKeys) {
+      try { await sync.pushData(key); } catch { /* silent */ }
+    }
+  });
+}
+
 function bindNav() {
   document.querySelectorAll('[data-nav]').forEach((btn) => {
     btn.addEventListener('click', () => navigate(btn.dataset.nav));
   });
+}
+
+// -- Header user menu ---------------------------------------------------------
+
+async function updateUserMenu() {
+  const label = $('#user-menu-label');
+  const btn = $('#user-menu-btn');
+  const loggedIn = await auth.isLoggedIn();
+  const user = loggedIn ? await auth.getCurrentUser() : null;
+  label.textContent = loggedIn ? (user?.email || 'Account') : 'Login';
+
+  // Update aria for screen readers
+  if (loggedIn) {
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', `Account: ${user?.email || 'signed in'}`);
+  } else {
+    btn.removeAttribute('aria-haspopup');
+    btn.removeAttribute('aria-expanded');
+    btn.setAttribute('aria-label', 'Login');
+  }
+
+  // Pre-render dropdown for signed-in state
+  const dropdown = $('#user-dropdown');
+  if (loggedIn) {
+    dropdown.innerHTML = `
+      <p class="user-dropdown-email">${esc(user?.email || '')}</p>
+      <p class="user-dropdown-sync" id="dropdown-sync-status"></p>
+      <button id="dropdown-sign-out-btn" class="secondary-btn" style="width:100%">Sign Out</button>`;
+  }
+}
+
+function showLoginModal(onSuccess) {
+  showModal(`
+  <h2>Sign In</h2>
+  <p>Sign in to sync your data with <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.</p>
+  <form id="modal-login-form" class="settings-form" aria-label="Learn login">
+    <label>
+      Email
+      <input type="email" name="email" required autocomplete="email">
+    </label>
+    <label>
+      Password
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <div id="modal-login-feedback" role="status" aria-live="polite"></div>
+    <div class="action-bar">
+      <button type="button" id="login-cancel-btn" class="secondary-btn">Cancel</button>
+      <button type="submit" class="primary-btn">Sign In</button>
+    </div>
+  </form>`, 'dialog', 'Sign in');
+
+  $('#login-cancel-btn').addEventListener('click', hideModal);
+
+  const form = $('#modal-login-form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const email = fd.get('email').trim();
+    const password = fd.get('password');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const fb = $('#modal-login-feedback');
+
+    if (fb) { fb.textContent = ''; fb.className = ''; }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in...';
+
+    try {
+      await auth.login(email, password);
+
+      // Replace form with success state
+      const modal = document.querySelector('#modal-overlay .modal');
+      if (modal) {
+        modal.innerHTML = `
+          <div class="login-success-state" role="status">
+            <p class="login-success-msg">Signed in as ${esc(email)}</p>
+            <p class="login-success-hint">Syncing your data...</p>
+          </div>`;
+      }
+
+      // Check for admin-assigned API key
+      if (!await getApiKey()) {
+        try {
+          const assignedKey = await auth.getAssignedApiKey();
+          if (assignedKey) await saveApiKey(assignedKey);
+        } catch { /* non-critical */ }
+      }
+
+      // Initial sync
+      try {
+        await sync.syncAll();
+        state.allProgress = await getAllProgress();
+        state.preferences = await getPreferences();
+        const hint = document.querySelector('.login-success-hint');
+        if (hint) hint.textContent = 'All synced.';
+      } catch {
+        const hint = document.querySelector('.login-success-hint');
+        if (hint) hint.textContent = 'Signed in. Sync will retry later.';
+      }
+
+      await updateUserMenu();
+      if (state.view === 'settings') render();
+
+      setTimeout(() => {
+        hideModal();
+        if (onSuccess) onSuccess();
+      }, 1200);
+    } catch (err) {
+      if (fb) {
+        fb.textContent = err.message || 'Invalid email or password';
+        fb.className = 'login-error-msg';
+      }
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+    }
+  });
+}
+
+function bindUserMenu() {
+  const btn = $('#user-menu-btn');
+  const dropdown = $('#user-dropdown');
+
+  btn.addEventListener('click', async () => {
+    const loggedIn = await auth.isLoggedIn();
+    if (!loggedIn) {
+      showLoginModal(async () => {
+        state.preferences = await getPreferences();
+        state.allProgress = await getAllProgress();
+        state.courses = await loadCourses();
+        const activeCourse = Object.entries(state.allProgress)
+          .find(([, p]) => p.status === 'in_progress');
+        if (activeCourse) {
+          state.activeCourseId = activeCourse[0];
+          state.progress = activeCourse[1];
+          state.view = 'course';
+        }
+        render();
+      });
+      return;
+    }
+    // Toggle dropdown for signed-in users
+    const opening = dropdown.hidden;
+    dropdown.hidden = !opening;
+    btn.setAttribute('aria-expanded', String(opening));
+    if (opening) {
+      const ls = await getLastSync();
+      const statusEl = $('#dropdown-sync-status');
+      if (statusEl) statusEl.textContent = ls ? `Last synced ${formatTimeAgo(ls)}` : 'Not yet synced';
+      bindDropdownActions();
+    }
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    if (!dropdown.hidden && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  // Close dropdown on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !dropdown.hidden) {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      btn.focus();
+    }
+  });
+}
+
+function bindDropdownActions() {
+  const dropdown = $('#user-dropdown');
+
+  const signOutBtn = $('#dropdown-sign-out-btn');
+  if (signOutBtn) {
+    signOutBtn.onclick = () => {
+      dropdown.hidden = true;
+      $('#user-menu-btn').setAttribute('aria-expanded', 'false');
+      showModal(`
+  <h2>Sign Out?</h2>
+  <p>This will clear all local data and return you to the welcome screen.</p>
+  <div class="action-bar">
+    <button id="cancel-signout-btn" class="secondary-btn">Cancel</button>
+    <button id="confirm-signout-btn" class="danger-btn">Sign Out</button>
+  </div>`, 'alertdialog', 'Confirm sign out');
+      $('#cancel-signout-btn').addEventListener('click', hideModal);
+      $('#confirm-signout-btn').addEventListener('click', async () => {
+        hideModal();
+        await auth.logout();
+        await chrome.storage.local.clear();
+        try {
+          const dbs = await indexedDB.databases();
+          for (const db of dbs) { if (db.name) indexedDB.deleteDatabase(db.name); }
+        } catch { /* not supported in all contexts */ }
+        state.preferences = { name: '' };
+        state.allProgress = {};
+        state.progress = null;
+        state.activeCourseId = null;
+        _onboardingStep = 1;
+        _onboardingData = {};
+        await updateUserMenu();
+        announce('Signed out');
+        state.view = 'onboarding';
+        render();
+      });
+    };
+  }
 }
 
 // View depth for determining transition direction
@@ -235,6 +481,10 @@ function navigate(view, data) {
   const prev = state.view;
   state.view = view;
   if (data) Object.assign(state, data);
+
+  if (prev !== view) {
+    trackEvent('navigation', { fromView: prev, toView: view });
+  }
 
   const fromDepth = VIEW_DEPTH[prev] ?? 0;
   const toDepth = VIEW_DEPTH[view] ?? 0;
@@ -291,7 +541,7 @@ function renderCourses() {
           <div class="course-info">
             <strong>${esc(c.name)}</strong>
             <p>${esc(c.description)}</p>
-            <small>${progressLabel(c, locked)} · ~${(c.learningObjectives.length + 1) * 5} min</small>
+            <small>${progressLabel(c, locked)} · ~${c.learningObjectives.length * 5 + 2} min</small>
           </div>
         </button>
       </li>`;
@@ -439,6 +689,7 @@ async function startOrResumeCourse(courseId) {
 
       await saveCourseProgress(courseId, newProgress);
       state.allProgress[courseId] = newProgress;
+      syncInBackground(`progress:${courseId}`);
       // Clear diagnostic state now that the plan has been generated
       state.pendingDiagnosticResult = null;
       state.skipDiagnosticFor = null;
@@ -527,6 +778,7 @@ async function renderCourse() {
       };
 
       await saveCourseProgress(p.courseId, p);
+      syncInBackground(`progress:${p.courseId}`);
     })();
 
     state.generating = { courseId: p.courseId, promise };
@@ -545,6 +797,20 @@ async function renderCourse() {
   }
 
   const activity = p.activities[p.currentActivityIndex];
+
+  // Track activity start time (only if we're on a new activity)
+  const actMeta = { courseId: p.courseId, activityIndex: p.currentActivityIndex };
+  if (!_activityStartMeta || _activityStartMeta.courseId !== actMeta.courseId || _activityStartMeta.activityIndex !== actMeta.activityIndex) {
+    _activityStartMs = Date.now();
+    _activityStartMeta = actMeta;
+    trackEvent('activity_started', {
+      courseId: p.courseId,
+      activityIndex: p.currentActivityIndex,
+      activityType: activity.type,
+      activityGoal: activity.goal || '',
+    });
+  }
+
   const draftsForActivity = p.drafts.filter((d) => d.activityId === activity.id);
   const hasDrafts = draftsForActivity.length > 0;
   const lastDraft = hasDrafts ? draftsForActivity[draftsForActivity.length - 1] : null;
@@ -667,6 +933,7 @@ async function renderCourse() {
     nextBtn.addEventListener('click', async () => {
       p.currentActivityIndex++;
       await saveCourseProgress(p.courseId, p);
+      syncInBackground(`progress:${p.courseId}`);
       animateMain('view-slide-left');
       render();
     });
@@ -749,6 +1016,7 @@ async function regenerateCurrentActivity(course, p) {
     };
 
     await saveCourseProgress(p.courseId, p);
+    syncInBackground(`progress:${p.courseId}`);
     trackEvent('activity_regenerated', {
       courseId: course.courseId,
       activityIndex: p.currentActivityIndex,
@@ -881,6 +1149,8 @@ async function submitDispute(course, p, activity, draft) {
 
     await saveCourseProgress(p.courseId, p);
     state.allProgress[p.courseId] = p;
+    syncInBackground(`progress:${p.courseId}`);
+    if (justCompleted) syncInBackground('work');
     render();
 
     // Update learner profile in background
@@ -1000,15 +1270,22 @@ async function recordDraft(activity) {
     }
 
     if (result.recommendation === 'advance') {
+      const actDurationMs = _activityStartMs ? Date.now() - _activityStartMs : null;
       trackEvent('activity_completed', {
         courseId: p.courseId, activityType: activity.type,
+        activityIndex: p.currentActivityIndex,
         score: result.score, recommendation: result.recommendation,
         draftCount: attemptNumber,
+        durationMs: actDurationMs,
       });
+      _activityStartMs = null;
+      _activityStartMeta = null;
     }
 
     await saveCourseProgress(p.courseId, p);
     state.allProgress[p.courseId] = p;
+    syncInBackground(`progress:${p.courseId}`);
+    if (justCompleted) syncInBackground('work');
     render();
 
     // Update learner profile in background (non-blocking)
@@ -1066,6 +1343,7 @@ async function saveProfileResult(existing, result) {
   const merged = mergeProfile(existing, result.profile);
   await saveLearnerProfile(merged);
   await saveLearnerProfileSummary(result.summary);
+  syncInBackground('profile', 'profileSummary');
 }
 
 async function updateProfileInBackground(assessmentResult, course, activity) {
@@ -1121,7 +1399,7 @@ async function updateProfileOnCourseCompletionInBackground(course, progress) {
 
 // -- Onboarding ---------------------------------------------------------------
 
-function renderOnboarding() {
+async function renderOnboarding() {
   const main = $main();
 
   const dots = (active) => [1, 2, 3, 4].map(i =>
@@ -1131,13 +1409,64 @@ function renderOnboarding() {
   if (_onboardingStep === 1) {
     main.innerHTML = `
       <div class="onboarding">
+        <h2>Welcome to Learn</h2>
+        <p class="onboarding-lead">An agentic learning app that builds around you.</p>
+        <div class="onboarding-choice">
+          <button id="onboarding-login" class="primary-btn onboarding-choice-btn">Login to Learn</button>
+          <button id="onboarding-skip-login" class="onboarding-skip-btn">Continue without logging in...</button>
+        </div>
+      </div>`;
+
+    $('#onboarding-login').addEventListener('click', () => {
+      showLoginModal(async () => {
+        state.preferences = await getPreferences();
+        state.allProgress = await getAllProgress();
+        state.courses = await loadCourses();
+        await saveOnboardingComplete();
+        await updateUserMenu();
+        _onboardingStep = 1;
+        _onboardingData = {};
+        const activeCourse = Object.entries(state.allProgress)
+          .find(([, p]) => p.status === 'in_progress');
+        if (activeCourse) {
+          state.activeCourseId = activeCourse[0];
+          state.progress = activeCourse[1];
+          state.view = 'course';
+        } else {
+          state.view = 'courses';
+        }
+        render();
+      });
+    });
+
+    $('#onboarding-skip-login').addEventListener('click', () => {
+      showModal(`
+  <h2>Continue without logging in?</h2>
+  <p>By not logging in, credit for your work will not be given and changes won't be saved to the cloud.</p>
+  <div class="action-bar">
+    <button id="skip-login-back" class="secondary-btn">Go Back</button>
+    <button id="skip-login-continue" class="primary-btn btn-success">Continue</button>
+  </div>`, 'alertdialog', 'Continue without login');
+      $('#skip-login-back').addEventListener('click', hideModal);
+      $('#skip-login-continue').addEventListener('click', () => {
+        hideModal();
+        _onboardingStep = 2;
+        animateMain('view-slide-left');
+        renderOnboarding();
+      });
+    });
+
+  } else if (_onboardingStep === 2) {
+    main.innerHTML = `
+      <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 1 of 4" aria-valuenow="1" aria-valuemin="1" aria-valuemax="4">${dots(1)}</div>
         <span class="onboarding-step-label">Step 1 of 4</span>
-        <h2>Welcome to Learn</h2>
-        <p class="onboarding-lead">An agentic learning app that builds around you. Let's start with your name.</p>
+        <h2>What's your name?</h2>
+        <p class="onboarding-lead">Let's start with your name.</p>
         <label for="onboarding-name" class="sr-only">Your name</label>
         <input type="text" id="onboarding-name" placeholder="Your name" autocomplete="given-name" value="${esc(_onboardingData.name || '')}">
         <div class="action-bar">
+          <button id="onboarding-back" class="secondary-btn">Back</button>
           <button id="onboarding-next" class="primary-btn">Continue</button>
         </div>
       </div>`;
@@ -1145,11 +1474,12 @@ function renderOnboarding() {
     const input = $('#onboarding-name');
     input.focus();
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); advanceOnboarding(1); }
+      if (e.key === 'Enter') { e.preventDefault(); advanceOnboarding(2); }
     });
-    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(1));
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 1; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
 
-  } else if (_onboardingStep === 2) {
+  } else if (_onboardingStep === 3) {
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 2 of 4" aria-valuenow="2" aria-valuemin="1" aria-valuemax="4">${dots(2)}</div>
@@ -1168,12 +1498,12 @@ function renderOnboarding() {
     const textarea = $('#onboarding-statement');
     textarea.focus();
     textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); advanceOnboarding(2); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); advanceOnboarding(3); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 1; animateMain('view-slide-right'); renderOnboarding(); });
-    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 2; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(3));
 
-  } else if (_onboardingStep === 3) {
+  } else if (_onboardingStep === 4) {
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 3 of 4" aria-valuenow="3" aria-valuemin="1" aria-valuemax="4">${dots(3)}</div>
@@ -1206,24 +1536,26 @@ function renderOnboarding() {
 
     $('#onboarding-skip').addEventListener('click', () => {
       _onboardingData.dataSharing = false;
-      _onboardingStep = 4;
+      _onboardingStep = 5;
       animateMain('view-slide-left');
       renderOnboarding();
     });
     $('#onboarding-consent').addEventListener('click', () => {
       _onboardingData.dataSharing = true;
-      _onboardingStep = 4;
+      _onboardingStep = 5;
       animateMain('view-slide-left');
       renderOnboarding();
     });
 
-  } else if (_onboardingStep === 4) {
+  } else if (_onboardingStep === 5) {
+    const hasKey = !!(await getApiKey());
+
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 4 of 4" aria-valuenow="4" aria-valuemin="1" aria-valuemax="4">${dots(4)}</div>
         <span class="onboarding-step-label">Step 4 of 4</span>
         <h2>Connect your AI.</h2>
-        <p class="onboarding-lead">1111 Learn is powered by Claude. Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.</p>
+        <p class="onboarding-lead">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.</p>
         <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
         <input type="password" id="onboarding-apikey" placeholder="sk-ant-..." autocomplete="off">
         <div id="onboarding-key-error" role="alert" aria-live="polite" class="onboarding-error"></div>
@@ -1235,37 +1567,34 @@ function renderOnboarding() {
 
     const input = $('#onboarding-apikey');
     input.focus();
-    // Pre-fill with placeholder bullets if a key is already seeded (e.g. from .env.js)
-    getApiKey().then(existing => {
-      if (existing && !input.value) {
-        input.value = '••••••••••••••••••••••••••••••••••••••••';
-        input.addEventListener('focus', () => {
-          if (input.value === '••••••••••••••••••••••••••••••••••••••••') input.value = '';
-        });
-        input.addEventListener('blur', async () => {
-          if (!input.value) input.value = '••••••••••••••••••••••••••••••••••••••••';
-        });
-      }
-    });
+    if (hasKey) {
+      input.value = '••••••••••••••••••••••••••••••••••••••••';
+      input.addEventListener('focus', () => {
+        if (input.value === '••••••••••••••••••••••••••••••••••••••••') input.value = '';
+      });
+      input.addEventListener('blur', async () => {
+        if (!input.value && await getApiKey()) input.value = '••••••••••••••••••••••••••••••••••••••••';
+      });
+    }
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 3; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 4; animateMain('view-slide-right'); renderOnboarding(); });
     $('#onboarding-finish').addEventListener('click', () => completeOnboarding());
   }
 }
 
 function advanceOnboarding(fromStep) {
-  if (fromStep === 1) {
+  if (fromStep === 2) {
     const name = $('#onboarding-name')?.value?.trim();
     if (!name) { $('#onboarding-name').focus(); return; }
     _onboardingData.name = name;
-    _onboardingStep = 2;
-  } else if (fromStep === 2) {
+    _onboardingStep = 3;
+  } else if (fromStep === 3) {
     const statement = $('#onboarding-statement')?.value?.trim();
     if (!statement) { $('#onboarding-statement').focus(); return; }
     _onboardingData.statement = statement;
-    _onboardingStep = 3;
+    _onboardingStep = 4;
   }
   animateMain('view-slide-left');
   renderOnboarding();
@@ -1275,7 +1604,6 @@ async function completeOnboarding() {
   const keyInput = $('#onboarding-apikey');
   const rawValue = keyInput?.value?.trim();
   const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
-  // If placeholder bullets shown, the seeded key is already in storage — keep it
   const existingKey = rawValue === PLACEHOLDER ? await getApiKey() : null;
   const key = existingKey || rawValue;
   if (!key) {
@@ -1284,7 +1612,6 @@ async function completeOnboarding() {
     keyInput?.focus();
     return;
   }
-
   await saveApiKey(key);
   state.preferences = { ...(state.preferences || {}), name: _onboardingData.name };
   await savePreferences(state.preferences);
@@ -1314,6 +1641,7 @@ async function completeOnboarding() {
     result.profile.updatedAt = Date.now();
     await saveLearnerProfile(result.profile);
     await saveLearnerProfileSummary(result.summary);
+    syncInBackground('profile', 'profileSummary');
   } catch (e) {
     console.warn('Profile initialization failed (non-blocking):', e);
   }
@@ -1779,19 +2107,28 @@ async function renderSettings() {
   const hasKey = await orchestrator.isReady();
   const profileSummary = await getLearnerProfileSummary();
   const devModeOn = await getDevMode();
+  const loggedIn = await auth.isLoggedIn();
 
   main.innerHTML = `
     <h2>Settings</h2>
 
     <div class="settings-section">
       <h3>API Key</h3>
-      <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
-      <div class="api-key-row">
-        <label for="api-key-input" class="sr-only">API Key</label>
-        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}">
-        <button id="save-key-btn" class="primary-btn">Save</button>
-      </div>
-      <div id="key-feedback" role="status" aria-live="polite"></div>
+      ${loggedIn ? `
+        <p class="settings-hint">Managed by your 1111 Learn account.</p>
+        <div class="api-key-row">
+          <label for="api-key-input" class="sr-only">API Key</label>
+          <input type="password" id="api-key-input" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}" disabled>
+        </div>
+      ` : `
+        <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
+        <div class="api-key-row">
+          <label for="api-key-input" class="sr-only">API Key</label>
+          <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}">
+          <button id="save-key-btn" class="primary-btn">Save</button>
+        </div>
+        <div id="key-feedback" role="status" aria-live="polite"></div>
+      `}
     </div>
 
     <hr>
@@ -1820,47 +2157,50 @@ async function renderSettings() {
     <hr>
     <div class="settings-section">
       <h3>Data Management</h3>
+      ${loggedIn ? `<div class="settings-managed-banner" role="status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 10.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM8.75 7a.75.75 0 0 1-1.5 0V4.5a.75.75 0 0 1 1.5 0V7Z" fill="currentColor"/></svg>Your data is managed by your 1111 Learn account. Sign out to manage data locally.</div>` : ''}
       <div class="toggle-row">
         <label for="dev-mode-toggle">Share data with 11:11</label>
-        <input type="checkbox" id="dev-mode-toggle" role="switch" ${devModeOn ? 'checked' : ''}>
+        <input type="checkbox" id="dev-mode-toggle" role="switch" ${devModeOn ? 'checked' : ''} ${loggedIn ? 'disabled' : ''}>
       </div>
       <p class="settings-hint">Logs agent interactions locally and sends anonymous telemetry to help improve the extension. Screenshots and API keys are never sent, but feedback text you write may be included. You can disable this at any time.</p>
     </div>
     <div class="settings-actions">
-      <button id="export-btn" class="settings-action-btn">
+      <button id="export-btn" class="settings-action-btn" ${loggedIn ? 'disabled' : ''}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3 3-3M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Export data as JSON
       </button>
-      <button id="delete-all-btn" class="settings-action-btn settings-action-danger">
+      <button id="delete-all-btn" class="settings-action-btn settings-action-danger" ${loggedIn ? 'disabled' : ''}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 0 1 1.34-1.34h2.66a1.33 1.33 0 0 1 1.34 1.34V4m2 0v9.33a1.33 1.33 0 0 1-1.34 1.34H4.67a1.33 1.33 0 0 1-1.34-1.34V4h9.34Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Delete all data
       </button>
     </div>`;
 
-  // API key
-  const keyInput = $('#api-key-input');
-  keyInput.addEventListener('focus', () => {
-    if (keyInput.value === '••••••••••••••••••••••••••••••••••••••••') keyInput.value = '';
-  });
-  keyInput.addEventListener('blur', async () => {
-    if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
-  });
+  // API key (only interactive when not logged in)
+  if (!loggedIn) {
+    const keyInput = $('#api-key-input');
+    keyInput.addEventListener('focus', () => {
+      if (keyInput.value === '••••••••••••••••••••••••••••••••••••••••') keyInput.value = '';
+    });
+    keyInput.addEventListener('blur', async () => {
+      if (!keyInput.value && await getApiKey()) keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
+    });
 
-  const saveKey = async () => {
-    const key = keyInput.value.trim();
-    if (!key || key === '••••••••••••••••••••••••••••••••••••••••') {
-      showKeyFeedback('Please enter an API key.', 'error');
-      return;
-    }
-    await saveApiKey(key);
-    keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
-    showKeyFeedback('Saved!', 'success');
-  };
+    const saveKey = async () => {
+      const key = keyInput.value.trim();
+      if (!key || key === '••••••••••••••••••••••••••••••••••••••••') {
+        showKeyFeedback('Please enter an API key.', 'error');
+        return;
+      }
+      await saveApiKey(key);
+      keyInput.value = '••••••••••••••••••••••••••••••••••••••••';
+      showKeyFeedback('Saved!', 'success');
+    };
 
-  $('#save-key-btn').addEventListener('click', saveKey);
-  keyInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); saveKey(); }
-  });
+    $('#save-key-btn').addEventListener('click', saveKey);
+    keyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveKey(); }
+    });
+  }
 
   // Personalization
   const prefsForm = $('#prefs-form');
@@ -1869,6 +2209,7 @@ async function renderSettings() {
     const fd = new FormData(e.target);
     state.preferences = { name: fd.get('name') };
     await savePreferences(state.preferences);
+    syncInBackground('preferences');
     showFormFeedback('prefs-feedback', 'Saved!');
   });
 
@@ -2111,6 +2452,12 @@ function formatDuration(ms) {
   if (hrs < 24) return `${hrs} hr${hrs !== 1 ? 's' : ''}`;
   const days = Math.round(ms / 86400000);
   return `${Math.max(1, days)} day${days !== 1 ? 's' : ''}`;
+}
+
+function formatTimeAgo(timestamp) {
+  const diff = Date.now() - timestamp;
+  if (diff < 60000) return 'just now';
+  return formatDuration(diff) + ' ago';
 }
 
 function completionSummary(course, p) {
