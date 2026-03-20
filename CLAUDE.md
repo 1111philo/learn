@@ -1,7 +1,7 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using six AI agents powered by the Claude API. The user provides their own Anthropic API key via a first-run onboarding wizard. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots).
+1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using six AI agents powered by the Claude API. The user provides their own Anthropic API key via a first-run onboarding wizard. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots). Optional cloud sync via `learn-service` enables cross-device data persistence for logged-in users.
 
 ## Architecture
 Six agents drive the learning experience:
@@ -26,8 +26,25 @@ Before every new course, a mandatory single-activity skills check is generated b
 ### Learner profile updates
 The profile updates after assessments, diagnostic results, learner feedback, and course completion. On course completion, `updateProfileOnCourseCompletion()` sends the full course context (objectives, per-activity scores) so the profile reflects all skills learned -- e.g. removing "WordPress beginner" after completing the WordPress course. A code-level `mergeProfile()` in `app.js` unions array fields and merges preferences so agent responses can never accidentally lose accumulated data.
 
+### Data migrations
+`js/migrations.js` provides a forward-only migration system for stored data. A monotonic integer `schemaVersion` in `chrome.storage.local` tracks which migrations have been applied. On every launch, `runMigrations()` runs (before any data is read) and applies any pending migrations in order. Each migration is idempotent and the version is stamped after each successful step, so a crash mid-migration retries safely. Existing users without a `schemaVersion` key default to version 0, so the baseline migration (v1) runs and stamps them.
+
 ### Telemetry
-When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `js/telemetry.js` buffers usage events and sends them to `learn-service` (separate repo). Events include full agent I/O (prompts, responses, feedback) for debugging and improvement. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent notice is shown when enabling data sharing. The telemetry client is fire-and-forget and never blocks the UI. Service credentials are stored in `chrome.storage.local` under `serviceCredentials`.
+When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `js/telemetry.js` buffers usage events and sends them to `learn-dashboard` (separate repo). Events include full agent I/O (prompts, responses, feedback) for debugging and improvement. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent notice is shown when enabling data sharing. The telemetry client is fire-and-forget and never blocks the UI. Service credentials are stored in `chrome.storage.local` under `serviceCredentials`.
+
+Time-based telemetry tracks three dimensions:
+- **Time on task:** `activity_started` fires when a learner first sees an activity; `activity_completed` includes `durationMs` measuring how long they spent.
+- **Time in system:** `session_end` fires on `visibilitychange` (panel hidden) with `durationMs` since page load. Paired with `session_start` for session duration.
+- **Page hopping:** `navigation` events fire on every view transition with `fromView`/`toView` fields.
+
+### Cloud sync
+Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the extension works fully offline/locally. When logged in, data is synced to the cloud after significant operations (draft submission, course completion, profile updates, settings changes).
+
+- **Auth:** `js/auth.js` handles login/logout/token refresh via JWT access tokens (15 min) + refresh tokens (30 day, rotated on use). Tokens are stored in `chrome.storage.local` under `authAccessToken`, `authRefreshToken`, `authUser`.
+- **Sync:** `js/sync.js` pushes/pulls data to/from `/v1/sync` endpoints on `learn-service`. Uses optimistic locking (version numbers) with automatic conflict resolution. Sync keys: `profile`, `profileSummary`, `preferences`, `work`, `progress:{courseId}`.
+- **API key provisioning:** On login, if no local API key exists, the extension checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it.
+- **Merge strategy:** Profile uses array union (same as `mergeProfile()`), work products union by courseId, course progress prefers the more advanced version.
+- **Settings UI:** "Cloud Sync" section in Settings shows login form (when signed out) or account info + Sync Now / Sign Out (when signed in).
 
 ## Key conventions
 - All source is vanilla JS (ES modules), CSS, and HTML -- no local build step, no frameworks. CI packages the extension into a zip on push to `main`.
@@ -45,7 +62,7 @@ When data sharing is enabled (via "Share data with 11:11" toggle in Settings), `
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
 - Completion summary card shows stats (steps, recordings, elapsed time) when a course finishes. Time is displayed as minutes, hours, or days depending on duration.
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
-- Course cards show estimated time computed as `(learningObjectives.length + 1) * 5` minutes.
+- Course cards show estimated time computed as `learningObjectives.length * 5 + 2` minutes (5 min per activity + 2 min for the diagnostic).
 
 ## CI/CD
 Two GitHub Actions workflows handle versioning and releases across two branches:
@@ -53,11 +70,11 @@ Two GitHub Actions workflows handle versioning and releases across two branches:
 ### Staging workflow (`.github/workflows/staging.yml`)
 Runs on every push to `staging`:
 1. Runs tests (`npm test`)
-2. Collects commits since the last production release tag
-3. Calls Claude (Haiku) to determine the candidate semver version
-4. Appends an RC number based on existing RC tags (e.g., `0.7.0-RC1`)
-5. Updates `manifest.json` with 4-segment `version` (e.g., `0.7.0.1`) and `version_name` (e.g., `0.7.0-RC1`)
-6. Packages the extension and creates a GitHub **pre-release** (not published to Chrome Web Store)
+2. Reads `main`'s current version from `manifest.json` (e.g., `0.6.3`)
+3. Counts non-bump commits on `staging` since it diverged from `main` to determine the RC number
+4. Updates `manifest.json` with 4-segment `version` (e.g., `0.6.3.2`) and `version_name` (e.g., `0.6.3-RC2`)
+5. Packages the extension and creates a GitHub **pre-release** (not published to Chrome Web Store)
+6. The RC number resets automatically when `staging` is merged into `main` (since the merge-base moves forward)
 
 ### Release workflow (`.github/workflows/release.yml`)
 Runs on every push to `main` (which should only happen via PR from `staging`):
@@ -91,6 +108,9 @@ js/
   orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
+  auth.js                Authentication module for learn-service (login, logout, token refresh)
+  sync.js                Cloud data sync (push/pull with optimistic locking)
+  migrations.js          Forward-only data migration runner
 prompts/
   onboarding-profile.md     System prompt for Onboarding Profile Agent
   diagnostic-creation.md    System prompt for Diagnostic (Skills Check) Agent
@@ -109,6 +129,7 @@ tests/
   manifest.test.js       Manifest validation tests
   courses.test.js        Course data validation tests
   validators.test.js     Output validator unit tests
+  migrations.test.js     Data migration unit tests
 package.json             Test runner config (no dependencies)
 scripts/
   setup-branch-protection.sh  One-time branch protection setup
@@ -130,10 +151,18 @@ PRIVACY.md               Privacy policy (GDPR-compliant)
 8. Activities must be completable entirely in the browser -- never reference desktop apps, terminals, or file system operations.
 9. Do not manually bump the version in `manifest.json` -- the CI/CD workflows handle versioning automatically. During RC builds, `manifest.json` gains a 4-segment `version` and a `version_name` field; these are stripped on production release.
 10. Run `npm test` before submitting PRs. Tests must pass in CI on both `staging` and `main`.
-11. **Telemetry and privacy impact:** if a change adds, removes, or modifies what data is collected, sent to learn-service, or stored locally, you must:
+11. **Data schema changes (CRITICAL -- never skip this):** Extension updates must never break existing user data. If you add, remove, rename, or restructure any stored data (`chrome.storage.local` keys or IndexedDB), you MUST:
+    - Add a migration to `js/migrations.js` with the next integer version number.
+    - The migration's `run()` function must read the old format and write the new format.
+    - Migrations must be idempotent (safe to run twice -- a crash mid-migration will re-run it).
+    - Add a test for the migration in `tests/migrations.test.js`.
+    - Update any affected getter/setter functions in `js/storage.js` to handle the new shape.
+    - Update `mergeProfile()` in `js/app.js` if the learner profile shape changed.
+    - Examples of changes that require a migration: adding a new field to progress objects, renaming `devMode` to `dataSharingEnabled`, changing an array field to an object, adding a new storage key that existing users need seeded with a default value.
+12. **Telemetry and privacy impact:** if a change adds, removes, or modifies what data is collected, sent to learn-dashboard, or stored locally, you must:
     - Update `PRIVACY.md` (the legally binding privacy policy) to reflect the new data practices.
     - Update the consent dialog in `js/app.js` if the change affects what users are agreeing to share.
     - Update the `stripBinaries()` function in `js/telemetry.js` if new sensitive fields need to be blocked from telemetry.
     - Update `README.md` privacy section and `CONTRIBUTING.md` if the change affects contributor-facing guidance.
-    - Update `learn-service` validation (`src/lib/validate.js`) and docs if adding new event types or fields.
+    - Update `learn-dashboard` validation (`src/lib/validate.js`) and docs if adding new event types or fields.
     - Never send screenshots, API keys, or data that could identify the user. Feedback text the user writes may be included.

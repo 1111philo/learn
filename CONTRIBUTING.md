@@ -16,7 +16,7 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 - Course definitions live in `data/courses.json`.
 - Agent system prompts live in `prompts/*.md` -- edit these to change agent behavior without touching code.
 - `.env.js` seeds your API key and name into storage on every load (values only written if not already set). The onboarding wizard still runs regardless — it is controlled by the `onboardingComplete` storage flag, not by whether a key is present. This lets you develop against a pre-seeded key while still exercising the onboarding flow.
-- Enable **Share data with 11:11** in Settings > Data Management to log all agent interactions locally and send anonymous telemetry to `learn-service`. A consent notice explains what is and isn't sent. Export the JSON to inspect agent requests, responses, and errors.
+- Enable **Share data with 11:11** in Settings > Data Management to log all agent interactions locally and send anonymous telemetry to `learn-dashboard`. A consent notice explains what is and isn't sent. Export the JSON to inspect agent requests, responses, and errors.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ Activities must:
 
 - **Accessibility is required.** Every interactive element must be keyboard-operable and have an accessible name. Test with a screen reader when adding UI.
 - **Keep it lightweight.** No frameworks, no heavy dependencies. The app must perform well on Chromebooks and Android tablets.
-- **Local-first.** External calls go to the Anthropic API (user's own key) and, when data sharing is enabled, anonymous telemetry to `learn-service`. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent dialog is shown before enabling data sharing.
+- **Local-first.** External calls go to the Anthropic API (user's own key) and, when data sharing is enabled, anonymous telemetry to `learn-dashboard`. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent dialog is shown before enabling data sharing.
 - **Update documentation.** If your change adds, removes, or renames a feature, file, or permission, update README.md and CLAUDE.md accordingly.
 - **Test prompts.** When editing `prompts/*.md`, test with a real API key to verify the agent returns valid JSON.
 
@@ -61,7 +61,18 @@ Tests use Node's built-in test runner (no dependencies to install):
 npm test
 ```
 
-Tests validate `manifest.json` structure, `courses.json` data integrity, and the output validator functions used by the agent orchestrator. All tests must pass before merging.
+Tests validate `manifest.json` structure, `courses.json` data integrity, data migrations, and the output validator functions used by the agent orchestrator. All tests must pass before merging.
+
+## Data migrations
+
+When a change modifies the shape of stored data (`chrome.storage.local` keys or IndexedDB), add a migration to `js/migrations.js`:
+
+1. Add a new entry to the `migrations` array with the next integer version.
+2. Write an async `run()` function that reads the old format and writes the new format.
+3. Ensure the function is **idempotent** — running it twice on the same data must produce the same result.
+4. Add a test for the migration in `tests/migrations.test.js`.
+5. Update any affected getter/setter functions in `js/storage.js`.
+6. Update `mergeProfile()` in `js/app.js` if the learner profile shape changed.
 
 ## Submitting changes
 
@@ -80,8 +91,8 @@ Versioning is fully automated across two branches:
 ### Staging (release candidates)
 When commits are pushed to `staging`, a GitHub Actions workflow:
 1. Runs tests.
-2. Analyzes commits with Claude to determine the candidate semver version.
-3. Appends an RC number (e.g., `0.7.0-RC1`). The RC number increments on each push and resets when a new candidate version is determined.
+2. Reads `main`'s current version as the base (e.g., `0.6.3`).
+3. Counts non-bump commits since `staging` diverged from `main` to determine the RC number (e.g., `0.6.3-RC2`). The RC number resets when `staging` is merged into `main`.
 4. Creates a GitHub **pre-release** with the extension zip. RCs are not published to the Chrome Web Store.
 
 ### Production (main)

@@ -28,6 +28,7 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 - **JSON export** -- export all saved data (metadata + screenshots + dev logs) at any time
 - **Keyboard shortcuts** -- Enter submits inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs
 - **Fully local** -- screenshots are stored in IndexedDB; metadata in `chrome.storage.local`. Only API calls to Anthropic are made (with the user's own key).
+- **Cloud sync** (optional) -- sign in via learn-service to sync your profile, preferences, progress, and portfolio across devices. Login is never required; everything works without an account. Admins can pre-assign API keys that auto-install on login.
 - **Accessible** -- keyboard-operable, screen-reader-friendly, respects `prefers-reduced-motion` and `forced-colors`
 - **Lightweight** -- vanilla JS, no frameworks, no local build step; designed for Chromebooks and Android tablets
 
@@ -52,9 +53,10 @@ js/
   storage.js             chrome.storage.local + IndexedDB abstraction
   courses.js             Course loading and prerequisite checking
   api.js                 Anthropic API client
-  orchestrator.js        Agent orchestration + output validation
+  orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
+  migrations.js          Forward-only data migration runner
 prompts/
   course-creation.md        System prompt for Course Creation Agent
   activity-creation.md      System prompt for Activity Creation Agent
@@ -73,6 +75,7 @@ tests/
   manifest.test.js       Manifest validation tests
   courses.test.js        Course data validation tests
   validators.test.js     Output validator unit tests
+  migrations.test.js     Data migration unit tests
 package.json             Test runner config (no dependencies)
 scripts/
   setup-branch-protection.sh  One-time branch protection setup
@@ -92,13 +95,13 @@ Releases follow a two-branch workflow: **feature branches → staging → main**
 Every push to `staging` triggers the staging workflow:
 
 1. Tests run (`npm test`).
-2. Commits since the last production release are analyzed by Claude to determine the candidate semver version.
-3. An RC number is appended based on existing RC tags (e.g., `0.7.0-RC1`, `0.7.0-RC2`).
-4. `manifest.json` is updated with a 4-segment numeric `version` (e.g., `0.7.0.1`) and a human-readable `version_name` (e.g., `0.7.0-RC1`).
+2. The current version from `main`'s `manifest.json` is read as the base version (e.g., `0.6.3`).
+3. Non-bump commits on `staging` since it diverged from `main` are counted to determine the RC number.
+4. `manifest.json` is updated with a 4-segment numeric `version` (e.g., `0.6.3.2`) and a human-readable `version_name` (e.g., `0.6.3-RC2`).
 5. The extension is packaged and a **GitHub pre-release** is created with the zip attached.
 6. RC builds are **not** published to the Chrome Web Store.
 
-The RC number resets automatically when a new candidate version is determined (i.e., after a production release).
+The RC number resets automatically when `staging` is merged into `main` (the merge-base moves forward, so the commit count restarts).
 
 ### Production (main)
 
@@ -160,7 +163,8 @@ Each course in `data/courses.json` has:
 | Host                        | Why                                    |
 |-----------------------------|----------------------------------------|
 | `https://api.anthropic.com/*` | Send requests to the Claude API with the user's own key |
-| `https://czrqy8ea0a.execute-api.us-east-1.amazonaws.com/*` | Send anonymous telemetry when data sharing is enabled |
+| `https://learn-dashboard.philosophers.group/*` | Send anonymous telemetry when data sharing is enabled |
+| `https://learn.philosophers.group/*` | Cloud sync and authentication (optional, only when signed in) |
 
 ## Privacy
 
@@ -168,7 +172,8 @@ Each course in `data/courses.json` has:
 
 - **Local by default**: course progress, screenshots, learner profile, and API key never leave your device.
 - **Opt-in telemetry**: "Share data with 11:11" in Settings sends anonymous usage data (agent I/O, feedback text, scores). Screenshots and API keys are never sent.
-- **Anonymous**: data is tied to a random ID, not your identity.
+- **Cloud sync** (optional): signing in via learn-service syncs your profile, preferences, progress, and portfolio to the cloud. Screenshots are never synced. Auth tokens are stored locally and refresh automatically.
+- **Anonymous**: telemetry data is tied to a random ID, not your identity.
 - **90-day retention**: telemetry is automatically deleted.
 - **Your rights**: withdraw consent anytime, request deletion via [1111@philosophers.group](mailto:1111@philosophers.group) or [open an issue](https://github.com/1111philo/learn-extension/issues).
 

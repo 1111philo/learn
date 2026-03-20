@@ -76,6 +76,51 @@ export async function saveLearnerProfileSummary(summary) {
   await chrome.storage.local.set({ learnerProfileSummary: summary });
 }
 
+// --- Auth tokens (cloud sync) ---
+
+export async function getAuthTokens() {
+  const result = await chrome.storage.local.get(['authAccessToken', 'authRefreshToken']);
+  if (!result.authAccessToken) return null;
+  return { accessToken: result.authAccessToken, refreshToken: result.authRefreshToken };
+}
+
+export async function saveAuthTokens({ accessToken, refreshToken }) {
+  await chrome.storage.local.set({ authAccessToken: accessToken, authRefreshToken: refreshToken });
+}
+
+export async function clearAuth() {
+  await chrome.storage.local.remove(['authAccessToken', 'authRefreshToken', 'authUser', 'syncVersions', 'lastSyncAt']);
+}
+
+export async function getAuthUser() {
+  const result = await chrome.storage.local.get('authUser');
+  return result.authUser || null;
+}
+
+export async function saveAuthUser(user) {
+  await chrome.storage.local.set({ authUser: user });
+}
+
+// --- Sync versions (cloud sync) ---
+
+export async function getSyncVersions() {
+  const result = await chrome.storage.local.get('syncVersions');
+  return result.syncVersions || {};
+}
+
+export async function saveSyncVersions(versions) {
+  await chrome.storage.local.set({ syncVersions: versions });
+}
+
+export async function getLastSync() {
+  const result = await chrome.storage.local.get('lastSyncAt');
+  return result.lastSyncAt || null;
+}
+
+export async function saveLastSync() {
+  await chrome.storage.local.set({ lastSyncAt: Date.now() });
+}
+
 // --- Service credentials (telemetry) ---
 
 export async function getServiceCredentials() {
