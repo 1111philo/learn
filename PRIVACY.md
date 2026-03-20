@@ -81,7 +81,7 @@ Different devices and extension reinstalls generate separate anonymous IDs.
 
 Telemetry data is used solely to improve the extension:
 
-- **Prompt improvement:** we analyze disputes (where users disagreed with AI assessment), activity regenerations (where users rejected an activity), and validation failures to identify patterns and improve the AI agent prompts.
+- **Prompt improvement:** we analyze disputes (where users disagreed with AI assessment) and validation failures to identify patterns and improve the AI agent prompts.
 - **Bug fixes:** error events help us find and fix issues.
 - **Quality metrics:** aggregate statistics (dispute rate, validation failure rate, latency) help us measure overall quality.
 

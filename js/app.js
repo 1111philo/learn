@@ -3,13 +3,14 @@ import {
   getCourseProgress, saveCourseProgress, getAllProgress,
   getWorkProducts, saveWorkProduct,
   saveScreenshot, getScreenshot,
-  exportAllData,
   getApiKey, saveApiKey,
   getLearnerProfile, saveLearnerProfile,
   getLearnerProfileSummary, saveLearnerProfileSummary,
   getDevMode, saveDevMode, appendDevLog,
   getOnboardingComplete, saveOnboardingComplete,
-  getLastSync
+  getLastSync,
+  getDiagnosticState, saveDiagnosticState, clearDiagnosticState,
+  getOnboardingState, saveOnboardingState, clearOnboardingState
 } from './storage.js';
 import { loadCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
@@ -159,7 +160,7 @@ async function logDev(type, data) {
 }
 
 let state = {
-  view: 'courses',        // onboarding | courses | course | work | work-detail | settings | diagnostic-choice
+  view: 'courses',        // onboarding | courses | course | work | work-detail | settings
   courses: [],
   activeCourseId: null,
   progress: null,
@@ -167,18 +168,21 @@ let state = {
   preferences: null,
   activeWorkCourseId: null,  // for work-detail view
   generating: null,          // { courseId, promise } — in-flight generation tracker
-  // Diagnostic flow
-  diagnosticPhase: 'choice',      // 'choice' | 'activity' | 'result'
-  diagnosticActivity: null,       // generated diagnostic activity object
-  diagnosticResponse: null,       // string — learner's text response, kept for appeal reassessment
-  pendingDiagnosticResult: null,  // { courseId, result } — persists for plan generation
-  skipDiagnosticFor: null         // courseId — bypass diagnostic
+  // Diagnostic flow (consolidated)
+  diagnostic: {
+    phase: null,          // 'generating' | 'activity' | null
+    activity: null,       // generated diagnostic activity object
+    messages: [],         // conversation history [{role, content}]
+    result: null,         // { courseId, result } — assessment for plan generation
+    skipFor: null,        // courseId — bypass diagnostic
+  }
 };
 
 // -- Time tracking state ------------------------------------------------------
 const _sessionStartMs = Date.now();
 let _activityStartMs = null;   // set when an activity view renders
 let _activityStartMeta = null; // { courseId, activityIndex } for the current activity
+
 
 // Onboarding wizard state (persists across re-renders within a session)
 let _onboardingStep = 1;
@@ -205,10 +209,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindUserMenu();
   await updateUserMenu();
 
+  // Restore diagnostic conversation state if it was in progress
+  const savedDiag = await getDiagnosticState();
+  if (savedDiag) {
+    state.diagnostic = { ...state.diagnostic, ...savedDiag };
+  }
+
   // First-run: show onboarding if it hasn't been completed yet
   const onboardingDone = await getOnboardingComplete();
   if (!onboardingDone) {
     state.view = 'onboarding';
+    // Restore onboarding conversation state if it was in progress
+    const savedOnboarding = await getOnboardingState();
+    if (savedOnboarding) {
+      Object.assign(_onboardingData, savedOnboarding);
+    }
     if (state.preferences.name) _onboardingData.name = state.preferences.name;
   }
 
@@ -466,7 +481,7 @@ function bindDropdownActions() {
 }
 
 // View depth for determining transition direction
-const VIEW_DEPTH = { onboarding: 0, courses: 1, 'diagnostic-choice': 2, course: 2, work: 1, 'work-detail': 2, settings: 1 };
+const VIEW_DEPTH = { onboarding: 0, courses: 1, course: 2, work: 1, 'work-detail': 2, settings: 1 };
 const ANIM_CLASSES = ['view-slide-left', 'view-slide-right', 'view-fade-up'];
 
 function animateMain(anim) {
@@ -506,7 +521,7 @@ function render() {
 
   document.querySelectorAll('[data-nav]').forEach((btn) => {
     const active = btn.dataset.nav === state.view ||
-      (btn.dataset.nav === 'courses' && (state.view === 'course' || state.view === 'diagnostic-choice')) ||
+      (btn.dataset.nav === 'courses' && state.view === 'course') ||
       (btn.dataset.nav === 'work' && state.view === 'work-detail');
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
@@ -518,7 +533,7 @@ function render() {
     case 'work':    return renderWork();
     case 'work-detail': return renderWorkDetail();
     case 'settings': return renderSettings();
-    case 'diagnostic-choice': return renderDiagnosticChoice();
+
   }
 }
 
@@ -601,23 +616,22 @@ async function startOrResumeCourse(courseId) {
     }
 
     // Run diagnostic unless one already exists for this course
-    const hasDiagnosticResult = state.pendingDiagnosticResult?.courseId === courseId;
-    const skipped = state.skipDiagnosticFor === courseId;
+    const hasDiagnosticResult = state.diagnostic.result?.courseId === courseId;
+    const skipped = state.diagnostic.skipFor === courseId;
     if (!hasDiagnosticResult && !skipped) {
       state.activeCourseId = courseId;
-      state.diagnosticPhase = 'activity';
-      state.diagnosticActivity = null;
-      state.view = 'diagnostic-choice';
-
-      $main().innerHTML = `
-        <div class="loading-container" role="status" aria-live="polite">
-          <div class="loading-spinner" aria-hidden="true"></div>
-          <p>Preparing skills check...</p>
-        </div>`;
+      state.diagnostic.phase = 'generating';
+      state.diagnostic.activity = null;
+      state.diagnostic.messages = [];
+      state.view = 'course';
+      saveDiagnosticState(state.diagnostic);
+      render();
 
       try {
         const activity = await orchestrator.generateDiagnosticActivity(course);
-        state.diagnosticActivity = activity;
+        state.diagnostic.activity = activity;
+        state.diagnostic.phase = 'activity';
+        saveDiagnosticState(state.diagnostic);
         render();
       } catch (e) {
         handleApiError(e);
@@ -626,25 +640,16 @@ async function startOrResumeCourse(courseId) {
     }
 
     state.activeCourseId = courseId;
+    state.diagnostic.phase = null;
     state.view = 'course';
 
     const promise = (async () => {
-      const main = $main();
-      const totalSteps = 3;
-
-      function showStep(step, label) {
-        // Only update DOM if we're still viewing this course
-        if (state.view === 'course' && state.activeCourseId === courseId) {
-          main.innerHTML = `
-            <div class="loading-container" role="status" aria-live="polite">
-              <div class="loading-spinner" aria-hidden="true"></div>
-              <p>Setting up your course...</p>
-              <p class="loading-substep" aria-label="Step ${step} of ${totalSteps}: ${label}">Step ${step} of ${totalSteps}: ${label}</p>
-            </div>`;
-        }
+      function showStep(label) {
+        const el = document.getElementById('setup-status');
+        if (el) el.innerHTML = `<span class="loading-spinner-inline" aria-hidden="true"></span> ${label}`;
       }
 
-      showStep(1, 'Analyzing your profile');
+      showStep('Analyzing your profile...');
 
       const profileSummary = await getLearnerProfileSummary();
       const completedNames = Object.entries(state.allProgress)
@@ -652,9 +657,9 @@ async function startOrResumeCourse(courseId) {
         .map(([id]) => state.courses.find(c => c.courseId === id)?.name)
         .filter(Boolean);
 
-      showStep(2, 'Building your learning plan');
+      showStep('Building your learning plan...');
 
-      const diagnosticResult = hasDiagnosticResult ? state.pendingDiagnosticResult.result : null;
+      const diagnosticResult = hasDiagnosticResult ? state.diagnostic.result.result : null;
       const plan = await orchestrator.createLearningPlan(
         course, state.preferences, profileSummary, completedNames, diagnosticResult
       );
@@ -675,7 +680,7 @@ async function startOrResumeCourse(courseId) {
         finalWorkProductUrl: null
       };
 
-      showStep(3, 'Preparing your first activity');
+      showStep('Preparing your first activity...');
 
       const firstSlot = plan.activities[0];
       const generated = await orchestrator.generateNextActivity(
@@ -691,8 +696,9 @@ async function startOrResumeCourse(courseId) {
       state.allProgress[courseId] = newProgress;
       syncInBackground(`progress:${courseId}`);
       // Clear diagnostic state now that the plan has been generated
-      state.pendingDiagnosticResult = null;
-      state.skipDiagnosticFor = null;
+      state.diagnostic.result = null;
+      state.diagnostic.skipFor = null;
+      clearDiagnosticState();
       trackEvent('course_started', { courseId, totalActivities: plan.activities.length });
       return newProgress;
     })();
@@ -721,37 +727,250 @@ async function renderCourse() {
   const main = $main();
   const course = state.courses.find((c) => c.courseId === state.activeCourseId);
   const p = state.progress;
+  const planActivities = p?.learningPlan?.activities;
 
-  // Course is still being set up (no progress yet)
-  if (!p || !p.learningPlan) {
-    main.innerHTML = `
-      <div class="loading-container" role="status" aria-live="polite">
-        <div class="loading-spinner" aria-hidden="true"></div>
-        <p>Setting up your course...</p>
-      </div>`;
+  // ── Header ──
+  let progressLabel = '';
+  if (planActivities) {
+    progressLabel = `Step ${p.currentActivityIndex + 1} of ${planActivities.length}`;
+  } else if (state.diagnostic.phase) {
+    progressLabel = 'Skills Check';
+  }
+
+  let html = `<div class="course-layout">
+    <div class="course-header">
+      <button class="back-btn" aria-label="Back to courses" id="back-btn">&larr;</button>
+      <div class="course-header-info">
+        <h2>${esc(course.name)}</h2>
+        ${progressLabel ? `<span class="progress-label">${esc(progressLabel)}</span>` : ''}
+      </div>
+      ${p ? '<button class="reset-btn" id="reset-course-btn" aria-label="Reset course" title="Reset course">&#8635;</button>' : ''}
+    </div>`;
+
+  // ── Activity track (only when plan exists) ──
+  if (planActivities) {
+    const activityPips = planActivities.map((_, i) => {
+      const cls = i < p.currentActivityIndex ? 'pip pip-done'
+                : i === p.currentActivityIndex ? 'pip pip-current'
+                : 'pip';
+      return `<span class="${cls}" aria-hidden="true"></span>`;
+    }).join('');
+    html += `<div class="activity-track" role="progressbar" aria-label="Activity ${p.currentActivityIndex + 1} of ${planActivities.length}" aria-valuenow="${p.currentActivityIndex + 1}" aria-valuemin="1" aria-valuemax="${planActivities.length}">${activityPips}</div>`;
+  }
+
+  // ── Chat ──
+  html += '<div class="chat" role="log" aria-label="Course conversation">';
+
+  // ── Skills Check section ──
+  if (state.diagnostic.activity || state.diagnostic.phase === 'generating') {
+    html += '<div class="chat-section-heading" role="separator">Skills Check</div>';
+  }
+
+  // Diagnostic conversation (rendered from structured messages)
+  if (state.diagnostic.activity) {
+    html += renderConversationMessages(
+      state.diagnostic.messages,
+      state.diagnostic.activity.instruction
+    );
+  }
+
+  // Diagnostic thinking (generating the question)
+  if (state.diagnostic.phase === 'generating') {
+    html += `<div class="msg msg-response" role="status" aria-live="polite"><span class="loading-spinner-inline" aria-hidden="true"></span> Preparing your skills check...</div>`;
+  }
+
+  // Course setup thinking (plan being generated)
+  if (!p?.learningPlan && state.generating?.courseId === course.courseId) {
+    html += `<div class="msg msg-response" role="status" aria-live="polite" id="setup-status"><span class="loading-spinner-inline" aria-hidden="true"></span> Setting up your course...</div>`;
+  }
+
+  // ── Current activity section ──
+  const activity = p?.activities?.[p?.currentActivityIndex];
+  if (activity) {
+    const typeLabel = TYPE_LABELS[activity.type] || activity.type;
+    html += `<div class="chat-section-heading" role="separator">Lesson ${p.currentActivityIndex + 1}: ${esc(activity.goal || typeLabel)}</div>`;
+
+    html += instructionMessage(activity.instruction);
+
+    const draftsForActivity = p.drafts.filter((d) => d.activityId === activity.id);
+    for (let di = 0; di < draftsForActivity.length; di++) {
+      const draft = draftsForActivity[di];
+      const isLatest = di === draftsForActivity.length - 1;
+      html += draftMessage(draft);
+      html += feedbackCard(draft, isLatest);
+    }
+  } else if (p?.learningPlan) {
+    // Activity not generated yet — show thinking
+    html += `<div class="msg msg-response" role="status" aria-live="polite"><span class="loading-spinner-inline" aria-hidden="true"></span> Preparing your next activity...</div>`;
+  }
+
+  // Course completion summary
+  if (p?.status === 'completed') {
+    html += completionSummary(course, p);
+  }
+
+  // Diagnostic skip (inside chat, after 2 user messages)
+  const diagUserMsgCount = (state.diagnostic.messages || []).filter(m => m.role === 'user').length;
+  if (state.diagnostic.phase === 'activity' && state.diagnostic.activity && !state.diagnostic.result && diagUserMsgCount >= 2) {
+    html += '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to course</button>';
+  }
+
+  // Activity action buttons (inside chat)
+  const draftsForActivity = activity ? p.drafts.filter((d) => d.activityId === activity.id) : [];
+  const hasDrafts = draftsForActivity.length > 0;
+  const lastDraft = hasDrafts ? draftsForActivity[draftsForActivity.length - 1] : null;
+
+  if (activity && p?.status !== 'completed') {
+    if (lastDraft && lastDraft.recommendation === 'advance') {
+      // Agent asks if user wants to continue
+      const remaining = planActivities.length - p.currentActivityIndex - 1;
+      html += `<div class="msg msg-response"><p>Great work — you've passed this activity! ${remaining > 0 ? `Ready to move on? You have ${remaining} ${remaining === 1 ? 'lesson' : 'lessons'} left.` : 'This was the final activity!'}</p></div>`;
+      if (remaining > 0) {
+        html += '<button id="next-activity-btn" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue to next lesson</button>';
+      }
+    } else if (!hasDrafts) {
+      // First recording — show Record button
+      html += '<button id="record-draft-btn" class="skip-step-btn" style="background:#dc2626;color:#fff;border-color:#dc2626;">&#9679; Record</button>';
+    }
+  }
+
+  html += '</div>'; // close chat
+
+  // ── Compose bar (fixed bottom) ──
+  if (state.diagnostic.phase === 'activity' && state.diagnostic.activity && !state.diagnostic.result) {
+    html += `<div class="chat-compose">
+      <div class="compose-input-row">
+        <label for="diagnostic-response" class="sr-only">Your response</label>
+        <textarea id="diagnostic-response" class="chat-input" rows="1" placeholder="Describe what you know..."></textarea>
+        <button id="submit-diagnostic-btn" class="send-btn" aria-label="Send"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 14V9l10-1L3 7V2l13 6z"/></svg></button>
+      </div>
+    </div>`;
+  } else if (activity && p?.status !== 'completed') {
+    html += `<div class="chat-compose">
+      <div class="compose-input-row">
+        <label for="chat-input" class="sr-only">Ask a question</label>
+        <textarea id="chat-input" class="chat-input" rows="1" placeholder="Ask a question..."></textarea>
+        <button id="send-btn" class="send-btn" aria-label="Send"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 14V9l10-1L3 7V2l13 6z"/></svg></button>
+      </div>
+    </div>`;
+  }
+
+  html += '</div>'; // close course-layout
+
+  main.innerHTML = html;
+
+  // Scroll chat to bottom
+  const chatEl = main.querySelector('.chat');
+  if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+
+  // Confetti on first view after course completion
+  if (p?.status === 'completed' && !_confettiFired.has(p.courseId)) {
+    _confettiFired.add(p.courseId);
+    launchConfetti();
+  }
+
+  // ── Event handlers ──
+  $('#back-btn').addEventListener('click', () => navigate('courses'));
+  if (p) {
+    $('#reset-course-btn')?.addEventListener('click', () => confirmResetCourse(course, p));
+  }
+
+  // Diagnostic compose handlers
+  const diagInput = $('#diagnostic-response');
+  if (diagInput) {
+    diagInput.focus();
+    diagInput.addEventListener('input', () => {
+      diagInput.style.height = 'auto';
+      diagInput.style.height = Math.min(diagInput.scrollHeight, 120) + 'px';
+    });
+    diagInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        sendDiagnosticMessage(course);
+      }
+    });
+    $('#submit-diagnostic-btn')?.addEventListener('click', () => sendDiagnosticMessage(course));
+    $('#skip-diagnostic-btn')?.addEventListener('click', () => skipDiagnostic(course));
+  }
+
+  // Activity compose handlers
+  const chatInput = $('#chat-input');
+  if (chatInput && activity) {
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+    });
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleComposeSend(course, p, activity);
+      }
+    });
+    $('#send-btn')?.addEventListener('click', () => handleComposeSend(course, p, activity));
+  }
+
+  $('#record-draft-btn')?.addEventListener('click', () => recordDraft(activity));
+
+  // Dispute + Re-record buttons on feedback cards
+  main.querySelectorAll('.dispute-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const draft = p.drafts.find(d => d.id === btn.dataset.draftId);
+      if (draft) showDisputeModal(course, p, activity, draft);
+    });
+  });
+  main.querySelectorAll('.rerecord-btn').forEach(btn => {
+    btn.addEventListener('click', () => recordDraft(activity));
+  });
+
+  const nextBtn = $('#next-activity-btn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', async () => {
+      p.currentActivityIndex++;
+      await saveCourseProgress(p.courseId, p);
+      syncInBackground(`progress:${p.courseId}`);
+      render();
+    });
+  }
+
+  $('#next-course-btn')?.addEventListener('click', () => navigate('courses'));
+  $('#view-portfolio-btn')?.addEventListener('click', () => {
+    state.activeWorkCourseId = p.courseId;
+    navigate('work-detail');
+  });
+
+  // Track activity start time
+  if (activity) {
+    const actMeta = { courseId: p.courseId, activityIndex: p.currentActivityIndex };
+    if (!_activityStartMeta || _activityStartMeta.courseId !== actMeta.courseId || _activityStartMeta.activityIndex !== actMeta.activityIndex) {
+      _activityStartMs = Date.now();
+      _activityStartMeta = actMeta;
+      trackEvent('activity_started', {
+        courseId: p.courseId,
+        activityIndex: p.currentActivityIndex,
+        activityType: activity.type,
+        activityGoal: activity.goal || '',
+      });
+    }
+  }
+
+  // ── Async generation (wait while showing in-chat thinking) ──
+  if (!p?.learningPlan && state.generating?.courseId === course.courseId) {
+    try {
+      await state.generating.promise;
+    } catch (e) {
+      handleApiError(e);
+      return;
+    }
+    state.progress = state.allProgress[course.courseId];
+    render();
     return;
   }
 
-  const planActivities = p.learningPlan.activities;
-  const currentSlot = planActivities[p.currentActivityIndex];
+  if (p?.learningPlan && !p.activities[p.currentActivityIndex]) {
+    const currentSlot = planActivities[p.currentActivityIndex];
 
-  // If current activity hasn't been generated yet, generate it (or wait for in-flight generation)
-  if (!p.activities[p.currentActivityIndex]) {
-    main.innerHTML = `
-      <div class="loading-container" role="status" aria-live="polite">
-        <div class="loading-spinner" aria-hidden="true"></div>
-        <p>Preparing your next activity...</p>
-      </div>`;
-
-    // If already generating for this course, wait for it
     if (state.generating?.courseId === p.courseId) {
-      try {
-        await state.generating.promise;
-      } catch (e) {
-        handleApiError(e);
-        return;
-      }
-      // Re-fetch progress after generation completes
+      try { await state.generating.promise; } catch (e) { handleApiError(e); return; }
       state.progress = state.allProgress[p.courseId];
       render();
       return;
@@ -783,254 +1002,158 @@ async function renderCourse() {
 
     state.generating = { courseId: p.courseId, promise };
 
-    try {
-      await promise;
-    } catch (e) {
-      state.generating = null;
-      handleApiError(e);
-      return;
-    }
-
+    try { await promise; } catch (e) { state.generating = null; handleApiError(e); return; }
     state.generating = null;
     render();
-    return;
   }
-
-  const activity = p.activities[p.currentActivityIndex];
-
-  // Track activity start time (only if we're on a new activity)
-  const actMeta = { courseId: p.courseId, activityIndex: p.currentActivityIndex };
-  if (!_activityStartMeta || _activityStartMeta.courseId !== actMeta.courseId || _activityStartMeta.activityIndex !== actMeta.activityIndex) {
-    _activityStartMs = Date.now();
-    _activityStartMeta = actMeta;
-    trackEvent('activity_started', {
-      courseId: p.courseId,
-      activityIndex: p.currentActivityIndex,
-      activityType: activity.type,
-      activityGoal: activity.goal || '',
-    });
-  }
-
-  const draftsForActivity = p.drafts.filter((d) => d.activityId === activity.id);
-  const hasDrafts = draftsForActivity.length > 0;
-  const lastDraft = hasDrafts ? draftsForActivity[draftsForActivity.length - 1] : null;
-
-  const typeLabel = TYPE_LABELS[activity.type] || activity.type;
-
-  const activityPips = planActivities.map((_, i) => {
-    const cls = i < p.currentActivityIndex ? 'pip pip-done'
-              : i === p.currentActivityIndex ? 'pip pip-current'
-              : 'pip';
-    return `<span class="${cls}" aria-hidden="true"></span>`;
-  }).join('');
-
-  let html = `
-    <div class="course-header">
-      <button class="back-btn" aria-label="Back to courses" id="back-btn">&larr;</button>
-      <div class="course-header-info">
-        <h2>${esc(course.name)}</h2>
-        <span class="progress-label">Step ${p.currentActivityIndex + 1} of ${planActivities.length}</span>
-      </div>
-      <button class="reset-btn" id="reset-course-btn" aria-label="Reset course" title="Reset course">&#8635;</button>
-    </div>
-    <div class="activity-track" role="progressbar" aria-label="Activity ${p.currentActivityIndex + 1} of ${planActivities.length}" aria-valuenow="${p.currentActivityIndex + 1}" aria-valuemin="1" aria-valuemax="${planActivities.length}">
-      ${activityPips}
-    </div>
-    <div class="chat" role="log" aria-label="Activity conversation">`;
-
-  // Feedback acknowledgment (shown after activity regeneration)
-  if (activity.changeNote) {
-    html += `<div class="msg msg-change-note" role="status"><p class="change-note-label">Updated based on your feedback</p><p>${esc(activity.changeNote)}</p></div>`;
-  }
-
-  // Current activity instruction
-  html += instructionMessage(activity.instruction);
-
-  for (const draft of draftsForActivity) {
-    html += draftMessage(draft);
-    html += feedbackCard(draft);
-  }
-
-  // Course completion summary
-  if (p.status === 'completed') {
-    html += completionSummary(course, p);
-  }
-
-  html += '</div>';
-
-  // Action bar
-  if (p.status !== 'completed') {
-    html += '<div class="action-bar">';
-
-    if (!hasDrafts) {
-      html += '<button id="feedback-btn" class="secondary-btn" aria-label="Give feedback on this activity">Add Feedback</button>';
-    }
-
-    if (lastDraft && lastDraft.recommendation) {
-      const rec = lastDraft.recommendation;
-      if (rec === 'advance' && p.currentActivityIndex < planActivities.length - 1) {
-        html += '<button id="next-activity-btn" class="primary-btn">Next Activity</button>';
-      } else if (rec === 'revise') {
-        html += '<button id="record-draft-btn" class="record-btn">&#9679; Revise Draft</button>';
-      } else if (rec === 'continue') {
-        if (p.currentActivityIndex < planActivities.length - 1) {
-          html += '<button id="next-activity-btn" class="secondary-btn">Next Activity</button>';
-        }
-        html += '<button id="record-draft-btn" class="record-btn">&#9679; Revise Draft</button>';
-      }
-    } else {
-      html += `<button id="record-draft-btn" class="record-btn">&#9679; Record</button>`;
-    }
-
-    html += '</div>';
-  }
-
-  // Prior activities (below action bar)
-  if (p.currentActivityIndex > 0) {
-    const priorItems = [];
-    for (let i = p.currentActivityIndex - 1; i >= 0; i--) {
-      const prev = p.activities[i];
-      if (!prev) continue;
-      const prevDrafts = p.drafts.filter((d) => d.activityId === prev.id);
-      const prevLabel = TYPE_LABELS[prev.type] || prev.type;
-      const lastPrev = prevDrafts[prevDrafts.length - 1];
-      const scorePercent = lastPrev ? Math.round((lastPrev.score || 0) * 100) : null;
-      priorItems.push(`<div class="prior-step">
-        <span class="prior-type">${esc(prevLabel)}</span>
-        <span class="prior-goal">${esc(prev.goal || '')}</span>
-        ${scorePercent !== null ? `<span class="prior-score">${scorePercent}%</span>` : ''}
-      </div>`);
-    }
-    html += `<details class="prior-activities"><summary>Previous steps (${p.currentActivityIndex})</summary>${priorItems.join('')}</details>`;
-  }
-
-  main.innerHTML = html;
-
-  // Scroll to bottom when there are drafts so new feedback is immediately visible
-  if (hasDrafts) main.scrollTop = main.scrollHeight;
-
-  // Confetti on first view after course completion
-  if (p.status === 'completed' && !_confettiFired.has(p.courseId)) {
-    _confettiFired.add(p.courseId);
-    launchConfetti();
-  }
-
-  $('#back-btn').addEventListener('click', () => navigate('courses'));
-  $('#reset-course-btn').addEventListener('click', () => confirmResetCourse(course, p));
-
-  const feedbackBtn = $('#feedback-btn');
-  if (feedbackBtn) {
-    feedbackBtn.addEventListener('click', () => showActivityFeedback(course, p));
-  }
-
-  const recordBtn = $('#record-draft-btn');
-  if (recordBtn) {
-    recordBtn.addEventListener('click', () => recordDraft(activity));
-  }
-
-  const nextBtn = $('#next-activity-btn');
-  if (nextBtn) {
-    nextBtn.addEventListener('click', async () => {
-      p.currentActivityIndex++;
-      await saveCourseProgress(p.courseId, p);
-      syncInBackground(`progress:${p.courseId}`);
-      animateMain('view-slide-left');
-      render();
-    });
-  }
-
-  const nextCourseBtn = $('#next-course-btn');
-  if (nextCourseBtn) {
-    nextCourseBtn.addEventListener('click', () => navigate('courses'));
-  }
-
-  const portfolioBtn = $('#view-portfolio-btn');
-  if (portfolioBtn) {
-    portfolioBtn.addEventListener('click', () => {
-      state.activeWorkCourseId = p.courseId;
-      navigate('work-detail');
-    });
-  }
-
-  main.querySelectorAll('.dispute-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const draftId = btn.dataset.draftId;
-      const draft = p.drafts.find(d => d.id === draftId);
-      if (draft) showDisputeForm(course, p, activity, draft);
-    });
-  });
 }
 
-function showActivityFeedback(course, p) {
-  showModal(`
-    <h2>Activity Feedback</h2>
-    <p>Describe what's wrong or ask a question. The activity will be regenerated to address your feedback while keeping the same learning goal.</p>
-    <label for="feedback-input" class="sr-only">Your feedback</label>
-    <textarea id="feedback-input" rows="3" class="feedback-textarea" placeholder="e.g. I'm on a phone and can't use DevTools (⌘/Ctrl+Enter to submit)"></textarea>
-    <div class="action-bar">
-      <button id="cancel-feedback-btn" class="secondary-btn">Cancel</button>
-      <button id="submit-feedback-btn" class="primary-btn">Regenerate</button>
-    </div>`, 'dialog', 'Activity feedback');
-
-  $('#feedback-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); regenerateCurrentActivity(course, p); }
-  });
-  $('#cancel-feedback-btn').addEventListener('click', hideModal);
-  $('#submit-feedback-btn').addEventListener('click', () => regenerateCurrentActivity(course, p));
+function handleComposeSend(course, p, activity) {
+  const text = $('#chat-input')?.value?.trim();
+  if (!text) return;
+  askAboutActivity(course, p, activity, text);
 }
 
-async function regenerateCurrentActivity(course, p) {
-  const feedbackText = $('#feedback-input')?.value?.trim();
-  if (!feedbackText) return;
-  hideModal();
-  const main = $main();
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Regenerating activity based on your feedback...</p>
-    </div>`;
+async function askAboutActivity(course, p, activity, text) {
+  const chat = document.querySelector('.chat');
+  const thinkingId = `qa-thinking-${Date.now()}`;
+
+  chat.insertAdjacentHTML('beforeend',
+    `<div class="msg msg-user"><p>${esc(text)}</p></div>
+     <div class="msg msg-response" id="${thinkingId}" role="status" aria-live="polite">
+       <span class="loading-spinner-inline" aria-hidden="true"></span> Thinking...
+     </div>`);
+  chat.scrollTop = chat.scrollHeight;
+
+  const input = $('#chat-input');
+  if (input) { input.value = ''; input.disabled = true; }
+  const sendBtn = $('#send-btn');
+  if (sendBtn) sendBtn.disabled = true;
 
   try {
-    const planActivities = p.learningPlan.activities;
-    const currentSlot = planActivities[p.currentActivityIndex];
-    const activity = p.activities[p.currentActivityIndex];
+    const lastDraft = p.drafts.filter(d => d.activityId === activity.id).pop();
+    let context = `Activity: ${activity.instruction}`;
+    if (lastDraft) {
+      context += `\nScore: ${Math.round((lastDraft.score || 0) * 100)}%`;
+      context += `\nFeedback: ${lastDraft.feedback || ''}`;
+      context += `\nStrengths: ${(lastDraft.strengths || []).join(', ')}`;
+      context += `\nAreas to improve: ${(lastDraft.improvements || []).join(', ')}`;
+    }
+
+    const systemPrompt = `You are a learning coach for the course "${course.name}". A learner is working on an activity and has a question. Answer concisely (2-3 sentences). Be helpful, specific, and encouraging.\n\n${context}`;
+
+    const response = await orchestrator.chatWithContext(systemPrompt, [
+      { role: 'user', content: text }
+    ]);
+
+    const el = document.getElementById(thinkingId);
+    if (el) { el.textContent = ''; el.insertAdjacentHTML('beforeend', `<p>${renderMd(response)}</p>`); }
+  } catch (e) {
+    const el = document.getElementById(thinkingId);
+    if (el) { el.textContent = ''; el.insertAdjacentHTML('beforeend', `<p>Sorry, I couldn't answer that. Try again?</p>`); }
+  }
+
+  if (input) input.disabled = false;
+  if (sendBtn) sendBtn.disabled = false;
+  if (input) input.focus();
+  if (chat) chat.scrollTop = chat.scrollHeight;
+}
+
+function showDisputeModal(course, p, activity, draft) {
+  showModal(`
+    <h2>Dispute Assessment</h2>
+    <p>Explain why you think this assessment is wrong. The AI will re-evaluate your work.</p>
+    <label for="dispute-input" class="sr-only">Your dispute</label>
+    <textarea id="dispute-input" rows="3" class="feedback-textarea" placeholder="e.g. I did complete the task — the result is in the bottom right corner"></textarea>
+    <div class="action-bar">
+      <button id="cancel-dispute-btn" class="secondary-btn">Cancel</button>
+      <button id="submit-dispute-btn" class="primary-btn">Submit</button>
+    </div>`, 'dialog', 'Dispute assessment');
+
+  $('#dispute-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      submitDisputeFromModal(course, p, activity, draft);
+    }
+  });
+  $('#cancel-dispute-btn').addEventListener('click', hideModal);
+  $('#submit-dispute-btn').addEventListener('click', () => submitDisputeFromModal(course, p, activity, draft));
+}
+
+async function submitDisputeFromModal(course, p, activity, draft) {
+  const feedbackText = $('#dispute-input')?.value?.trim();
+  if (!feedbackText) return;
+  hideModal();
+
+  // Show dispute message + thinking in chat
+  const chat = document.querySelector('.chat');
+  const thinkingId = `dispute-thinking-${Date.now()}`;
+  if (chat) {
+    chat.insertAdjacentHTML('beforeend',
+      `<div class="msg msg-user"><p><strong>Dispute:</strong> ${esc(feedbackText)}</p></div>
+       <div class="msg msg-response" id="${thinkingId}" role="status" aria-live="polite">
+         <span class="loading-spinner-inline" aria-hidden="true"></span> Re-evaluating...
+       </div>`);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  try {
+    const screenshotDataUrl = await getScreenshot(draft.screenshotKey);
     const profileSummary = await getLearnerProfileSummary();
-    const progressSummary = p.activities
-      .slice(0, p.currentActivityIndex)
-      .map(a => {
-        const drafts = p.drafts.filter(d => d.activityId === a.id);
-        const last = drafts[drafts.length - 1];
-        return { type: a.type, score: last?.score, keyFeedback: last?.feedback?.slice(0, 100) };
-      });
-
-    const generated = await orchestrator.regenerateActivity(
-      course, currentSlot, progressSummary, profileSummary,
-      activity.instruction, activity.tips, feedbackText, p.learningPlan
-    );
-
-    p.activities[p.currentActivityIndex] = {
-      ...currentSlot,
-      instruction: generated.instruction,
-      tips: generated.tips,
-      changeNote: generated.changeNote || null,
+    const priorDrafts = p.drafts.filter(d => d.activityId === activity.id && d.id !== draft.id);
+    const previousAssessment = {
+      feedback: draft.feedback, strengths: draft.strengths,
+      improvements: draft.improvements, score: draft.score,
+      recommendation: draft.recommendation, passed: draft.passed || false
     };
 
-    await saveCourseProgress(p.courseId, p);
-    syncInBackground(`progress:${p.courseId}`);
-    trackEvent('activity_regenerated', {
-      courseId: course.courseId,
-      activityIndex: p.currentActivityIndex,
-      activityType: currentSlot.type,
-      activityGoal: currentSlot.goal,
-      originalInstruction: activity.instruction,
-      learnerFeedback: feedbackText,
-      newInstruction: generated.instruction,
-      changeNote: generated.changeNote || null,
+    const result = await orchestrator.reassessDraft(
+      course, activity, screenshotDataUrl, draft.url,
+      priorDrafts, profileSummary, previousAssessment, feedbackText
+    );
+
+    // Update draft in place
+    const originalScore = draft.score;
+    draft.feedback = result.feedback;
+    draft.strengths = result.strengths;
+    draft.improvements = result.improvements;
+    draft.score = result.score;
+    draft.recommendation = result.recommendation;
+    draft.disputed = true;
+
+    trackEvent('dispute', {
+      courseId: course.courseId, activityType: activity.type,
+      originalScore, revisedScore: result.score,
+      scoreChanged: originalScore !== result.score,
     });
-    updateProfileFromFeedbackInBackground(feedbackText, course, currentSlot);
+
+    // Show revised assessment in chat
+    const el = document.getElementById(thinkingId);
+    if (el) {
+      const scorePercent = Math.round((result.score || 0) * 100);
+      el.innerHTML = `<p>${esc(result.feedback)}</p><p style="margin-top:4px;font-size:0.85rem;opacity:0.85;">Revised score: ${scorePercent}%</p>`;
+    }
+
+    // Handle completion
+    const justCompleted = activity.type === 'final' && result.passed && p.status !== 'completed';
+    if (justCompleted) {
+      p.status = 'completed';
+      p.completedAt = Date.now();
+      p.finalWorkProductUrl = draft.url;
+      await saveWorkProduct({ courseId: p.courseId, courseName: course.name, url: draft.url, completedAt: p.completedAt });
+    }
+
+    await saveCourseProgress(p.courseId, p);
+    state.allProgress[p.courseId] = p;
+    syncInBackground(`progress:${p.courseId}`);
+    if (justCompleted) { syncInBackground('work'); updateProfileOnCourseCompletionInBackground(course, p); }
+    updateProfileFromFeedbackInBackground(feedbackText, course, activity);
+
+    // Re-render to update feedback card and action buttons
     render();
   } catch (e) {
-    handleApiError(e);
+    const el = document.getElementById(thinkingId);
+    if (el) { el.textContent = ''; el.insertAdjacentHTML('beforeend', '<p>Re-evaluation failed. Please try again.</p>'); }
   }
 }
 
@@ -1054,111 +1177,6 @@ function confirmResetCourse(course, progress) {
     announce(`${course.name} has been reset.`);
     render();
   });
-}
-
-function showDisputeForm(course, p, activity, draft) {
-  showModal(`
-    <h2>Appeal Assessment</h2>
-    <p>Explain why you think this assessment is wrong. The AI will re-evaluate the same screenshot with your feedback.</p>
-    <label for="dispute-input" class="sr-only">Your feedback</label>
-    <textarea id="dispute-input" rows="3" class="feedback-textarea" placeholder="e.g. I did complete the task — the result is in the bottom right corner (⌘/Ctrl+Enter to submit)"></textarea>
-    <div class="action-bar">
-      <button id="cancel-dispute-btn" class="secondary-btn">Cancel</button>
-      <button id="submit-dispute-btn" class="primary-btn">Reassess</button>
-    </div>`, 'dialog', 'Appeal assessment');
-
-  $('#dispute-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitDispute(course, p, activity, draft); }
-  });
-  $('#cancel-dispute-btn').addEventListener('click', hideModal);
-  $('#submit-dispute-btn').addEventListener('click', () => submitDispute(course, p, activity, draft));
-}
-
-async function submitDispute(course, p, activity, draft) {
-  const feedbackText = $('#dispute-input')?.value?.trim();
-  if (!feedbackText) return;
-  hideModal();
-  const main = $main();
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Reassessing your work...</p>
-    </div>`;
-
-  try {
-    // Load the original screenshot from IndexedDB
-    const screenshotDataUrl = await getScreenshot(draft.screenshotKey);
-    const profileSummary = await getLearnerProfileSummary();
-    const priorDrafts = p.drafts.filter(d => d.activityId === activity.id && d.id !== draft.id);
-
-    const previousAssessment = {
-      feedback: draft.feedback,
-      strengths: draft.strengths,
-      improvements: draft.improvements,
-      score: draft.score,
-      recommendation: draft.recommendation,
-      passed: draft.passed || false
-    };
-
-    const originalScore = draft.score;
-    const result = await orchestrator.reassessDraft(
-      course, activity, screenshotDataUrl, draft.url,
-      priorDrafts, profileSummary, previousAssessment, feedbackText
-    );
-
-    // Update the draft in place
-    draft.feedback = result.feedback;
-    draft.strengths = result.strengths;
-    draft.improvements = result.improvements;
-    draft.score = result.score;
-    draft.recommendation = result.recommendation;
-    draft.disputed = true;
-
-    trackEvent('dispute', {
-      courseId: course.courseId,
-      activityType: activity.type,
-      activityGoal: activity.goal,
-      activityInstruction: activity.instruction,
-      originalAssessment: previousAssessment,
-      learnerFeedback: feedbackText,
-      revisedAssessment: {
-        feedback: result.feedback,
-        strengths: result.strengths,
-        improvements: result.improvements,
-        score: result.score,
-        recommendation: result.recommendation,
-      },
-      originalScore,
-      revisedScore: result.score,
-      scoreChanged: originalScore !== result.score,
-    });
-
-    // Handle completion changes
-    const justCompleted = activity.type === 'final' && result.passed && p.status !== 'completed';
-    if (justCompleted) {
-      p.status = 'completed';
-      p.completedAt = Date.now();
-      p.finalWorkProductUrl = draft.url;
-      await saveWorkProduct({
-        courseId: p.courseId,
-        courseName: course.name,
-        url: draft.url,
-        completedAt: p.completedAt
-      });
-    }
-
-    await saveCourseProgress(p.courseId, p);
-    state.allProgress[p.courseId] = p;
-    syncInBackground(`progress:${p.courseId}`);
-    if (justCompleted) syncInBackground('work');
-    render();
-
-    // Update learner profile in background
-    updateProfileFromFeedbackInBackground(feedbackText, course, activity);
-    if (justCompleted) updateProfileOnCourseCompletionInBackground(course, p);
-  } catch (e) {
-    handleApiError(e);
-  }
 }
 
 async function recordDraft(activity) {
@@ -1203,12 +1221,15 @@ async function recordDraft(activity) {
   const screenshotKey = `draft-${Date.now()}`;
   await saveScreenshot(screenshotKey, dataUrl);
 
-  // Show loading state for AI assessment
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Evaluating your work...</p>
-    </div>`;
+  // Show in-chat thinking state for AI assessment
+  const chat = document.querySelector('.chat');
+  const compose = document.querySelector('.chat-compose');
+  if (chat) {
+    chat.insertAdjacentHTML('beforeend',
+      `<div class="msg msg-response" id="record-thinking" role="status" aria-live="polite"><span class="loading-spinner-inline" aria-hidden="true"></span> Evaluating your work...</div>`);
+    chat.scrollTop = chat.scrollHeight;
+  }
+  if (compose) compose.hidden = true;
 
   try {
     const course = state.courses.find((c) => c.courseId === state.activeCourseId);
@@ -1346,9 +1367,30 @@ async function saveProfileResult(existing, result) {
   syncInBackground('profile', 'profileSummary');
 }
 
-async function updateProfileInBackground(assessmentResult, course, activity) {
-  try {
-    const profile = await getLearnerProfile() || defaultProfile();
+// Profile update queue — prevents concurrent updates from overwriting each other
+let _profileUpdateQueue = Promise.resolve();
+
+function queueProfileUpdate(fn) {
+  _profileUpdateQueue = _profileUpdateQueue.then(fn).catch(e => {
+    console.warn('Profile update failed (non-blocking):', e);
+  });
+  return _profileUpdateQueue;
+}
+
+async function ensureProfileExists() {
+  let profile = await getLearnerProfile();
+  if (!profile) {
+    profile = defaultProfile();
+    profile.name = state.preferences?.name || '';
+    await saveLearnerProfile(profile);
+    await saveLearnerProfileSummary('New learner — profile will be built as they learn.');
+  }
+  return profile;
+}
+
+function updateProfileInBackground(assessmentResult, course, activity) {
+  queueProfileUpdate(async () => {
+    const profile = await ensureProfileExists();
     const result = await orchestrator.updateLearnerProfile(profile, assessmentResult, {
       courseName: course.name,
       activityType: activity.type,
@@ -1359,14 +1401,12 @@ async function updateProfileInBackground(assessmentResult, course, activity) {
       trigger: 'assessment', strengthsCount: result?.profile?.strengths?.length || 0,
       weaknessesCount: result?.profile?.weaknesses?.length || 0,
     });
-  } catch (e) {
-    console.warn('Learner profile update failed (non-blocking):', e);
-  }
+  });
 }
 
-async function updateProfileFromFeedbackInBackground(feedbackText, course, activity) {
-  try {
-    const profile = await getLearnerProfile() || defaultProfile();
+function updateProfileFromFeedbackInBackground(feedbackText, course, activity) {
+  queueProfileUpdate(async () => {
+    const profile = await ensureProfileExists();
     const result = await orchestrator.updateProfileFromFeedback(profile, feedbackText, {
       courseName: course.name,
       activityType: activity.type,
@@ -1377,14 +1417,12 @@ async function updateProfileFromFeedbackInBackground(feedbackText, course, activ
       trigger: 'feedback', strengthsCount: result?.profile?.strengths?.length || 0,
       weaknessesCount: result?.profile?.weaknesses?.length || 0,
     });
-  } catch (e) {
-    console.warn('Learner profile feedback update failed (non-blocking):', e);
-  }
+  });
 }
 
-async function updateProfileOnCourseCompletionInBackground(course, progress) {
-  try {
-    const profile = await getLearnerProfile() || defaultProfile();
+function updateProfileOnCourseCompletionInBackground(course, progress) {
+  queueProfileUpdate(async () => {
+    const profile = await ensureProfileExists();
     const result = await orchestrator.updateProfileOnCourseCompletion(profile, course, progress);
     await saveProfileResult(profile, result);
     trackEvent('profile_updated', {
@@ -1392,9 +1430,7 @@ async function updateProfileOnCourseCompletionInBackground(course, progress) {
       strengthsCount: result?.profile?.strengths?.length || 0,
       weaknessesCount: result?.profile?.weaknesses?.length || 0,
     });
-  } catch (e) {
-    console.warn('Learner profile course-completion update failed (non-blocking):', e);
-  }
+  });
 }
 
 // -- Onboarding ---------------------------------------------------------------
@@ -1402,7 +1438,7 @@ async function updateProfileOnCourseCompletionInBackground(course, progress) {
 async function renderOnboarding() {
   const main = $main();
 
-  const dots = (active) => [1, 2, 3, 4].map(i =>
+  const dots = (active) => [1, 2, 3].map(i =>
     `<span class="dot${i === active ? ' dot-active' : ''}" aria-hidden="true"></span>`
   ).join('');
 
@@ -1459,8 +1495,8 @@ async function renderOnboarding() {
   } else if (_onboardingStep === 2) {
     main.innerHTML = `
       <div class="onboarding">
-        <div class="onboarding-dots" role="progressbar" aria-label="Step 1 of 4" aria-valuenow="1" aria-valuemin="1" aria-valuemax="4">${dots(1)}</div>
-        <span class="onboarding-step-label">Step 1 of 4</span>
+        <div class="onboarding-dots" role="progressbar" aria-label="Step 1 of 3" aria-valuenow="1" aria-valuemin="1" aria-valuemax="4">${dots(1)}</div>
+        <span class="onboarding-step-label">Step 1 of 3 — Your Name</span>
         <h2>What's your name?</h2>
         <p class="onboarding-lead">Let's start with your name.</p>
         <label for="onboarding-name" class="sr-only">Your name</label>
@@ -1480,80 +1516,13 @@ async function renderOnboarding() {
     $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
 
   } else if (_onboardingStep === 3) {
-    main.innerHTML = `
-      <div class="onboarding">
-        <div class="onboarding-dots" role="progressbar" aria-label="Step 2 of 4" aria-valuenow="2" aria-valuemin="1" aria-valuemax="4">${dots(2)}</div>
-        <span class="onboarding-step-label">Step 2 of 4</span>
-        <h2>Hi, ${esc(_onboardingData.name)}.</h2>
-        <p class="onboarding-lead">What brings you here? What do you want to build, become, or achieve?</p>
-        <label for="onboarding-statement" class="sr-only">Your purpose</label>
-        <textarea id="onboarding-statement" rows="4" class="feedback-textarea" placeholder="I want to...">${esc(_onboardingData.statement || '')}</textarea>
-        <p class="onboarding-hint">Cmd/Ctrl+Enter to continue</p>
-        <div class="action-bar">
-          <button id="onboarding-back" class="secondary-btn">Back</button>
-          <button id="onboarding-next" class="primary-btn">Continue</button>
-        </div>
-      </div>`;
-
-    const textarea = $('#onboarding-statement');
-    textarea.focus();
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); advanceOnboarding(3); }
-    });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 2; animateMain('view-slide-right'); renderOnboarding(); });
-    $('#onboarding-next').addEventListener('click', () => advanceOnboarding(3));
-
-  } else if (_onboardingStep === 4) {
-    main.innerHTML = `
-      <div class="onboarding">
-        <div class="onboarding-dots" role="progressbar" aria-label="Step 3 of 4" aria-valuenow="3" aria-valuemin="1" aria-valuemax="4">${dots(3)}</div>
-        <span class="onboarding-step-label">Step 3 of 4</span>
-        <h2>Help us improve.</h2>
-        <p class="onboarding-lead">Share anonymous usage data to help make 1111 better for everyone.</p>
-        <div class="onboarding-share-section">
-          <div class="onboarding-share-group">
-            <p class="onboarding-share-heading">What's shared</p>
-            <ul class="onboarding-share-list">
-              <li class="share-yes">Activity interactions &amp; AI responses</li>
-              <li class="share-yes">Your feedback text and scores</li>
-            </ul>
-          </div>
-          <div class="onboarding-share-group">
-            <p class="onboarding-share-heading">Never shared</p>
-            <ul class="onboarding-share-list">
-              <li class="share-no">Screenshots</li>
-              <li class="share-no">Your API key</li>
-            </ul>
-          </div>
-        </div>
-        <p class="onboarding-hint">You can change this anytime in Settings.</p>
-        <a class="onboarding-privacy-link" href="https://github.com/1111philo/learn-extension/blob/main/PRIVACY.md" target="_blank" rel="noopener">Full privacy policy →</a>
-        <div class="action-bar">
-          <button id="onboarding-skip" class="consent-decline-btn">&#10005; No thanks</button>
-          <button id="onboarding-consent" class="consent-accept-btn">&#10003; I'm in</button>
-        </div>
-      </div>`;
-
-    $('#onboarding-skip').addEventListener('click', () => {
-      _onboardingData.dataSharing = false;
-      _onboardingStep = 5;
-      animateMain('view-slide-left');
-      renderOnboarding();
-    });
-    $('#onboarding-consent').addEventListener('click', () => {
-      _onboardingData.dataSharing = true;
-      _onboardingStep = 5;
-      animateMain('view-slide-left');
-      renderOnboarding();
-    });
-
-  } else if (_onboardingStep === 5) {
+    // API key step (moved earlier so chat step can use AI)
     const hasKey = !!(await getApiKey());
 
     main.innerHTML = `
       <div class="onboarding">
-        <div class="onboarding-dots" role="progressbar" aria-label="Step 4 of 4" aria-valuenow="4" aria-valuemin="1" aria-valuemax="4">${dots(4)}</div>
-        <span class="onboarding-step-label">Step 4 of 4</span>
+        <div class="onboarding-dots" role="progressbar" aria-label="Step 2 of 3" aria-valuenow="2" aria-valuemin="1" aria-valuemax="4">${dots(2)}</div>
+        <span class="onboarding-step-label">Step 2 of 3 — API Key</span>
         <h2>Connect your AI.</h2>
         <p class="onboarding-lead">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.</p>
         <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
@@ -1561,7 +1530,7 @@ async function renderOnboarding() {
         <div id="onboarding-key-error" role="alert" aria-live="polite" class="onboarding-error"></div>
         <div class="action-bar">
           <button id="onboarding-back" class="secondary-btn">Back</button>
-          <button id="onboarding-finish" class="primary-btn">Get started</button>
+          <button id="onboarding-next" class="primary-btn">Continue</button>
         </div>
       </div>`;
 
@@ -1577,10 +1546,79 @@ async function renderOnboarding() {
       });
     }
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); completeOnboarding(); }
+      if (e.key === 'Enter') { e.preventDefault(); saveApiKeyAndAdvance(); }
     });
-    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 4; animateMain('view-slide-right'); renderOnboarding(); });
-    $('#onboarding-finish').addEventListener('click', () => completeOnboarding());
+    $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 2; animateMain('view-slide-right'); renderOnboarding(); });
+    $('#onboarding-next').addEventListener('click', () => saveApiKeyAndAdvance());
+
+  } else if (_onboardingStep === 4) {
+    // Multi-turn chat to get to know the learner
+    if (!_onboardingData.messages) _onboardingData.messages = [];
+    const initialGreeting = `Hi, ${_onboardingData.name}. What brings you here? What do you want to build, become, or achieve?`;
+    const initialMsg = renderConversationMessages(_onboardingData.messages || [], initialGreeting);
+
+    const showContinue = _onboardingData.profileDone;
+    const userMsgCount = (_onboardingData.messages || []).filter(m => m.role === 'user').length;
+    const hasExchanged = userMsgCount >= 2;
+
+    main.innerHTML = `
+      <div class="onboarding" style="padding-bottom: 0;">
+        <div class="onboarding-dots" role="progressbar" aria-label="Step 3 of 3" aria-valuenow="3" aria-valuemin="1" aria-valuemax="4">${dots(3)}</div>
+        <span class="onboarding-step-label">Step 3 of 3 — About You</span>
+        <div class="chat" role="log" aria-label="Getting to know you" id="onboarding-chat">
+          ${initialMsg}
+          ${hasExchanged && !showContinue ? '<button id="onboarding-skip" class="skip-step-btn">Skip to next step</button>' : ''}
+          ${showContinue ? '<button id="onboarding-next-chat" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue to next step</button>' : ''}
+        </div>
+        <div class="chat-compose" id="onboarding-compose">
+          <div class="compose-input-row">
+            <label for="onboarding-input" class="sr-only">Your response</label>
+            <textarea id="onboarding-input" class="chat-input" rows="1" placeholder="${showContinue ? 'Say more or ask a question...' : 'I want to...'}"></textarea>
+            <button id="onboarding-send" class="send-btn" aria-label="Send"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 14V9l10-1L3 7V2l13 6z"/></svg></button>
+          </div>
+        </div>
+      </div>`;
+
+    const chatInput = $('#onboarding-input');
+    chatInput.focus();
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+    });
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendOnboardingMessage(); }
+    });
+    $('#onboarding-send').addEventListener('click', () => sendOnboardingMessage());
+
+    const advanceOnboardingChat = () => {
+      // Save profile in background — don't block navigation
+      if (!_onboardingData.profileDone) {
+        const msgs = _onboardingData.messages || [];
+        const userText = msgs.filter(m => m.role === 'user').map(m => m.content).join(' ');
+        if (userText || _onboardingData.name) {
+          queueProfileUpdate(async () => {
+            const result = await orchestrator.initializeLearnerProfile(
+              _onboardingData.name, userText || 'No details provided.'
+            );
+            result.profile.createdAt = Date.now();
+            result.profile.updatedAt = Date.now();
+            await saveLearnerProfile(result.profile);
+            await saveLearnerProfileSummary(result.summary);
+            syncInBackground('profile', 'profileSummary');
+          });
+        }
+      }
+      completeOnboarding();
+    };
+
+    $('#onboarding-skip')?.addEventListener('click', advanceOnboardingChat);
+    $('#onboarding-next-chat')?.addEventListener('click', advanceOnboardingChat);
+    // Scroll to bottom if there's conversation history
+    if ((_onboardingData.messages || []).length > 0) {
+      const main2 = $main();
+      main2.scrollTop = main2.scrollHeight;
+    }
+
   }
 }
 
@@ -1590,17 +1628,12 @@ function advanceOnboarding(fromStep) {
     if (!name) { $('#onboarding-name').focus(); return; }
     _onboardingData.name = name;
     _onboardingStep = 3;
-  } else if (fromStep === 3) {
-    const statement = $('#onboarding-statement')?.value?.trim();
-    if (!statement) { $('#onboarding-statement').focus(); return; }
-    _onboardingData.statement = statement;
-    _onboardingStep = 4;
   }
   animateMain('view-slide-left');
   renderOnboarding();
 }
 
-async function completeOnboarding() {
+async function saveApiKeyAndAdvance() {
   const keyInput = $('#onboarding-apikey');
   const rawValue = keyInput?.value?.trim();
   const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
@@ -1613,40 +1646,89 @@ async function completeOnboarding() {
     return;
   }
   await saveApiKey(key);
+  _onboardingStep = 4;
+  animateMain('view-slide-left');
+  renderOnboarding();
+}
+
+async function sendOnboardingMessage() {
+  const input = $('#onboarding-input');
+  const text = input?.value?.trim();
+  if (!text) { input?.focus(); return; }
+
+  const chat = $('#onboarding-chat');
+  const compose = $('#onboarding-compose');
+
+  // Add user message to chat + conversation history
+  _onboardingData.messages.push({ role: 'user', content: text });
+  const thinkingId = `onboarding-thinking-${Date.now()}`;
+  chat.insertAdjacentHTML('beforeend',
+    `<div class="msg msg-user"><p>${esc(text)}</p></div>
+     <div class="msg msg-response" id="${thinkingId}" role="status" aria-live="polite">
+       <span class="loading-spinner-inline" aria-hidden="true"></span>
+       <span>${_onboardingData.messages.length <= 1 ? 'Getting to know you...' : 'Thinking...'}</span>
+     </div>`);
+  chat.scrollTop = chat.scrollHeight;
+
+  input.value = '';
+  input.disabled = true;
+  const sendBtn = $('#onboarding-send');
+  if (sendBtn) sendBtn.disabled = true;
+
+  try {
+    // Build messages with name context folded into the first user message
+    const msgs = _onboardingData.messages.map((m, i) =>
+      i === 0 && m.role === 'user'
+        ? { role: 'user', content: `My name is ${_onboardingData.name}. ${m.content}` }
+        : m
+    );
+    const result = await orchestrator.converse('onboarding-conversation', msgs, 1024);
+
+    // Add assistant response to history
+    _onboardingData.messages.push({ role: 'assistant', content: JSON.stringify(result) });
+
+    // Show response
+    const thinkingEl = document.getElementById(thinkingId);
+    thinkingEl.textContent = '';
+    thinkingEl.insertAdjacentHTML('beforeend', `<p>${esc(result.message)}</p>`);
+
+    if (result.done) {
+      // Save profile
+      const profile = result.profile || {};
+      profile.name = _onboardingData.name;
+      profile.createdAt = Date.now();
+      profile.updatedAt = Date.now();
+      await saveLearnerProfile(profile);
+      await saveLearnerProfileSummary(result.summary || result.message);
+      syncInBackground('profile', 'profileSummary');
+      _onboardingData.profileDone = true;
+    }
+  } catch (e) {
+    console.warn('Onboarding conversation failed:', e);
+    try {
+      const thinkingEl = document.getElementById(thinkingId);
+      if (thinkingEl) {
+        thinkingEl.textContent = '';
+        thinkingEl.insertAdjacentHTML('beforeend', `<p>No worries — let's keep going!</p>`);
+      }
+    } catch { /* DOM may have changed */ }
+    _onboardingData.profileDone = true;
+  }
+
+  // Persist conversation state
+  saveOnboardingState({ name: _onboardingData.name, messages: _onboardingData.messages, profileDone: _onboardingData.profileDone });
+
+  // Re-render to update compose bar (show Continue if done)
+  input.disabled = false;
+  if (sendBtn) sendBtn.disabled = false;
+  renderOnboarding();
+}
+
+async function completeOnboarding() {
   state.preferences = { ...(state.preferences || {}), name: _onboardingData.name };
   await savePreferences(state.preferences);
-
-  if (_onboardingData.dataSharing) {
-    await saveDevMode(true);
-    trackEvent('session_start', {
-      extensionVersion: chrome.runtime.getManifest().version,
-      platform: navigator.platform,
-    });
-  }
-
-  const main = $main();
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Creating your profile...</p>
-    </div>`;
-
-  // Initialize learner profile from name + statement (non-blocking on error)
-  try {
-    const result = await orchestrator.initializeLearnerProfile(
-      _onboardingData.name, _onboardingData.statement
-    );
-    // Stamp timestamps
-    result.profile.createdAt = Date.now();
-    result.profile.updatedAt = Date.now();
-    await saveLearnerProfile(result.profile);
-    await saveLearnerProfileSummary(result.summary);
-    syncInBackground('profile', 'profileSummary');
-  } catch (e) {
-    console.warn('Profile initialization failed (non-blocking):', e);
-  }
-
   await saveOnboardingComplete();
+  await clearOnboardingState();
   _onboardingStep = 1;
   _onboardingData = {};
   state.view = 'courses';
@@ -1655,74 +1737,6 @@ async function completeOnboarding() {
 
 // -- Diagnostic ---------------------------------------------------------------
 
-async function renderDiagnosticChoice() {
-  const main = $main();
-  const course = state.courses.find(c => c.courseId === state.activeCourseId);
-
-  if (state.diagnosticPhase === 'activity') {
-    const activity = state.diagnosticActivity;
-    main.innerHTML = `
-      <div class="course-header">
-        <button class="back-btn" id="diag-back-btn" aria-label="Back to courses">&larr;</button>
-        <div class="course-header-info">
-          <h2>Skills Check</h2>
-          <span class="progress-label">${esc(course.name)}</span>
-        </div>
-      </div>
-      <div class="chat" role="log" aria-label="Skills check activity">
-        ${instructionMessage(activity.instruction)}
-        ${activity.tips?.length ? `<div class="msg msg-app" style="font-size: 0.8rem; color: var(--color-text-secondary);">${activity.tips.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
-      </div>
-      <label for="diagnostic-response" class="sr-only">Your response</label>
-      <textarea id="diagnostic-response" class="feedback-textarea" rows="6" placeholder="Type your response here... (⌘/Ctrl+Enter to submit)" style="margin-top: var(--space); resize: vertical;"></textarea>
-      <div class="action-bar">
-        <button id="diag-feedback-btn" class="secondary-btn" aria-label="Give feedback on this activity">Add Feedback</button>
-        <button id="submit-diagnostic-btn" class="primary-btn">Submit</button>
-      </div>`;
-
-    $('#diag-back-btn').addEventListener('click', () => navigate('courses'));
-    $('#diagnostic-response').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitDiagnosticResponse(course, activity); }
-    });
-    $('#submit-diagnostic-btn').addEventListener('click', () => submitDiagnosticResponse(course, activity));
-    $('#diag-feedback-btn').addEventListener('click', () => showDiagnosticFeedback(course, activity));
-
-  } else if (state.diagnosticPhase === 'result') {
-    const result = state.pendingDiagnosticResult.result;
-    const score = result.score || 0;
-    const conclusion = score >= 0.8
-      ? "You have strong existing knowledge here. Your course will focus on refinement and the final deliverable."
-      : score >= 0.5
-        ? "You have a working foundation. Your course will skip the basics and target the gaps."
-        : "You're starting from scratch. Your course will build this skill step by step.";
-
-    main.innerHTML = `
-      <div class="course-header">
-        <button class="back-btn" id="diag-back-btn" aria-label="Back to courses">&larr;</button>
-        <div class="course-header-info">
-          <h2>Skills Check</h2>
-          <span class="progress-label">${esc(course.name)}</span>
-        </div>
-      </div>
-      <div class="chat" role="log" aria-label="Skills check result">
-        <div class="msg msg-app">
-          <p>${esc(result.feedback)}</p>
-        </div>
-        <p style="font-size: 0.85rem; color: var(--color-text-secondary); padding: 0 var(--space-sm);">${esc(conclusion)}</p>
-      </div>
-      <div class="action-bar">
-        <button id="diag-appeal-btn" class="secondary-btn">Add Feedback</button>
-        <button id="start-course-btn" class="primary-btn">Start Course</button>
-      </div>`;
-
-    $('#diag-back-btn').addEventListener('click', () => navigate('courses'));
-    $('#start-course-btn').addEventListener('click', () => {
-      state.skipDiagnosticFor = state.activeCourseId;
-      startOrResumeCourse(state.activeCourseId);
-    });
-    $('#diag-appeal-btn').addEventListener('click', () => showDiagnosticAppeal(course));
-  }
-}
 
 function showProfileFeedback() {
   showModal(`
@@ -1770,161 +1784,114 @@ function showProfileFeedback() {
   }
 }
 
-function showDiagnosticFeedback(course, activity) {
-  showModal(`
-    <h2>Adjust Skills Check</h2>
-    <p>What's wrong with this activity? It will be regenerated to address your feedback.</p>
-    <label for="diag-feedback-input" class="sr-only">Your feedback</label>
-    <textarea id="diag-feedback-input" rows="3" class="feedback-textarea" placeholder="e.g. I'm not familiar with this topic at all (⌘/Ctrl+Enter to submit)"></textarea>
-    <div class="action-bar">
-      <button id="cancel-diag-feedback-btn" class="secondary-btn">Cancel</button>
-      <button id="submit-diag-feedback-btn" class="primary-btn">Regenerate</button>
-    </div>`, 'dialog', 'Skills check feedback');
+async function sendDiagnosticMessage(course) {
+  const input = $('#diagnostic-response');
+  const text = input?.value?.trim();
+  if (!text) { input?.focus(); return; }
 
-  $('#diag-feedback-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); regenerateDiagnosticActivity(course, activity); }
-  });
-  $('#cancel-diag-feedback-btn').addEventListener('click', hideModal);
-  $('#submit-diag-feedback-btn').addEventListener('click', () => regenerateDiagnosticActivity(course, activity));
-}
+  const activity = state.diagnostic.activity;
+  const chat = document.querySelector('.chat');
+  const compose = document.querySelector('.chat-compose');
 
-async function regenerateDiagnosticActivity(course, activity) {
-  const feedbackText = $('#diag-feedback-input')?.value?.trim();
-  if (!feedbackText) return;
-  hideModal();
-  const main = $main();
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Regenerating skills check...</p>
-    </div>`;
+  // Add user message to conversation history
+  state.diagnostic.messages.push({ role: 'user', content: text });
+  const diagThinkingId = `diag-thinking-${Date.now()}`;
+  chat.insertAdjacentHTML('beforeend',
+    `<div class="msg msg-user"><p>${esc(text)}</p></div>
+     <div class="msg msg-response" id="${diagThinkingId}" role="status" aria-live="polite">
+       <span class="loading-spinner-inline" aria-hidden="true"></span> ${state.diagnostic.messages.length <= 1 ? 'Assessing your skills...' : 'Thinking...'}
+     </div>`);
+  chat.scrollTop = chat.scrollHeight;
+
+  input.value = '';
+  input.disabled = true;
+  const sendBtn = $('#submit-diagnostic-btn');
+  if (sendBtn) sendBtn.disabled = true;
 
   try {
-    const profileSummary = await getLearnerProfileSummary();
-    const generated = await orchestrator.regenerateActivity(
-      course,
-      { type: activity.type, goal: activity.goal },
-      [],
-      profileSummary,
-      activity.instruction,
-      activity.tips,
-      feedbackText,
-      {}
-    );
-    state.diagnosticActivity = {
-      ...activity,
-      instruction: generated.instruction,
-      tips: generated.tips,
-      changeNote: generated.changeNote || null
-    };
-    trackEvent('diagnostic_activity_regenerated', {
-      courseId: course.courseId,
-      activityGoal: activity.goal,
-      originalInstruction: activity.instruction,
-      learnerFeedback: feedbackText,
-      newInstruction: generated.instruction,
-    });
-    render();
+    // Build context for the conversational diagnostic agent
+    const courseContext = `Course: ${course.name}\nDescription: ${course.description || ''}\nObjectives: ${(course.learningObjectives || []).map(o => o.name).join(', ')}`;
+    const result = await orchestrator.converse('diagnostic-conversation', [
+      { role: 'user', content: courseContext },
+      { role: 'assistant', content: JSON.stringify({ message: activity.instruction, done: false }) },
+      ...state.diagnostic.messages
+    ], 1024);
+
+    // Add assistant response to history
+    state.diagnostic.messages.push({ role: 'assistant', content: JSON.stringify(result) });
+
+    // Show response
+    const thinkingEl = document.getElementById(diagThinkingId);
+    thinkingEl.textContent = '';
+    thinkingEl.insertAdjacentHTML('beforeend', `<p>${esc(result.message)}</p>`);
+
+    // Persist conversation state
+    saveDiagnosticState(state.diagnostic);
+
+    if (result.done) {
+      // Save diagnostic result and start course
+      const diagnosticResult = {
+        score: result.score || 0,
+        feedback: result.feedback || result.message,
+        strengths: result.strengths || [],
+        improvements: result.improvements || [],
+        recommendation: 'advance',
+        passed: true
+      };
+      state.diagnostic.result = { courseId: course.courseId, result: diagnosticResult };
+
+      trackEvent('diagnostic_assessed', {
+        courseId: course.courseId,
+        activityGoal: activity.goal,
+        score: diagnosticResult.score,
+        feedback: diagnosticResult.feedback,
+        strengths: diagnosticResult.strengths,
+        improvements: diagnosticResult.improvements,
+        recommendation: diagnosticResult.recommendation,
+      });
+      updateProfileInBackground(diagnosticResult, course, activity);
+
+      // Auto-start course after brief pause
+      state.diagnostic.phase = null;
+      state.diagnostic.skipFor = state.activeCourseId;
+      startOrResumeCourse(state.activeCourseId);
+      return;
+    }
+
+    // Not done — re-enable compose for next message
+    // Inject skip button after 2 user messages (since we don't re-render)
+    const userCount = state.diagnostic.messages.filter(m => m.role === 'user').length;
+    const existingSkip = document.getElementById('skip-diagnostic-btn');
+    if (userCount >= 2 && !existingSkip) {
+      chat.insertAdjacentHTML('beforeend',
+        '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to course</button>');
+      $('#skip-diagnostic-btn').addEventListener('click', () => skipDiagnostic(course));
+    }
+
+    input.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+    input.focus();
+    chat.scrollTop = chat.scrollHeight;
   } catch (e) {
-    handleApiError(e);
+    console.warn('Diagnostic conversation failed:', e);
+    try {
+      const thinkingEl = document.getElementById(diagThinkingId);
+      if (thinkingEl) {
+        thinkingEl.textContent = '';
+        thinkingEl.insertAdjacentHTML('beforeend', `<p>Let's move on to the course.</p>`);
+      }
+    } catch { /* DOM may have changed */ }
+    // Skip diagnostic and start course
+    state.diagnostic.phase = null;
+    state.diagnostic.skipFor = state.activeCourseId;
+    startOrResumeCourse(state.activeCourseId);
   }
 }
 
-async function submitDiagnosticResponse(course, activity) {
-  const responseText = $('#diagnostic-response')?.value?.trim();
-  if (!responseText) {
-    showError('Please write a response before submitting.');
-    return;
-  }
-
-  const main = $main();
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Assessing your skills...</p>
-    </div>`;
-
-  state.diagnosticResponse = responseText;
-
-  try {
-    const profileSummary = await getLearnerProfileSummary();
-    const result = await orchestrator.assessTextResponse(course, activity, responseText, profileSummary);
-    state.pendingDiagnosticResult = { courseId: course.courseId, result };
-    state.diagnosticPhase = 'result';
-    trackEvent('diagnostic_assessed', {
-      courseId: course.courseId,
-      activityGoal: activity.goal,
-      score: result.score,
-      feedback: result.feedback,
-      strengths: result.strengths,
-      improvements: result.improvements,
-      recommendation: result.recommendation,
-    });
-    render();
-    updateProfileInBackground(result, course, activity);
-  } catch (e) {
-    handleApiError(e);
-  }
-}
-
-function showDiagnosticAppeal(course) {
-  showModal(`
-    <h2>Add Feedback</h2>
-    <p>Share any context that might help — the AI will re-evaluate your work with this in mind.</p>
-    <label for="diag-appeal-input" class="sr-only">Your context</label>
-    <textarea id="diag-appeal-input" rows="3" class="feedback-textarea" placeholder="e.g. I have 3 years of experience with this but wasn't sure what to write (⌘/Ctrl+Enter to submit)"></textarea>
-    <div class="action-bar">
-      <button id="cancel-appeal-btn" class="secondary-btn">Cancel</button>
-      <button id="submit-appeal-btn" class="primary-btn">Resubmit</button>
-    </div>`, 'dialog', 'Add feedback to skills check');
-
-  $('#diag-appeal-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitDiagnosticAppeal(course); }
-  });
-  $('#cancel-appeal-btn').addEventListener('click', hideModal);
-  $('#submit-appeal-btn').addEventListener('click', () => submitDiagnosticAppeal(course));
-}
-
-async function submitDiagnosticAppeal(course) {
-  const feedbackText = $('#diag-appeal-input')?.value?.trim();
-  if (!feedbackText) return;
-  hideModal();
-  const main = $main();
-  main.innerHTML = `
-    <div class="loading-container" role="status" aria-live="polite">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p>Re-evaluating...</p>
-    </div>`;
-
-  try {
-    const learnerResponse = state.diagnosticResponse || '';
-    const previousResult = state.pendingDiagnosticResult.result;
-    const profileSummary = await getLearnerProfileSummary();
-    const result = await orchestrator.reassessTextResponse(
-      course, state.diagnosticActivity, learnerResponse,
-      profileSummary, previousResult, feedbackText
-    );
-    state.pendingDiagnosticResult = { courseId: course.courseId, result };
-    trackEvent('diagnostic_appeal', {
-      courseId: course.courseId,
-      activityGoal: state.diagnosticActivity?.goal,
-      learnerFeedback: feedbackText,
-      originalAssessment: previousResult,
-      revisedAssessment: {
-        feedback: result.feedback,
-        strengths: result.strengths,
-        improvements: result.improvements,
-        score: result.score,
-        recommendation: result.recommendation,
-      },
-      originalScore: previousResult?.score,
-      revisedScore: result.score,
-      scoreChanged: previousResult?.score !== result.score,
-    });
-    render();
-  } catch (e) {
-    handleApiError(e);
-  }
+function skipDiagnostic(course) {
+  state.diagnostic.phase = null;
+  state.diagnostic.skipFor = state.activeCourseId;
+  startOrResumeCourse(state.activeCourseId);
 }
 
 // -- Work ---------------------------------------------------------------------
@@ -2106,7 +2073,6 @@ async function renderSettings() {
   const prefs = state.preferences;
   const hasKey = await orchestrator.isReady();
   const profileSummary = await getLearnerProfileSummary();
-  const devModeOn = await getDevMode();
   const loggedIn = await auth.isLoggedIn();
 
   main.innerHTML = `
@@ -2154,26 +2120,7 @@ async function renderSettings() {
       <button class="secondary-btn profile-feedback-btn" id="profile-feedback-btn">Add Feedback</button>
     </div>
 
-    <hr>
-    <div class="settings-section">
-      <h3>Data Management</h3>
-      ${loggedIn ? `<div class="settings-managed-banner" role="status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 10.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM8.75 7a.75.75 0 0 1-1.5 0V4.5a.75.75 0 0 1 1.5 0V7Z" fill="currentColor"/></svg>Your data is managed by your 1111 Learn account. Sign out to manage data locally.</div>` : ''}
-      <div class="toggle-row">
-        <label for="dev-mode-toggle">Share data with 11:11</label>
-        <input type="checkbox" id="dev-mode-toggle" role="switch" ${devModeOn ? 'checked' : ''} ${loggedIn ? 'disabled' : ''}>
-      </div>
-      <p class="settings-hint">Logs agent interactions locally and sends anonymous telemetry to help improve the extension. Screenshots and API keys are never sent, but feedback text you write may be included. You can disable this at any time.</p>
-    </div>
-    <div class="settings-actions">
-      <button id="export-btn" class="settings-action-btn" ${loggedIn ? 'disabled' : ''}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3 3-3M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Export data as JSON
-      </button>
-      <button id="delete-all-btn" class="settings-action-btn settings-action-danger" ${loggedIn ? 'disabled' : ''}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 0 1 1.34-1.34h2.66a1.33 1.33 0 0 1 1.34 1.34V4m2 0v9.33a1.33 1.33 0 0 1-1.34 1.34H4.67a1.33 1.33 0 0 1-1.34-1.34V4h9.34Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Delete all data
-      </button>
-    </div>`;
+    `;
 
   // API key (only interactive when not logged in)
   if (!loggedIn) {
@@ -2216,83 +2163,6 @@ async function renderSettings() {
   // Learner profile feedback
   $('#profile-feedback-btn').addEventListener('click', () => showProfileFeedback());
 
-  // Data sharing toggle with consent notice
-  $('#dev-mode-toggle').addEventListener('change', async (e) => {
-    if (e.target.checked) {
-      // Show consent notice before enabling
-      showModal(`
-  <h2>Share Data with 11:11?</h2>
-  <p>By enabling this, you consent to 11:11 Philosopher's Group collecting anonymous usage data to improve the extension.</p>
-  <p><strong>What is collected:</strong> agent prompts, AI responses, feedback text you write, scores, activity metadata, and error messages.</p>
-  <p><strong>What is never collected:</strong> screenshots and your API key.</p>
-  <p><strong>How it's stored:</strong> data is tied to a random anonymous ID (not your identity), sent to a secure server, and automatically deleted after 90 days.</p>
-  <p><strong>Your rights:</strong> you can withdraw consent at any time by turning this off. Disabling stops all future data collection. To request deletion of previously collected data, contact <a href="mailto:1111@philosophers.group">1111@philosophers.group</a> or <a href="https://github.com/1111philo/learn-extension/issues" target="_blank" rel="noopener">open an issue</a>.</p>
-  <p>See our <a href="https://github.com/1111philo/learn-extension/blob/main/PRIVACY.md" target="_blank" rel="noopener">privacy policy</a> for full details.</p>
-  <div class="action-bar">
-    <button id="cancel-devmode-btn" class="secondary-btn">Cancel</button>
-    <button id="confirm-devmode-btn" class="primary-btn">I Agree</button>
-  </div>`, 'alertdialog', 'Data sharing consent');
-      $('#cancel-devmode-btn').addEventListener('click', () => { e.target.checked = false; hideModal(); });
-      $('#confirm-devmode-btn').addEventListener('click', async () => {
-        hideModal();
-        await saveDevMode(true);
-        trackEvent('session_start', {
-          extensionVersion: chrome.runtime.getManifest().version,
-          platform: navigator.platform,
-        });
-        announce('Data sharing on');
-        renderSettings();
-      });
-    } else {
-      await saveDevMode(false);
-      flushNow();
-      announce('Data sharing off');
-    }
-  });
-
-  // Export
-  $('#export-btn').addEventListener('click', async () => {
-    const data = await exportAllData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '1111-export.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    announce('Data exported.');
-  });
-
-  // Delete all data
-  $('#delete-all-btn').addEventListener('click', () => {
-    showModal(`
-  <h2>Delete all data?</h2>
-  <p>This will permanently erase all courses progress, drafts, screenshots, preferences, learner profile, and API key. This cannot be undone.</p>
-  <div class="action-bar">
-    <button id="cancel-delete-btn" class="secondary-btn">Cancel</button>
-    <button id="confirm-delete-btn" class="danger-btn">Delete Everything</button>
-  </div>`, 'alertdialog', 'Confirm delete all data');
-
-    $('#cancel-delete-btn').addEventListener('click', hideModal);
-    $('#confirm-delete-btn').addEventListener('click', async () => {
-      hideModal();
-      await chrome.storage.local.clear();
-      // Clear IndexedDB
-      try {
-        const dbs = await indexedDB.databases();
-        for (const db of dbs) {
-          if (db.name) indexedDB.deleteDatabase(db.name);
-        }
-      } catch { /* indexedDB.databases() not supported in all contexts */ }
-      state.preferences = { name: '' };
-      state.allProgress = {};
-      state.progress = null;
-      state.activeCourseId = null;
-      state.view = 'settings';
-      announce('All data deleted.');
-      render();
-    });
-  });
 }
 
 function showFormFeedback(id, msg) {
@@ -2364,6 +2234,24 @@ function appMessage(text) {
   return `<div class="msg msg-app"><p>${esc(text)}</p></div>`;
 }
 
+/** Render a conversation message array to HTML. Parses assistant JSON for .message field. */
+function renderConversationMessages(messages, initialMessage) {
+  let html = '';
+  if (initialMessage) {
+    html += `<div class="msg msg-response"><p>${renderMd(initialMessage)}</p></div>`;
+  }
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      html += `<div class="msg msg-user"><p>${esc(msg.content)}</p></div>`;
+    } else {
+      let text = msg.content;
+      try { text = JSON.parse(msg.content).message || text; } catch { /* use raw content */ }
+      html += `<div class="msg msg-response"><p>${renderMd(text)}</p></div>`;
+    }
+  }
+  return html;
+}
+
 function instructionMessage(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   let intro = '';
@@ -2380,17 +2268,17 @@ function instructionMessage(text) {
     }
   }
 
-  let html = '<div class="msg msg-app instruction-card">';
-  if (intro) html += `<p class="instruction-intro">${linkify(esc(intro))}</p>`;
+  let html = '<div class="msg msg-response instruction-card">';
+  if (intro) html += `<p class="instruction-intro">${renderMd(intro)}</p>`;
   if (steps.length > 0) {
     html += '<ol class="instruction-steps">';
     for (const step of steps) {
-      html += `<li>${linkify(esc(step))}</li>`;
+      html += `<li>${renderMd(step)}</li>`;
     }
     html += '</ol>';
   }
   if (!intro && steps.length === 0) {
-    html += `<p>${linkify(esc(text))}</p>`;
+    html += `<p>${renderMd(text)}</p>`;
   }
   html += '</div>';
   return html;
@@ -2411,15 +2299,15 @@ function draftMessage(draft) {
     </div>`;
 }
 
-function feedbackCard(draft) {
+function feedbackCard(draft, isLatest = false) {
   const scorePercent = Math.round((draft.score || 0) * 100);
   let recLabel = '';
   if (draft.recommendation === 'advance') recLabel = 'Ready to advance';
   else if (draft.recommendation === 'revise') recLabel = 'Revision recommended';
   else if (draft.recommendation === 'continue') recLabel = 'Acceptable -- revision optional';
 
-  let html = `<div class="msg msg-app feedback-card">
-    <p>${esc(draft.feedback)}</p>
+  let html = `<div class="msg msg-response feedback-card">
+    <p>${renderMd(draft.feedback)}</p>
     <div class="feedback-score">
       <span class="score-badge">${scorePercent}%</span>
       ${recLabel ? `<span class="rec-label rec-${draft.recommendation}">${esc(recLabel)}</span>` : ''}
@@ -2439,9 +2327,16 @@ function feedbackCard(draft) {
     </details>`;
   }
 
-  html += `<button class="dispute-btn" data-draft-id="${esc(draft.id)}" aria-label="Appeal this assessment">Appeal</button>`;
-
   html += '</div>';
+
+  // Action buttons only on the latest draft, and not when already passed
+  if (isLatest && draft.recommendation !== 'advance') {
+    html += `<div class="feedback-below-actions">
+      <button class="dispute-btn feedback-action-btn" data-draft-id="${esc(draft.id)}" aria-label="Dispute this assessment">Dispute</button>
+      <button class="rerecord-btn feedback-action-btn feedback-action-record" data-draft-id="${esc(draft.id)}" aria-label="Re-record your work">&#9679; Re-record</button>
+    </div>`;
+  }
+
   return html;
 }
 
@@ -2486,6 +2381,28 @@ function esc(s) {
   const el = document.createElement('span');
   el.textContent = s;
   return el.innerHTML;
+}
+
+/** Lightweight markdown to HTML. Handles bold, italic, headings, lists, and line breaks. */
+function renderMd(text) {
+  let escaped = esc(text);
+  // Headings (# to ###)
+  escaped = escaped.replace(/^### (.+)$/gm, '<strong style="font-size:0.85rem;">$1</strong>');
+  escaped = escaped.replace(/^## (.+)$/gm, '<strong style="font-size:0.9rem;">$1</strong>');
+  escaped = escaped.replace(/^# (.+)$/gm, '<strong style="font-size:0.95rem;">$1</strong>');
+  // Bold + italic
+  escaped = escaped.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Unordered lists
+  escaped = escaped.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
+  escaped = escaped.replace(/(<li>.*<\/li>\n?)+/g, '<ul style="margin:4px 0 4px 16px;">$&</ul>');
+  // Line breaks (double newline = paragraph break, single = <br>)
+  escaped = escaped.replace(/\n\n+/g, '</p><p>');
+  escaped = escaped.replace(/\n/g, '<br>');
+  // Linkify URLs
+  escaped = linkify(escaped);
+  return escaped;
 }
 
 /** Convert URLs in already-escaped text into clickable links. */

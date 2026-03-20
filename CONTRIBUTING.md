@@ -20,14 +20,19 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 
 ## Architecture
 
-The app uses six AI agents orchestrated through `js/orchestrator.js`:
+The app uses nine AI agents orchestrated through `js/orchestrator.js`:
 
-1. **Onboarding Profile Agent** -- creates an inspiring initial learner profile from name and personal statement
-2. **Diagnostic Agent** -- generates a skills check activity before every new course
-3. **Course Creation Agent** -- generates a learning plan skeleton, informed by the diagnostic result
-4. **Activity Creation Agent** -- generates detailed instructions per activity
-5. **Activity Assessment Agent** -- evaluates screenshots with vision
-6. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after assessments, diagnostics, feedback, and course completion
+1. **Onboarding Conversation Agent** -- multi-turn chat that gets to know the learner and builds their initial profile
+2. **Onboarding Profile Agent** -- creates an initial learner profile (fallback when conversation is skipped)
+3. **Diagnostic Agent** -- generates a skills check question before every new course
+4. **Diagnostic Conversation Agent** -- multi-turn chat that assesses prior knowledge through follow-up questions
+5. **Course Creation Agent** -- generates a learning plan skeleton, informed by the diagnostic result
+6. **Activity Creation Agent** -- generates detailed instructions per activity
+7. **Activity Assessment Agent** -- evaluates screenshots with vision
+8. **Activity Q&A Agent** -- answers learner questions about activities and assessments inline
+9. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after assessments, diagnostics, feedback, and course completion
+
+The entire course experience (diagnostic, setup, activities, assessments) happens in a single conversational chat interface. Multi-turn conversations use `orchestrator.converse()` with prompts in `prompts/`. One-off Q&A uses `orchestrator.chatWithContext()` with inline system prompts.
 
 All activity, assessment, and course plan outputs pass through deterministic validators before reaching the user. Validators check for format compliance, safety, and constraints (browser-only, single page, viewport-sized output, ends with "Record"). Course plans are validated for activity count matching learning objective count exactly, no consecutive duplicate activity types, and required fields.
 

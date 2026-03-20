@@ -156,6 +156,34 @@ export async function saveDevMode(enabled) {
   await chrome.storage.local.set(update);
 }
 
+// --- Conversation state (diagnostic + onboarding) ---
+
+export async function getDiagnosticState() {
+  const result = await chrome.storage.local.get('diagnosticState');
+  return result.diagnosticState || null;
+}
+
+export async function saveDiagnosticState(diagState) {
+  await chrome.storage.local.set({ diagnosticState: diagState });
+}
+
+export async function clearDiagnosticState() {
+  await chrome.storage.local.remove('diagnosticState');
+}
+
+export async function getOnboardingState() {
+  const result = await chrome.storage.local.get('onboardingState');
+  return result.onboardingState || null;
+}
+
+export async function saveOnboardingState(state) {
+  await chrome.storage.local.set({ onboardingState: state });
+}
+
+export async function clearOnboardingState() {
+  await chrome.storage.local.remove('onboardingState');
+}
+
 export async function getDevLog() {
   const result = await chrome.storage.local.get('devLog');
   return result.devLog || [];

@@ -13,6 +13,14 @@ const migrations = [
       // This migration exists to mark existing installs so future
       // migrations run from v2 onward.
     }
+  },
+  {
+    version: 2,
+    description: 'Add diagnosticState and onboardingState keys for conversation persistence',
+    async run() {
+      // No data transformation. These are new keys that default to null
+      // when absent (handled by getter functions in storage.js).
+    }
   }
 ];
 

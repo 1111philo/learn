@@ -6,26 +6,24 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 
 ## What it does
 
-1111 Learn guides learners through predefined courses using six AI agents powered by the Claude API. Each course produces one final work product. All data stays on the user's device.
+1111 Learn guides learners through predefined courses using nine AI agents powered by the Claude API. Each course produces one final work product. All data stays on the user's device.
 
 ### Key features
 
-- **Onboarding wizard** -- four-step first-run flow (name → personal statement → data consent → API key) that seeds an inspiring learner profile via AI
-- **Skills check** -- a mandatory diagnostic activity before every new course; the result personalizes the learning plan generated for that course
-- **AI-powered learning** -- six Claude agents handle onboarding, diagnostics, course creation, activity generation, assessment, and learner profile updates
+- **Conversational onboarding** -- four-step first-run flow (name → API key → multi-turn "about you" chat → data consent) that builds a learner profile through conversation
+- **Skills check** -- a multi-turn diagnostic conversation before every new course; the AI asks follow-up questions to gauge depth, then personalizes the learning plan
+- **AI-powered learning** -- nine Claude agents handle onboarding, diagnostics, course creation, activity generation, assessment, Q&A, and learner profile updates
 - **Course catalog** with prerequisite checking
 - **Personalized activity generation** adapted to the learner's profile, prior work, and diagnostic result
 - **AI assessment with vision** -- the Assessment Agent analyzes screenshots of your work and provides structured feedback with strengths, improvements, score, and a recommendation
 - **Output validation** -- deterministic validators check every agent response for safety, format compliance, and activity constraints (browser-only, single page, viewport-sized output, activity-to-objective count match) before showing it to the learner
 - **Learner profile** -- tracks your strengths, weaknesses, preferences, and learning patterns across courses; updated after assessments, diagnostic results, feedback, and course completion
-- **Activity feedback** -- submit feedback on any activity to regenerate it while keeping the same learning goal
+- **Activity Q&A** -- ask questions about any activity or assessment and get contextual answers from the AI coach
 - **Draft recording** -- captures a screenshot of the active tab, the page URL, and AI-generated feedback
 - **Iterative feedback** -- each activity builds on prior drafts and feedback
 - **Final assessment** -- the final work product must meet a minimum passing threshold
 - **Portfolio** -- work cards show progress bars and recording counts; tap into a Build Detail view with full draft timeline and on-demand screenshots
 - **Build narrative** -- activity type labels (Research, Practice, Draft, Deliver) and a completion summary card celebrate your process
-- **Share data with 11:11** -- toggle in Settings to log all agent interactions locally and send anonymous telemetry to 11:11 Philosopher's Group. Includes agent prompts, responses, feedback text you write, scores, and errors. Screenshots and API keys are never sent. Included in JSON export
-- **JSON export** -- export all saved data (metadata + screenshots + dev logs) at any time
 - **Keyboard shortcuts** -- Enter submits inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs
 - **Fully local** -- screenshots are stored in IndexedDB; metadata in `chrome.storage.local`. Only API calls to Anthropic are made (with the user's own key).
 - **Cloud sync** (optional) -- sign in via learn-service to sync your profile, preferences, progress, and portfolio across devices. Login is never required; everything works without an account. Admins can pre-assign API keys that auto-install on login.
@@ -39,7 +37,7 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the project folder.
 5. Click the 1111 extension icon to open the side panel.
-6. Complete the onboarding wizard: enter your name, a personal statement, consent to data sharing (optional), and your Anthropic API key.
+6. Complete the onboarding wizard: enter your name, your Anthropic API key, and chat with the AI about your goals (or skip).
 
 ## File structure
 
@@ -56,14 +54,18 @@ js/
   orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
+  auth.js                Authentication module for learn-service
+  sync.js                Cloud data sync (push/pull with optimistic locking)
   migrations.js          Forward-only data migration runner
 prompts/
+  onboarding-profile.md     System prompt for Onboarding Profile Agent (fallback)
+  onboarding-conversation.md System prompt for multi-turn onboarding chat
+  diagnostic-creation.md    System prompt for Diagnostic (Skills Check) Agent
+  diagnostic-conversation.md System prompt for multi-turn diagnostic chat
+  diagnostic-assessment.md  System prompt for Diagnostic Assessment Agent
   course-creation.md        System prompt for Course Creation Agent
   activity-creation.md      System prompt for Activity Creation Agent
   activity-assessment.md    System prompt for Activity Assessment Agent
-  diagnostic-creation.md    System prompt for Diagnostic (Skills Check) Agent
-  diagnostic-assessment.md  System prompt for Diagnostic Assessment Agent (evaluates skills check screenshots)
-  onboarding-profile.md     System prompt for Onboarding Profile Agent
   learner-profile-update.md System prompt for Learner Profile Agent
 data/
   courses.json           Predefined course definitions
@@ -127,12 +129,15 @@ Maintainers must add these secrets to the repository settings:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
-| Onboarding Profile | `claude-haiku-4-5` | Creates an inspiring initial learner profile from the user's name and personal statement |
-| Diagnostic (Skills Check) | `claude-haiku-4-5` | Generates a brief pre-course assessment activity to gauge prior knowledge |
+| Onboarding Conversation | `claude-haiku-4-5` | Multi-turn chat to get to know the learner and build their profile |
+| Onboarding Profile | `claude-haiku-4-5` | Creates an initial learner profile (fallback when conversation is skipped) |
+| Diagnostic (Skills Check) | `claude-haiku-4-5` | Generates the initial skills check question |
+| Diagnostic Conversation | `claude-haiku-4-5` | Multi-turn chat to assess prior knowledge through follow-ups |
 | Course Creation | `claude-haiku-4-5` | Generates a personalized learning plan informed by the diagnostic result |
 | Activity Creation | `claude-haiku-4-5` | Fills in detailed instructions for one activity at a time |
 | Activity Assessment | `claude-sonnet-4-6` | Evaluates screenshots with vision + provides structured feedback |
-| Learner Profile | `claude-haiku-4-5` | Incrementally updates learner profile after assessments, diagnostic results, and feedback |
+| Activity Q&A | `claude-haiku-4-5` | Answers learner questions about activities and assessments |
+| Learner Profile | `claude-haiku-4-5` | Incrementally updates learner profile after assessments, diagnostics, and feedback |
 
 Agent prompts are stored as markdown files in `prompts/` and can be edited without changing code. All activity and assessment outputs are validated before reaching the user.
 
@@ -168,14 +173,10 @@ Each course in `data/courses.json` has:
 
 ## Privacy
 
-1111 Learn is local-first. All learning data stays on your device by default. Optional anonymous telemetry can be enabled to help improve the extension. See our full [Privacy Policy](PRIVACY.md) for details.
+1111 Learn is local-first. All learning data stays on your device by default. See our full [Privacy Policy](PRIVACY.md) for details.
 
 - **Local by default**: course progress, screenshots, learner profile, and API key never leave your device.
-- **Opt-in telemetry**: "Share data with 11:11" in Settings sends anonymous usage data (agent I/O, feedback text, scores). Screenshots and API keys are never sent.
-- **Cloud sync** (optional): signing in via learn-service syncs your profile, preferences, progress, and portfolio to the cloud. Screenshots are never synced. Auth tokens are stored locally and refresh automatically.
-- **Anonymous**: telemetry data is tied to a random ID, not your identity.
-- **90-day retention**: telemetry is automatically deleted.
-- **Your rights**: withdraw consent anytime, request deletion via [1111@philosophers.group](mailto:1111@philosophers.group) or [open an issue](https://github.com/1111philo/learn-extension/issues).
+- **Cloud sync** (optional): signing in via learn-service syncs your profile, preferences, progress, and portfolio to the cloud. Screenshots are never synced. Telemetry is managed by the cloud service when signed in.
 
 API calls to Anthropic use your own key and are governed by [Anthropic's privacy policy](https://www.anthropic.com/privacy).
 

@@ -83,6 +83,40 @@ export async function isReady() {
 }
 
 /**
+ * Multi-turn conversation agent. Send a system prompt + message history,
+ * get back a parsed JSON response (typically { message, done, ...extras }).
+ */
+export async function converse(promptName, messages, maxTokens = 512) {
+  const apiKey = await requireKey();
+  const systemPrompt = await loadPrompt(promptName);
+
+  devLog('agent_request', { agent: promptName, messages });
+
+  const { content } = await callClaude({
+    apiKey,
+    model: MODEL_LIGHT,
+    systemPrompt,
+    messages,
+    maxTokens
+  });
+
+  const parsed = parseJSON(content);
+  devLog('agent_response', { agent: promptName, response: parsed });
+  return parsed;
+}
+
+/**
+ * Free-form chat with an inline system prompt. Returns raw text (not parsed JSON).
+ */
+export async function chatWithContext(systemPrompt, messages, maxTokens = 512) {
+  const apiKey = await requireKey();
+  devLog('agent_request', { agent: 'chat', messages });
+  const { content } = await callClaude({ apiKey, model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
+  devLog('agent_response', { agent: 'chat', response: content });
+  return content;
+}
+
+/**
  * Initialize a learner profile from onboarding name + statement.
  */
 export async function initializeLearnerProfile(name, statement) {
@@ -196,42 +230,6 @@ export async function generateNextActivity(course, planSlot, progressSummary, pr
   };
 
   return callWithValidation(callAgent, validateActivity, 'activity-creation');
-}
-
-/**
- * Regenerate an activity based on learner feedback.
- */
-export async function regenerateActivity(course, planSlot, progressSummary, profileSummary, previousInstruction, previousTips, learnerFeedback, planContext) {
-  const apiKey = await requireKey();
-  const systemPrompt = await loadPrompt('activity-creation');
-
-  const userContent = JSON.stringify({
-    course: { name: course.name, learningObjectives: course.learningObjectives },
-    activity: { type: planSlot.type, goal: planSlot.goal },
-    workProduct: planContext?.finalWorkProductDescription || '',
-    workProductTool: planContext?.workProductTool || '',
-    priorActivities: progressSummary,
-    learnerProfile: profileSummary || 'No profile yet'
-  });
-
-  const messages = [
-    { role: 'user', content: userContent },
-    { role: 'assistant', content: JSON.stringify({ instruction: previousInstruction, tips: previousTips || [] }) },
-    { role: 'user', content: `The learner has feedback about this activity: "${learnerFeedback}"\n\nGenerate a new version of this activity that addresses their feedback. You MUST keep the same learning goal: "${planSlot.goal}". The activity must still align with the course learning objectives.\n\nInclude a brief "changeNote" (1-2 sentences) explaining what you changed and why, so the learner knows their feedback was heard.` }
-  ];
-
-  const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages,
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  return callWithValidation(callAgent, validateActivity, 'activity-regeneration');
 }
 
 /**
