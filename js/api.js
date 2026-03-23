@@ -1,12 +1,14 @@
 /**
- * Thin fetch wrapper for the Anthropic Messages API.
+ * Thin fetch wrappers for AI model calls.
+ * Supports direct Anthropic API and proxy endpoints (e.g. Bedrock via learn-service).
  */
 
 export const MODEL_LIGHT = 'claude-haiku-4-5-20251001';
 export const MODEL_HEAVY = 'claude-sonnet-4-6';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const TIMEOUT_MS = 30000;
+const PROXY_TIMEOUT_MS = 90000;
 
 export class ApiError extends Error {
   constructor(type, message, status) {
@@ -18,14 +20,36 @@ export class ApiError extends Error {
 }
 
 /**
- * Call the Claude API.
- * @param {object} opts
- * @param {string} opts.apiKey
- * @param {string} opts.model
- * @param {string} opts.systemPrompt
- * @param {Array} opts.messages - Anthropic message format [{role, content}]
- * @param {number} [opts.maxTokens=1024]
- * @returns {Promise<{content: string, usage: object}>}
+ * Parse a Messages API response (shared by callClaude and callProxy).
+ * Expects a fetch Response object. Returns { content, usage }.
+ */
+export async function parseResponse(resp) {
+  if (!resp.ok) {
+    const status = resp.status;
+    let body;
+    try { body = await resp.json(); } catch { body = {}; }
+    const msg = body?.error?.message || body?.error || `API returned ${status}`;
+
+    if (status === 401) throw new ApiError('invalid_key', 'Invalid API key. Check your key in Settings.');
+    if (status === 429) throw new ApiError('rate_limit', 'Rate limited. Try again in a moment.');
+    throw new ApiError('api', msg, status);
+  }
+
+  let data;
+  try {
+    data = await resp.json();
+  } catch {
+    throw new ApiError('parse', 'Failed to parse API response.');
+  }
+
+  const textBlock = data.content?.find(b => b.type === 'text');
+  if (!textBlock) throw new ApiError('parse', 'No text content in API response.');
+
+  return { content: textBlock.text, usage: data.usage };
+}
+
+/**
+ * Call the Anthropic API directly (requires user's own API key).
  */
 export async function callClaude({ apiKey, model, systemPrompt, messages, maxTokens = 1024 }) {
   const controller = new AbortController();
@@ -33,7 +57,7 @@ export async function callClaude({ apiKey, model, systemPrompt, messages, maxTok
 
   let resp;
   try {
-    resp = await fetch(API_URL, {
+    resp = await fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -58,26 +82,38 @@ export async function callClaude({ apiKey, model, systemPrompt, messages, maxTok
   }
   clearTimeout(timer);
 
-  if (!resp.ok) {
-    const status = resp.status;
-    let body;
-    try { body = await resp.json(); } catch { body = {}; }
-    const msg = body?.error?.message || `API returned ${status}`;
+  return parseResponse(resp);
+}
 
-    if (status === 401) throw new ApiError('invalid_key', 'Invalid API key. Check your key in Settings.');
-    if (status === 429) throw new ApiError('rate_limit', 'Rate limited. Try again in a moment.');
-    throw new ApiError('api', msg, status);
-  }
+/**
+ * Call a proxy endpoint that forwards to Bedrock (or any Messages-API-compatible backend).
+ * Used for learn-service proxy and custom proxy URLs.
+ */
+export async function callProxy({ url, headers = {}, model, systemPrompt, messages, maxTokens = 1024 }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
-  let data;
+  let resp;
   try {
-    data = await resp.json();
-  } catch {
-    throw new ApiError('parse', 'Failed to parse API response.');
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages
+      }),
+      signal: controller.signal
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      throw new ApiError('network', 'Request timed out. The proxy may be slow or unreachable.');
+    }
+    throw new ApiError('network', 'Network error. Check your connection.');
   }
+  clearTimeout(timer);
 
-  const textBlock = data.content?.find(b => b.type === 'text');
-  if (!textBlock) throw new ApiError('parse', 'No text content in API response.');
-
-  return { content: textBlock.text, usage: data.usage };
+  return parseResponse(resp);
 }

@@ -10,9 +10,10 @@ import {
   getOnboardingComplete, saveOnboardingComplete,
   getLastSync,
   getDiagnosticState, saveDiagnosticState, clearDiagnosticState,
-  getOnboardingState, saveOnboardingState, clearOnboardingState
+  getOnboardingState, saveOnboardingState, clearOnboardingState,
+  getProxyUrl, saveProxyUrl
 } from './storage.js';
-import { loadCourses, checkPrerequisite } from './courses.js';
+import { loadCourses, flattenCourses, checkPrerequisite } from './courses.js';
 import * as orchestrator from './orchestrator.js';
 import { ApiError } from './api.js';
 import { trackEvent, flushNow } from './telemetry.js';
@@ -160,8 +161,10 @@ async function logDev(type, data) {
 }
 
 let state = {
-  view: 'courses',        // onboarding | courses | course | work | work-detail | settings
-  courses: [],
+  view: 'courses',        // onboarding | courses | units | course | work | work-detail | settings
+  courseGroups: [],         // top-level course groups (from courses.json)
+  courses: [],             // flat list of all playable courses/units (derived from courseGroups)
+  activeCourseGroupId: null, // which course group is selected (for units view)
   activeCourseId: null,
   progress: null,
   allProgress: {},
@@ -203,7 +206,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   await runMigrations();
   await seedFromEnv();
   state.preferences = await getPreferences();
-  state.courses = await loadCourses();
+  state.courseGroups = await loadCourses();
+  state.courses = flattenCourses(state.courseGroups);
   state.allProgress = await getAllProgress();
   bindNav();
   bindUserMenu();
@@ -399,11 +403,13 @@ function bindUserMenu() {
       showLoginModal(async () => {
         state.preferences = await getPreferences();
         state.allProgress = await getAllProgress();
-        state.courses = await loadCourses();
+        state.courseGroups = await loadCourses();
+        state.courses = flattenCourses(state.courseGroups);
         const activeCourse = Object.entries(state.allProgress)
           .find(([, p]) => p.status === 'in_progress');
         if (activeCourse) {
           state.activeCourseId = activeCourse[0];
+          state.activeCourseGroupId = findCourseGroupId(activeCourse[0]);
           state.progress = activeCourse[1];
           state.view = 'course';
         }
@@ -481,7 +487,7 @@ function bindDropdownActions() {
 }
 
 // View depth for determining transition direction
-const VIEW_DEPTH = { onboarding: 0, courses: 1, course: 2, work: 1, 'work-detail': 2, settings: 1 };
+const VIEW_DEPTH = { onboarding: 0, courses: 1, units: 2, course: 3, work: 1, 'work-detail': 2, settings: 1 };
 const ANIM_CLASSES = ['view-slide-left', 'view-slide-right', 'view-fade-up'];
 
 function animateMain(anim) {
@@ -521,7 +527,7 @@ function render() {
 
   document.querySelectorAll('[data-nav]').forEach((btn) => {
     const active = btn.dataset.nav === state.view ||
-      (btn.dataset.nav === 'courses' && state.view === 'course') ||
+      (btn.dataset.nav === 'courses' && (state.view === 'course' || state.view === 'units')) ||
       (btn.dataset.nav === 'work' && state.view === 'work-detail');
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
@@ -529,34 +535,87 @@ function render() {
   switch (state.view) {
     case 'onboarding': return renderOnboarding();
     case 'courses': return renderCourses();
+    case 'units':   return renderUnits();
     case 'course':  return renderCourse();
     case 'work':    return renderWork();
     case 'work-detail': return renderWorkDetail();
     case 'settings': return renderSettings();
-
   }
+}
+
+// -- Helpers ------------------------------------------------------------------
+
+function findCourseGroupId(courseId) {
+  const group = state.courseGroups.find(cg => cg.units?.some(u => u.courseId === courseId));
+  return group?.courseId || null;
+}
+
+function courseGroupStatus(cg) {
+  const statuses = cg.units.map(u => {
+    const prog = state.allProgress[u.courseId];
+    return prog ? prog.status : 'not_started';
+  });
+  if (statuses.every(s => s === 'completed')) return 'completed';
+  if (statuses.some(s => s !== 'not_started')) return 'in_progress';
+  return 'not_started';
+}
+
+function checkCourseGroupPrerequisite(cg) {
+  if (!cg.dependsOn) return true;
+  const dep = state.courseGroups.find(g => g.courseId === cg.dependsOn);
+  if (!dep) return false;
+  if (dep.units) return courseGroupStatus(dep) === 'completed';
+  const prog = state.allProgress[dep.courseId];
+  return prog?.status === 'completed';
 }
 
 // -- Courses list -------------------------------------------------------------
 
 function renderCourses() {
   const main = $main();
-  const cards = state.courses.map((c) => {
-    const prereqMet = checkPrerequisite(c, state.allProgress);
-    const prog = state.allProgress[c.courseId];
+  const cards = state.courseGroups.map((cg) => {
+    if (cg.units) {
+      const status = courseGroupStatus(cg);
+      const locked = !checkCourseGroupPrerequisite(cg);
+      const completedCount = cg.units.filter(u => {
+        const prog = state.allProgress[u.courseId];
+        return prog?.status === 'completed';
+      }).length;
+      const totalTime = cg.units.reduce((sum, u) => sum + u.learningObjectives.length * 5 + 2, 0);
+      const label = locked
+        ? `Requires ${state.courseGroups.find(g => g.courseId === cg.dependsOn)?.name || cg.dependsOn}`
+        : `${completedCount} of ${cg.units.length} units complete · ~${totalTime} min`;
+
+      return `
+        <li>
+          <button class="course-card${locked ? ' locked' : ''}"
+                  data-course-group="${cg.courseId}"
+                  ${locked ? 'disabled' : ''}>
+            <span class="course-status" aria-hidden="true">${statusIcon(status)}</span>
+            <div class="course-info">
+              <strong>${esc(cg.name)}</strong>
+              <p>${esc(cg.description)}</p>
+              <small>${label}</small>
+            </div>
+          </button>
+        </li>`;
+    }
+    // Standalone course (no units)
+    const prereqMet = checkPrerequisite(cg, state.allProgress);
+    const prog = state.allProgress[cg.courseId];
     const status = prog ? prog.status : 'not_started';
     const locked = !prereqMet;
 
     return `
       <li>
         <button class="course-card${locked ? ' locked' : ''}"
-                data-course="${c.courseId}"
+                data-course="${cg.courseId}"
                 ${locked ? 'disabled' : ''}>
-          <span class="course-status" aria-hidden="true">${state.generating?.courseId === c.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
+          <span class="course-status" aria-hidden="true">${state.generating?.courseId === cg.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
           <div class="course-info">
-            <strong>${esc(c.name)}</strong>
-            <p>${esc(c.description)}</p>
-            <small>${progressLabel(c, locked)} · ~${c.learningObjectives.length * 5 + 2} min</small>
+            <strong>${esc(cg.name)}</strong>
+            <p>${esc(cg.description)}</p>
+            <small>${progressLabel(cg, locked)} · ~${cg.learningObjectives.length * 5 + 2} min</small>
           </div>
         </button>
       </li>`;
@@ -564,7 +623,57 @@ function renderCourses() {
 
   main.innerHTML = `
     <h2>Courses</h2>
+    <ul class="course-list" role="list">${cards}</ul>
+    <div class="coming-soon-card">More courses added regularly!</div>`;
+
+  main.querySelectorAll('[data-course-group]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.activeCourseGroupId = btn.dataset.courseGroup;
+      navigate('units');
+    });
+  });
+
+  main.querySelectorAll('[data-course]').forEach((btn) => {
+    btn.addEventListener('click', () => startOrResumeCourse(btn.dataset.course));
+  });
+}
+
+// -- Units list ---------------------------------------------------------------
+
+function renderUnits() {
+  const main = $main();
+  const courseGroup = state.courseGroups.find(cg => cg.courseId === state.activeCourseGroupId);
+  if (!courseGroup?.units) { navigate('courses'); return; }
+
+  const cards = courseGroup.units.map((u) => {
+    const prereqMet = checkPrerequisite(u, state.allProgress);
+    const prog = state.allProgress[u.courseId];
+    const status = prog ? prog.status : 'not_started';
+    const locked = !prereqMet;
+
+    return `
+      <li>
+        <button class="course-card${locked ? ' locked' : ''}"
+                data-course="${u.courseId}"
+                ${locked ? 'disabled' : ''}>
+          <span class="course-status" aria-hidden="true">${state.generating?.courseId === u.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
+          <div class="course-info">
+            <strong>${esc(u.name)}</strong>
+            <p>${esc(u.description)}</p>
+            <small>${progressLabel(u, locked)} · ~${u.learningObjectives.length * 5 + 2} min</small>
+          </div>
+        </button>
+      </li>`;
+  }).join('');
+
+  main.innerHTML = `
+    <div class="units-header">
+      <button class="back-btn" aria-label="Back to courses" id="units-back-btn">&larr;</button>
+      <h2>${esc(courseGroup.name)}</h2>
+    </div>
     <ul class="course-list" role="list">${cards}</ul>`;
+
+  $('#units-back-btn').addEventListener('click', () => navigate('courses'));
 
   main.querySelectorAll('[data-course]').forEach((btn) => {
     btn.addEventListener('click', () => startOrResumeCourse(btn.dataset.course));
@@ -597,6 +706,7 @@ function progressLabel(course, locked) {
 
 async function startOrResumeCourse(courseId) {
   const course = state.courses.find((c) => c.courseId === courseId);
+  state.activeCourseGroupId = findCourseGroupId(courseId);
   let progress = await getCourseProgress(courseId);
 
   if (!progress) {
@@ -611,7 +721,7 @@ async function startOrResumeCourse(courseId) {
     // Check API key
     const ready = await orchestrator.isReady();
     if (!ready) {
-      showError('No API key set. Go to Settings to add your Claude API key.');
+      showError('No AI provider configured. Sign in or go to Settings to add your API key.');
       return;
     }
 
@@ -739,7 +849,7 @@ async function renderCourse() {
 
   let html = `<div class="course-layout">
     <div class="course-header">
-      <button class="back-btn" aria-label="Back to courses" id="back-btn">&larr;</button>
+      <button class="back-btn" aria-label="${state.activeCourseGroupId ? 'Back to units' : 'Back to courses'}" id="back-btn">&larr;</button>
       <div class="course-header-info">
         <h2>${esc(course.name)}</h2>
         ${progressLabel ? `<span class="progress-label">${esc(progressLabel)}</span>` : ''}
@@ -870,7 +980,7 @@ async function renderCourse() {
   }
 
   // ── Event handlers ──
-  $('#back-btn').addEventListener('click', () => navigate('courses'));
+  $('#back-btn').addEventListener('click', () => navigate(state.activeCourseGroupId ? 'units' : 'courses'));
   if (p) {
     $('#reset-course-btn')?.addEventListener('click', () => confirmResetCourse(course, p));
   }
@@ -1457,7 +1567,8 @@ async function renderOnboarding() {
       showLoginModal(async () => {
         state.preferences = await getPreferences();
         state.allProgress = await getAllProgress();
-        state.courses = await loadCourses();
+        state.courseGroups = await loadCourses();
+        state.courses = flattenCourses(state.courseGroups);
         await saveOnboardingComplete();
         await updateUserMenu();
         _onboardingStep = 1;
@@ -1466,6 +1577,7 @@ async function renderOnboarding() {
           .find(([, p]) => p.status === 'in_progress');
         if (activeCourse) {
           state.activeCourseId = activeCourse[0];
+          state.activeCourseGroupId = findCourseGroupId(activeCourse[0]);
           state.progress = activeCourse[1];
           state.view = 'course';
         } else {
@@ -1516,17 +1628,23 @@ async function renderOnboarding() {
     $('#onboarding-next').addEventListener('click', () => advanceOnboarding(2));
 
   } else if (_onboardingStep === 3) {
-    // API key step (moved earlier so chat step can use AI)
+    // AI provider step (API key or proxy URL)
     const hasKey = !!(await getApiKey());
+    const currentProxy = await getProxyUrl();
 
     main.innerHTML = `
       <div class="onboarding">
         <div class="onboarding-dots" role="progressbar" aria-label="Step 2 of 3" aria-valuenow="2" aria-valuemin="1" aria-valuemax="4">${dots(2)}</div>
-        <span class="onboarding-step-label">Step 2 of 3 — API Key</span>
+        <span class="onboarding-step-label">Step 2 of 3 — Connect AI</span>
         <h2>Connect your AI.</h2>
         <p class="onboarding-lead">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.</p>
         <label for="onboarding-apikey" class="sr-only">Anthropic API key</label>
         <input type="password" id="onboarding-apikey" placeholder="sk-ant-..." autocomplete="off">
+        <details class="proxy-details" ${currentProxy ? 'open' : ''}>
+          <summary>Or use a Bedrock proxy</summary>
+          <label for="onboarding-proxy" class="sr-only">Proxy URL</label>
+          <input type="url" id="onboarding-proxy" placeholder="https://your-proxy.example.com" autocomplete="off" value="${esc(currentProxy || '')}">
+        </details>
         <div id="onboarding-key-error" role="alert" aria-live="polite" class="onboarding-error"></div>
         <div class="action-bar">
           <button id="onboarding-back" class="secondary-btn">Back</button>
@@ -1546,6 +1664,9 @@ async function renderOnboarding() {
       });
     }
     input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveApiKeyAndAdvance(); }
+    });
+    $('#onboarding-proxy').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); saveApiKeyAndAdvance(); }
     });
     $('#onboarding-back').addEventListener('click', () => { _onboardingStep = 2; animateMain('view-slide-right'); renderOnboarding(); });
@@ -1635,17 +1756,26 @@ function advanceOnboarding(fromStep) {
 
 async function saveApiKeyAndAdvance() {
   const keyInput = $('#onboarding-apikey');
+  const proxyInput = $('#onboarding-proxy');
   const rawValue = keyInput?.value?.trim();
+  const proxyValue = proxyInput?.value?.trim();
   const PLACEHOLDER = '••••••••••••••••••••••••••••••••••••••••';
   const existingKey = rawValue === PLACEHOLDER ? await getApiKey() : null;
   const key = existingKey || rawValue;
-  if (!key) {
+
+  // Save proxy URL if provided
+  if (proxyValue) {
+    await saveProxyUrl(proxyValue);
+  }
+
+  // Need either an API key or a proxy URL to proceed
+  if (!key && !proxyValue) {
     const err = $('#onboarding-key-error');
-    if (err) err.textContent = 'Please enter your API key.';
+    if (err) err.textContent = 'Please enter an API key or proxy URL.';
     keyInput?.focus();
     return;
   }
-  await saveApiKey(key);
+  if (key) await saveApiKey(key);
   _onboardingStep = 4;
   animateMain('view-slide-left');
   renderOnboarding();
@@ -2071,21 +2201,18 @@ async function renderWorkDetail() {
 async function renderSettings() {
   const main = $main();
   const prefs = state.preferences;
-  const hasKey = await orchestrator.isReady();
+  const hasKey = !!(await getApiKey());
   const profileSummary = await getLearnerProfileSummary();
   const loggedIn = await auth.isLoggedIn();
+  const currentProxy = await getProxyUrl();
 
   main.innerHTML = `
     <h2>Settings</h2>
 
     <div class="settings-section">
-      <h3>API Key</h3>
+      <h3>AI Provider</h3>
       ${loggedIn ? `
-        <p class="settings-hint">Managed by your 1111 Learn account.</p>
-        <div class="api-key-row">
-          <label for="api-key-input" class="sr-only">API Key</label>
-          <input type="password" id="api-key-input" value="${hasKey ? '••••••••••••••••••••••••••••••••••••••••' : ''}" disabled>
-        </div>
+        <p class="settings-hint">AI is provided by your 1111 Learn account.</p>
       ` : `
         <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
         <div class="api-key-row">
@@ -2094,6 +2221,16 @@ async function renderSettings() {
           <button id="save-key-btn" class="primary-btn">Save</button>
         </div>
         <div id="key-feedback" role="status" aria-live="polite"></div>
+        <details class="proxy-details" ${currentProxy ? 'open' : ''}>
+          <summary>Or use a Bedrock proxy</summary>
+          <p class="settings-hint">Enter a proxy URL that forwards to Amazon Bedrock. If set, this takes priority over the API key.</p>
+          <div class="api-key-row">
+            <label for="proxy-url-input" class="sr-only">Proxy URL</label>
+            <input type="url" id="proxy-url-input" placeholder="https://your-proxy.example.com" autocomplete="off" value="${esc(currentProxy || '')}">
+            <button id="save-proxy-btn" class="primary-btn">Save</button>
+          </div>
+          <div id="proxy-feedback" role="status" aria-live="polite"></div>
+        </details>
       `}
     </div>
 
@@ -2122,7 +2259,7 @@ async function renderSettings() {
 
     `;
 
-  // API key (only interactive when not logged in)
+  // API key + proxy URL (only interactive when not logged in)
   if (!loggedIn) {
     const keyInput = $('#api-key-input');
     keyInput.addEventListener('focus', () => {
@@ -2146,6 +2283,18 @@ async function renderSettings() {
     $('#save-key-btn').addEventListener('click', saveKey);
     keyInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); saveKey(); }
+    });
+
+    // Proxy URL
+    const proxyInput = $('#proxy-url-input');
+    const saveProxy = async () => {
+      const url = proxyInput.value.trim();
+      await saveProxyUrl(url || null);
+      showFormFeedback('proxy-feedback', url ? 'Saved!' : 'Cleared.');
+    };
+    $('#save-proxy-btn').addEventListener('click', saveProxy);
+    proxyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveProxy(); }
     });
   }
 

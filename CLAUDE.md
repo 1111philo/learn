@@ -48,13 +48,14 @@ Optional login via `learn-service` (separate repo) enables cross-device data per
 
 - **Auth:** `js/auth.js` handles login/logout/token refresh via JWT access tokens (15 min) + refresh tokens (30 day, rotated on use). Tokens are stored in `chrome.storage.local` under `authAccessToken`, `authRefreshToken`, `authUser`.
 - **Sync:** `js/sync.js` pushes/pulls data to/from `/v1/sync` endpoints on `learn-service`. Uses optimistic locking (version numbers) with automatic conflict resolution. Sync keys: `profile`, `profileSummary`, `preferences`, `work`, `progress:{courseId}`.
+- **AI provider routing:** `js/orchestrator.js` routes API calls based on priority: (1) logged in → learn-service Bedrock proxy `/v1/ai/messages` via JWT auth, (2) proxy URL configured → custom Bedrock proxy, (3) Anthropic API key → direct Anthropic API. Logged-in users need no API key.
 - **API key provisioning:** On login, if no local API key exists, the extension checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it.
 - **Merge strategy:** Profile uses array union (same as `mergeProfile()`), work products union by courseId, course progress prefers the more advanced version.
 - **Settings UI:** "Cloud Sync" section in Settings shows login form (when signed out) or account info + Sync Now / Sign Out (when signed in).
 
 ## Key conventions
 - All source is vanilla JS (ES modules), CSS, and HTML -- no local build step, no frameworks. CI packages the extension into a zip on push to `main`.
-- Course definitions live in `data/courses.json`.
+- Course definitions live in `data/courses.json`. Courses can contain `units` arrays (grouped courses) or standalone `learningObjectives`. `js/courses.js` provides `flattenCourses()` to extract all playable units into a flat list.
 - The app entry point is `sidepanel.html`, which loads `js/app.js` as a module.
 - Storage is abstracted in `js/storage.js` (chrome.storage.local for metadata, IndexedDB for screenshots).
 - API calls go through `js/api.js`; agent orchestration through `js/orchestrator.js`.
@@ -63,12 +64,12 @@ Optional login via `learn-service` (separate repo) enables cross-device data per
 - All activities end with "Hit Record to capture your screen."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
 - URLs in activity instructions are automatically linkified.
-- Views: `onboarding`, `courses`, `course` (includes diagnostic + activities in one chat), `work` (portfolio cards), `work-detail` (build timeline), `settings`.
+- Views: `onboarding`, `courses`, `units` (units within a course group), `course` (includes diagnostic + activities in one chat), `work` (portfolio cards), `work-detail` (build timeline), `settings`.
 - Activity types map to user labels: `explore`→Research, `apply`→Practice, `create`→Draft, `final`→Deliver.
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
 - Completion summary card shows stats (steps, recordings, elapsed time) when a course finishes. Time is displayed as minutes, hours, or days depending on duration.
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
-- Course cards show estimated time computed as `learningObjectives.length * 5 + 2` minutes (5 min per activity + 2 min for the diagnostic).
+- Unit cards show estimated time computed as `learningObjectives.length * 5 + 2` minutes (5 min per activity + 2 min for the diagnostic). Course-level cards sum the time across all units.
 
 ## CI/CD
 Two GitHub Actions workflows handle versioning and releases across two branches:
@@ -109,8 +110,8 @@ sidepanel.css            Styles
 js/
   app.js                 App shell, routing, views, event handling
   storage.js             chrome.storage.local + IndexedDB abstraction
-  courses.js             Course loading and prerequisite checking
-  api.js                 Anthropic API client (fetch wrapper)
+  courses.js             Course loading, flattening (units), and prerequisite checking
+  api.js                 AI API client (Anthropic direct + Bedrock proxy support)
   orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
   validators.js          Pure validation functions (used by orchestrator + tests)
   telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)

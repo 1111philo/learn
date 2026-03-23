@@ -132,6 +132,21 @@ export async function saveServiceCredentials(creds) {
   await chrome.storage.local.set({ serviceCredentials: creds });
 }
 
+// --- Bedrock proxy URL ---
+
+export async function getProxyUrl() {
+  const result = await chrome.storage.local.get('proxyUrl');
+  return result.proxyUrl || null;
+}
+
+export async function saveProxyUrl(url) {
+  if (url) {
+    await chrome.storage.local.set({ proxyUrl: url });
+  } else {
+    await chrome.storage.local.remove('proxyUrl');
+  }
+}
+
 // --- Onboarding ---
 
 export async function getOnboardingComplete() {
