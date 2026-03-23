@@ -59,15 +59,18 @@ export async function pushData(syncKey) {
 
 /**
  * Pull all data from the server and merge with local.
+ * Keys that exist locally but were deleted on the server are removed.
+ * Returns the set of keys that were removed (so syncAll can skip re-pushing them).
  */
 export async function pullAll() {
-  if (!await isLoggedIn()) return;
+  if (!await isLoggedIn()) return new Set();
 
   const res = await authenticatedFetch('/v1/sync');
-  if (!res.ok) return;
+  if (!res.ok) return new Set();
 
   const items = await res.json();
   const versions = await getSyncVersions();
+  const serverKeys = new Set(items.map(i => i.dataKey));
 
   for (const { dataKey, data, version } of items) {
     const localData = await getLocalData(dataKey);
@@ -80,19 +83,31 @@ export async function pullAll() {
     versions[dataKey] = version;
   }
 
+  // Remove local data for keys that no longer exist on the server
+  const removedKeys = new Set();
+  for (const localKey of Object.keys(versions)) {
+    if (!serverKeys.has(localKey)) {
+      await removeLocalData(localKey);
+      delete versions[localKey];
+      removedKeys.add(localKey);
+    }
+  }
+
   await saveSyncVersions(versions);
   await saveLastSync();
+  return removedKeys;
 }
 
 /**
  * Full sync: pull from server, merge, then push all local data back.
+ * Keys deleted on the server are not re-pushed.
  */
 export async function syncAll() {
   if (!await isLoggedIn()) return;
 
-  await pullAll();
+  const removedKeys = await pullAll();
 
-  // Push all syncable keys
+  // Push all syncable keys, skipping any that were just deleted by the server
   const keys = ['profile', 'profileSummary', 'preferences', 'work'];
 
   const allProgress = await getAllProgress();
@@ -101,6 +116,7 @@ export async function syncAll() {
   }
 
   for (const key of keys) {
+    if (removedKeys.has(key)) continue;
     try { await pushData(key); } catch { /* silent */ }
   }
 
@@ -135,6 +151,17 @@ async function saveLocalData(syncKey, data) {
   if (syncKey.startsWith('progress:')) {
     const courseId = syncKey.slice('progress:'.length);
     return await saveCourseProgress(courseId, data);
+  }
+}
+
+async function removeLocalData(syncKey) {
+  if (syncKey === 'profile') return await chrome.storage.local.remove('learnerProfile');
+  if (syncKey === 'profileSummary') return await chrome.storage.local.remove('learnerProfileSummary');
+  if (syncKey === 'preferences') return await chrome.storage.local.remove('preferences');
+  if (syncKey === 'work') return await chrome.storage.local.remove('work');
+  if (syncKey.startsWith('progress:')) {
+    const courseId = syncKey.slice('progress:'.length);
+    return await chrome.storage.local.remove(`progress-${courseId}`);
   }
 }
 
