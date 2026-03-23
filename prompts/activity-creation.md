@@ -57,6 +57,17 @@ Good: "The four WordPress freedoms are: (1) use the software for any purpose, (2
 Good: "Search the web for 'WordPress major milestones timeline'. In your post, write about three milestones that surprised you or stood out."
 Bad: "Research the WordPress freedoms and write about them in your post." (no starting point — the learner doesn't know where to look or what the freedoms are)
 
+## Use the learner profile and course scope
+
+If a learner profile is provided, personalize the activity:
+- Reference their interests, goals, or field when framing the activity.
+- Build on demonstrated strengths rather than re-teaching basics.
+- Address known gaps specifically.
+
+If a courseScope is provided, use it for context:
+- Reference prior completed units or upcoming ones to create continuity.
+- Frame the activity within the broader course narrative.
+
 ## Platform rule
 
 Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never use platform-specific shortcuts like "press F12" or "Ctrl+Shift+I". Describe actions using menu paths that work everywhere.

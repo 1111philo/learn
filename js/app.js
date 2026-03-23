@@ -595,6 +595,27 @@ function findCourseGroupId(unitId) {
   return group?.courseId || null;
 }
 
+/** Build course scope context for agent calls — tells agents where this unit sits in the course. */
+function buildCourseScope(unitId) {
+  const groupId = findCourseGroupId(unitId);
+  if (!groupId) return null;
+  const group = state.courseGroups.find(cg => cg.courseId === groupId);
+  if (!group?.units) return null;
+  const unit = group.units.find(u => u.unitId === unitId);
+  const depTargets = new Set(group.units.map(u => u.dependsOn).filter(Boolean));
+  const isRequired = !!(unit?.dependsOn) || depTargets.has(unitId);
+  return {
+    courseName: group.name,
+    isRequired,
+    siblingUnits: group.units.map(u => ({
+      name: shortUnitName(u.name, group.name),
+      unitId: u.unitId,
+      description: u.description,
+      completed: state.allProgress[u.unitId]?.status === 'completed'
+    }))
+  };
+}
+
 /** Strip the course group name and number prefix from a unit name (e.g. "Foundations 0: Basic WordPress" → "Basic WordPress"). */
 function shortUnitName(unitName, groupName) {
   if (!groupName || !unitName.startsWith(groupName)) return unitName;
@@ -802,11 +823,48 @@ async function startOrResumeUnit(unitId) {
       render();
 
       try {
-        const activity = await orchestrator.generateDiagnosticActivity(unit);
-        state.diagnostic.activity = activity;
-        state.diagnostic.phase = 'activity';
-        saveDiagnosticState(state.diagnostic);
-        render();
+        const profileSummary = await getLearnerProfileSummary();
+        const courseScope = buildCourseScope(unitId);
+        const learnerName = state.preferences?.name || '';
+        const scopeCtx = courseScope ? `\nCourse: ${courseScope.courseName}\nThis unit is ${courseScope.isRequired ? 'required' : 'optional'}.\nUnits in this course: ${courseScope.siblingUnits.map(u => `${u.name}${u.completed ? ' (completed)' : ''}`).join(', ')}` : '';
+        const context = `Unit: ${unit.name}\nDescription: ${unit.description || ''}\nObjectives: ${(unit.learningObjectives || []).map(o => typeof o === 'string' ? o : o.name).join(', ')}${scopeCtx}${profileSummary ? `\nLearner profile: ${profileSummary}` : ''}${learnerName ? `\nLearner name: ${learnerName}` : ''}`;
+
+        // Let the conversation agent open the diagnostic directly
+        const result = await orchestrator.converse('diagnostic-conversation', [
+          { role: 'user', content: context }
+        ], 1024);
+
+        state.diagnostic.activity = {
+          id: `diagnostic-${unit.unitId}`,
+          type: 'final',
+          goal: unit.learningObjectives[unit.learningObjectives.length - 1],
+          instruction: result.message,
+          tips: []
+        };
+
+        if (result.done) {
+          // Agent assessed from profile alone — show the message and let the user proceed
+          const diagnosticResult = {
+            score: result.score || 0.7,
+            feedback: result.feedback || result.message,
+            strengths: result.strengths || [],
+            improvements: result.improvements || [],
+            recommendation: 'advance',
+            passed: true
+          };
+          state.diagnostic.result = { unitId, result: diagnosticResult };
+          state.diagnostic.phase = 'activity';
+          state.diagnostic.messages = [];
+          saveDiagnosticState(state.diagnostic);
+          updateProfileInBackground(diagnosticResult, unit, state.diagnostic.activity);
+          render();
+        } else {
+          // Agent wants to have a conversation — show it
+          state.diagnostic.phase = 'activity';
+          state.diagnostic.messages = [];
+          saveDiagnosticState(state.diagnostic);
+          render();
+        }
       } catch (e) {
         handleApiError(e);
       }
@@ -834,8 +892,9 @@ async function startOrResumeUnit(unitId) {
       showStep('Building your learning plan...');
 
       const diagnosticResult = hasDiagnosticResult ? state.diagnostic.result.result : null;
+      const courseScope = buildCourseScope(unitId);
       const plan = await orchestrator.createLearningPlan(
-        unit, state.preferences, profileSummary, completedUnitNames, diagnosticResult
+        unit, state.preferences, profileSummary, completedUnitNames, diagnosticResult, courseScope
       );
 
       // Capture the diagnostic conversation before it's cleared
@@ -866,7 +925,7 @@ async function startOrResumeUnit(unitId) {
 
       const firstSlot = plan.activities[0];
       const generated = await orchestrator.generateNextActivity(
-        unit, firstSlot, [], profileSummary, plan
+        unit, firstSlot, [], profileSummary, plan, courseScope
       );
       newProgress.activities.push({
         ...firstSlot,
@@ -995,7 +1054,12 @@ async function renderUnit() {
   // Diagnostic skip (inside chat, after 2 user messages)
   const diagUserMsgCount = (state.diagnostic.messages || []).filter(m => m.role === 'user').length;
   if (state.diagnostic.phase === 'activity' && state.diagnostic.activity && !state.diagnostic.result && diagUserMsgCount >= 2) {
-    html += '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to course</button>';
+    html += '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to activities</button>';
+  }
+
+  // Continue button when diagnostic assessed from profile (no conversation needed)
+  if (state.diagnostic.result && !p?.learningPlan) {
+    html += '<button id="continue-from-diagnostic-btn" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue</button>';
   }
 
   // Activity action buttons (inside chat)
@@ -1075,6 +1139,13 @@ async function renderUnit() {
     $('#submit-diagnostic-btn')?.addEventListener('click', () => sendDiagnosticMessage(unit));
     $('#skip-diagnostic-btn')?.addEventListener('click', () => skipDiagnostic(unit));
   }
+
+  // Continue from profile-based diagnostic assessment
+  $('#continue-from-diagnostic-btn')?.addEventListener('click', () => {
+    state.diagnostic.phase = null;
+    state.diagnostic.skipFor = state.activeUnitId;
+    startOrResumeUnit(state.activeUnitId);
+  });
 
   // Activity compose handlers
   const chatInput = $('#chat-input');
@@ -1169,8 +1240,9 @@ async function renderUnit() {
           return { type: a.type, score: last?.score, keyFeedback: last?.feedback?.slice(0, 100) };
         });
 
+      const courseScope = buildCourseScope(p.unitId);
       const generated = await orchestrator.generateNextActivity(
-        unit, currentSlot, progressSummary, profileSummary, p.learningPlan
+        unit, currentSlot, progressSummary, profileSummary, p.learningPlan, courseScope
       );
 
       p.activities[p.currentActivityIndex] = {
@@ -1667,21 +1739,13 @@ async function renderOnboarding() {
         state.allProgress = await getAllProgress();
         state.courseGroups = await loadCourses();
         state.units = flattenCourses(state.courseGroups);
-        await saveOnboardingComplete();
         await updateUserMenu();
-        _onboardingStep = 1;
-        _onboardingData = {};
-        const activeUnit = Object.entries(state.allProgress)
-          .find(([, p]) => p.status === 'in_progress');
-        if (activeUnit) {
-          state.activeUnitId = activeUnit[0];
-          state.activeCourseGroupId = findCourseGroupId(activeUnit[0]);
-          state.progress = activeUnit[1];
-          state.view = 'unit';
-        } else {
-          state.view = 'courses';
-        }
-        render();
+        // Send to the About You conversation so we can build their profile
+        const authUser = await auth.getCurrentUser();
+        _onboardingData.name = authUser?.name || state.preferences?.name || '';
+        _onboardingStep = 4;
+        animateMain('view-slide-left');
+        renderOnboarding();
       });
     });
 
@@ -1788,8 +1852,8 @@ async function renderOnboarding() {
         <span class="onboarding-step-label">${isLoggedInOnboarding ? 'Tell us about yourself' : 'Step 3 of 3 — About You'}</span>
         <div class="chat" role="log" aria-label="Getting to know you" id="onboarding-chat">
           ${initialMsg}
-          ${hasExchanged && !showContinue ? `<button id="onboarding-skip" class="skip-step-btn">${isLoggedInOnboarding ? 'Skip to courses' : 'Skip to next step'}</button>` : ''}
-          ${showContinue ? `<button id="onboarding-next-chat" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">${isLoggedInOnboarding ? 'Continue to courses' : 'Continue to next step'}</button>` : ''}
+          ${hasExchanged && !showContinue ? `<button id="onboarding-skip" class="skip-step-btn">Skip to courses</button>` : ''}
+          ${showContinue ? `<button id="onboarding-next-chat" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue to courses</button>` : ''}
         </div>
         <div class="chat-compose" id="onboarding-compose">
           <div class="compose-input-row">
@@ -2041,7 +2105,11 @@ async function sendDiagnosticMessage(unit) {
 
   try {
     // Build context for the conversational diagnostic agent
-    const courseContext = `Course: ${unit.name}\nDescription: ${unit.description || ''}\nObjectives: ${(unit.learningObjectives || []).map(o => typeof o === 'string' ? o : o.name).join(', ')}`;
+    const profileSummary = await getLearnerProfileSummary();
+    const learnerName = state.preferences?.name || '';
+    const courseScope = buildCourseScope(state.activeUnitId);
+    const scopeContext = courseScope ? `\nCourse: ${courseScope.courseName}\nThis unit is ${courseScope.isRequired ? 'required' : 'optional'}.\nUnits in this course: ${courseScope.siblingUnits.map(u => `${u.name}${u.completed ? ' (completed)' : ''}`).join(', ')}` : '';
+    const courseContext = `Unit: ${unit.name}\nDescription: ${unit.description || ''}\nObjectives: ${(unit.learningObjectives || []).map(o => typeof o === 'string' ? o : o.name).join(', ')}${scopeContext}${profileSummary ? `\nLearner profile: ${profileSummary}` : ''}${learnerName ? `\nLearner name: ${learnerName}` : ''}`;
     const result = await orchestrator.converse('diagnostic-conversation', [
       { role: 'user', content: courseContext },
       { role: 'assistant', content: JSON.stringify({ message: activity.instruction, done: false }) },
@@ -2094,7 +2162,7 @@ async function sendDiagnosticMessage(unit) {
     const existingSkip = document.getElementById('skip-diagnostic-btn');
     if (userCount >= 2 && !existingSkip) {
       chat.insertAdjacentHTML('beforeend',
-        '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to course</button>');
+        '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to activities</button>');
       $('#skip-diagnostic-btn').addEventListener('click', () => skipDiagnostic(unit));
     }
 

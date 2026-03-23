@@ -1,14 +1,13 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using ten AI agents powered by the Claude API. Courses contain units; each unit has a diagnostic (skills check) and a sequence of activities. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots). When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using nine AI agents powered by the Claude API. Courses contain units; each unit has a diagnostic (skills check) and a sequence of activities. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots). When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
-Ten agents drive the learning experience:
+Nine agents drive the learning experience:
 - **Onboarding Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that gets to know the learner and builds their initial profile
 - **Onboarding Profile Agent** (`MODEL_LIGHT`) -- creates an initial learner profile (fallback when conversation is skipped)
-- **Diagnostic Agent** (`MODEL_LIGHT`) -- generates a skills check question before every new course
-- **Diagnostic Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that assesses prior knowledge through follow-up questions
+- **Diagnostic Conversation Agent** (`MODEL_LIGHT`) -- opens and drives the skills check conversation; receives the learner profile, unit objectives, and course scope to calibrate depth; for optional units where the profile shows familiarity, can complete the assessment immediately without asking questions
 - **Diagnostic Assessment Agent** (`MODEL_LIGHT`) -- evaluates learner text responses during the diagnostic and re-evaluates on dispute
 - **Course Creation Agent** (`MODEL_LIGHT`) -- generates a personalized learning plan skeleton, informed by the diagnostic result
 - **Activity Creation Agent** (`MODEL_LIGHT`) -- fills in one activity at a time as the learner reaches it
@@ -25,7 +24,7 @@ All activity, assessment, and course plan outputs pass through deterministic val
 On first run, a three-step wizard collects: name → API key → "about you" conversation. The "about you" step is a multi-turn chat: the Onboarding Conversation Agent asks follow-up questions until it has a good picture of the learner, then creates their profile. The user can skip at any time. Conversation state is persisted to `chrome.storage.local` under `onboardingState` so it survives panel reload. Completion is tracked via an `onboardingComplete` flag (independent of the API key). If the user is already logged in on startup, onboarding is skipped entirely and the flag is stamped automatically. In development, `.env.js` seeds the key into storage but onboarding still runs.
 
 ### Diagnostic skills check
-Before every new course, a skills check runs as a multi-turn conversation inside the course chat (not a separate view). The Diagnostic Agent generates an initial question, then the Diagnostic Conversation Agent asks follow-up questions to gauge depth. After 2-3 exchanges, it provides a score and assessment. The result is passed to the Course Creation Agent to adjust activity depth (not count -- activity count is always locked to one per learning objective). The user can skip the diagnostic at any time. During the diagnostic, conversation state is persisted to `chrome.storage.local` under `diagnosticState`. Once the course plan is created, the diagnostic conversation (instruction, messages, and result) is saved into the `progress.diagnostic` field of the course progress object so it remains visible in the course chat history.
+Before every new unit, the Diagnostic Conversation Agent opens a skills check inside the unit chat. It receives the unit objectives, the learner profile, and the course scope (required/optional, sibling units). For optional units where the profile already covers the material, the agent can complete the assessment immediately (setting `done: true` in its first message) and suggest a more valuable unit. For required units, it asks 2-3 follow-up questions to gauge depth. The result is passed to the Course Creation Agent to adjust activity depth (not count -- activity count is always locked to one per learning objective). The user can skip the diagnostic at any time. During the diagnostic, conversation state is persisted to `chrome.storage.local` under `diagnosticState`. Once the course plan is created, the diagnostic conversation (instruction, messages, and result) is saved into the `progress.diagnostic` field of the unit progress object so it remains visible in the chat history.
 
 ### Conversational UX
 The entire course experience — diagnostic, course setup, activities, assessments — happens in a single chat interface per course. All loading states appear as in-chat thinking indicators (not full-screen spinners). The course header and compose bar are fixed (top and bottom); the chat scrolls between them. Users can ask questions about any activity or assessment at any time via the compose bar, powered by the Activity Q&A Agent. Q&A messages are persisted in `activity.messages[]` (each with `role`, `content`, `timestamp`) so they survive panel reloads and appear in the correct chronological position in the chat history alongside drafts and feedback. Completed activities remain visible above the current activity in the chat, creating a full scrollable history of the course. The Q&A agent receives the learner's name, profile summary, and full conversation history for context.
@@ -124,7 +123,7 @@ js/
 prompts/
   onboarding-profile.md     System prompt for Onboarding Profile Agent (fallback)
   onboarding-conversation.md System prompt for multi-turn onboarding chat
-  diagnostic-creation.md    System prompt for Diagnostic (Skills Check) Agent
+  diagnostic-creation.md    (unused — kept for reference) System prompt for deprecated Diagnostic Creation Agent
   diagnostic-conversation.md System prompt for multi-turn diagnostic chat
   diagnostic-assessment.md  System prompt for Diagnostic Assessment Agent
   course-creation.md        System prompt for Course Creation Agent

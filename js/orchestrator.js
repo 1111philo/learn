@@ -7,7 +7,7 @@ import { callClaude, callProxy, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiErro
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey, getProxyUrl, getDevMode, appendDevLog } from './storage.js';
 import { trackEvent } from './telemetry.js';
-import { validateSafety, validateActivity, validateDiagnosticActivity, validateAssessment, validatePlan } from './validators.js';
+import { validateSafety, validateActivity, validateAssessment, validatePlan } from './validators.js';
 
 async function devLog(type, data) {
   try {
@@ -161,40 +161,11 @@ export async function initializeLearnerProfile(name, statement) {
   return parsed;
 }
 
-/**
- * Generate a diagnostic activity that tests existing knowledge before a unit.
- */
-export async function generateDiagnosticActivity(unit) {
-  const systemPrompt = await loadPrompt('diagnostic-creation');
-
-  const userContent = JSON.stringify({
-    course: { name: unit.name, learningObjectives: unit.learningObjectives }
-  });
-
-  const callAgent = async () => {
-    const { content } = await callApi({
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  const generated = await callWithValidation(callAgent, validateDiagnosticActivity, 'diagnostic-creation');
-  return {
-    id: `diagnostic-${unit.unitId}`,
-    type: 'final',
-    goal: unit.learningObjectives[unit.learningObjectives.length - 1],
-    instruction: generated.instruction,
-    tips: generated.tips
-  };
-}
 
 /**
  * Create a learning plan for a unit.
  */
-export async function createLearningPlan(unit, preferences, profileSummary, completedUnitNames, diagnosticResult) {
+export async function createLearningPlan(unit, preferences, profileSummary, completedUnitNames, diagnosticResult, courseScope) {
   const systemPrompt = await loadPrompt('course-creation');
 
   const userContent = JSON.stringify({
@@ -206,7 +177,8 @@ export async function createLearningPlan(unit, preferences, profileSummary, comp
     },
     learnerProfile: profileSummary || `${preferences.name || 'Learner'}`,
     completedCourses: completedUnitNames,
-    diagnosticResult: diagnosticResult || null
+    diagnosticResult: diagnosticResult || null,
+    courseScope: courseScope || null
   });
 
   const callAgent = async () => {
@@ -226,7 +198,7 @@ export async function createLearningPlan(unit, preferences, profileSummary, comp
 /**
  * Generate the next activity's instruction.
  */
-export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext) {
+export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope) {
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
@@ -235,7 +207,8 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
     workProduct: planContext?.finalWorkProductDescription || '',
     workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
-    learnerProfile: profileSummary || 'No profile yet'
+    learnerProfile: profileSummary || 'No profile yet',
+    courseScope: courseScope || null
   });
 
   const callAgent = async () => {
