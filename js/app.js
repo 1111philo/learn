@@ -1,14 +1,13 @@
 import {
   getPreferences, savePreferences,
-  getCourseProgress, saveCourseProgress, getAllProgress,
-  getWorkProducts, saveWorkProduct,
+  getUnitProgress, saveUnitProgress, getAllProgress,
+  saveWorkProduct,
   saveScreenshot, getScreenshot,
   getApiKey, saveApiKey,
   getLearnerProfile, saveLearnerProfile,
   getLearnerProfileSummary, saveLearnerProfileSummary,
-  getDevMode, saveDevMode, appendDevLog,
+  getDevMode, appendDevLog,
   getOnboardingComplete, saveOnboardingComplete,
-  getLastSync,
   getDiagnosticState, saveDiagnosticState, clearDiagnosticState,
   getOnboardingState, saveOnboardingState, clearOnboardingState,
   getProxyUrl, saveProxyUrl
@@ -161,30 +160,30 @@ async function logDev(type, data) {
 }
 
 let state = {
-  view: 'courses',        // onboarding | courses | units | course | work | work-detail | settings
+  view: 'courses',        // onboarding | courses | units | unit | work | work-detail | settings
   courseGroups: [],         // top-level course groups (from courses.json)
-  courses: [],             // flat list of all playable courses/units (derived from courseGroups)
+  units: [],               // flat list of all playable units (derived from courseGroups)
   activeCourseGroupId: null, // which course group is selected (for units view)
-  activeCourseId: null,
+  activeUnitId: null,
   progress: null,
   allProgress: {},
   preferences: null,
-  activeWorkCourseId: null,  // for work-detail view
-  generating: null,          // { courseId, promise } — in-flight generation tracker
+  activeWorkUnitId: null,    // for work-detail view
+  generating: null,          // { unitId, promise } — in-flight generation tracker
   // Diagnostic flow (consolidated)
   diagnostic: {
     phase: null,          // 'generating' | 'activity' | null
     activity: null,       // generated diagnostic activity object
     messages: [],         // conversation history [{role, content}]
-    result: null,         // { courseId, result } — assessment for plan generation
-    skipFor: null,        // courseId — bypass diagnostic
+    result: null,         // { unitId, result } — assessment for plan generation
+    skipFor: null,        // unitId — bypass diagnostic
   }
 };
 
 // -- Time tracking state ------------------------------------------------------
 const _sessionStartMs = Date.now();
 let _activityStartMs = null;   // set when an activity view renders
-let _activityStartMeta = null; // { courseId, activityIndex } for the current activity
+let _activityStartMeta = null; // { unitId, activityIndex } for the current activity
 
 
 // Onboarding wizard state (persists across re-renders within a session)
@@ -205,9 +204,11 @@ const TYPE_LETTERS = { explore: 'R', apply: 'P', create: 'D', final: 'F' };
 document.addEventListener('DOMContentLoaded', async () => {
   await runMigrations();
   await seedFromEnv();
+
+  // Load from local cache immediately (fast, no network)
   state.preferences = await getPreferences();
   state.courseGroups = await loadCourses();
-  state.courses = flattenCourses(state.courseGroups);
+  state.units = flattenCourses(state.courseGroups);
   state.allProgress = await getAllProgress();
   bindNav();
   bindUserMenu();
@@ -221,7 +222,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // First-run: show onboarding if it hasn't been completed yet
   const onboardingDone = await getOnboardingComplete();
-  if (!onboardingDone) {
+  const alreadyLoggedIn = await auth.isLoggedIn();
+  if (!onboardingDone && !alreadyLoggedIn) {
     state.view = 'onboarding';
     // Restore onboarding conversation state if it was in progress
     const savedOnboarding = await getOnboardingState();
@@ -229,9 +231,41 @@ document.addEventListener('DOMContentLoaded', async () => {
       Object.assign(_onboardingData, savedOnboarding);
     }
     if (state.preferences.name) _onboardingData.name = state.preferences.name;
+  } else if (!onboardingDone && alreadyLoggedIn) {
+    // User is logged in but hasn't completed onboarding — skip to the About You step
+    const authUser = await auth.getCurrentUser();
+    _onboardingData.name = authUser?.name || state.preferences?.name || '';
+    _onboardingStep = 4;
+    state.view = 'onboarding';
+    // Restore conversation state if it was in progress
+    const savedOnboarding = await getOnboardingState();
+    if (savedOnboarding) {
+      Object.assign(_onboardingData, savedOnboarding);
+    }
   }
 
+  // Render immediately from local cache — no white screen
   render();
+
+  // Then sync from server in the background and re-render if data changed
+  if (alreadyLoggedIn) {
+    sync.loadAll().then(async () => {
+      const freshProgress = await getAllProgress();
+      const freshPrefs = await getPreferences();
+      const changed = JSON.stringify(freshProgress) !== JSON.stringify(state.allProgress)
+                   || JSON.stringify(freshPrefs) !== JSON.stringify(state.preferences);
+      if (changed) {
+        state.allProgress = freshProgress;
+        state.preferences = freshPrefs;
+        // Update progress for the active unit if viewing one
+        if (state.activeUnitId) {
+          state.progress = state.allProgress[state.activeUnitId] || null;
+        }
+        render();
+      }
+    }).catch(() => { /* offline — local cache is fine */ });
+  }
+
   if (await getDevMode()) {
     trackEvent('session_start', {
       extensionVersion: chrome.runtime.getManifest().version,
@@ -261,14 +295,22 @@ async function seedFromEnv() {
   } catch { /* .env.js not present — expected in production */ }
 }
 
-/** Push data to cloud in background. No-op if not logged in. */
+/** Save data to remote server in background. Debounces per key — rapid saves for the same key only trigger one push. */
+const _pendingSyncKeys = new Set();
+let _syncTimer = null;
 function syncInBackground(...syncKeys) {
-  Promise.resolve().then(async () => {
-    if (!await auth.isLoggedIn()) return;
-    for (const key of syncKeys) {
-      try { await sync.pushData(key); } catch { /* silent */ }
-    }
-  });
+  for (const key of syncKeys) _pendingSyncKeys.add(key);
+  if (_syncTimer) return;
+  _syncTimer = setTimeout(() => {
+    const keys = [..._pendingSyncKeys];
+    _pendingSyncKeys.clear();
+    _syncTimer = null;
+    Promise.resolve().then(async () => {
+      for (const key of keys) {
+        try { await sync.save(key); } catch { /* silent */ }
+      }
+    });
+  }, 500);
 }
 
 function bindNav() {
@@ -302,7 +344,6 @@ async function updateUserMenu() {
   if (loggedIn) {
     dropdown.innerHTML = `
       <p class="user-dropdown-email">${esc(user?.email || '')}</p>
-      <p class="user-dropdown-sync" id="dropdown-sync-status"></p>
       <button id="dropdown-sign-out-btn" class="secondary-btn" style="width:100%">Sign Out</button>`;
   }
 }
@@ -343,7 +384,14 @@ function showLoginModal(onSuccess) {
     submitBtn.textContent = 'Signing in...';
 
     try {
-      await auth.login(email, password);
+      const authUser = await auth.login(email, password);
+
+      // Sync auth name into preferences
+      if (authUser?.name) {
+        state.preferences = { ...state.preferences, name: authUser.name };
+        await savePreferences(state.preferences);
+        syncInBackground('preferences');
+      }
 
       // Replace form with success state
       const modal = document.querySelector('#modal-overlay .modal');
@@ -363,16 +411,16 @@ function showLoginModal(onSuccess) {
         } catch { /* non-critical */ }
       }
 
-      // Initial sync
+      // Load data from server
       try {
-        await sync.syncAll();
+        await sync.loadAll();
         state.allProgress = await getAllProgress();
         state.preferences = await getPreferences();
         const hint = document.querySelector('.login-success-hint');
-        if (hint) hint.textContent = 'All synced.';
+        if (hint) hint.textContent = 'All set.';
       } catch {
         const hint = document.querySelector('.login-success-hint');
-        if (hint) hint.textContent = 'Signed in. Sync will retry later.';
+        if (hint) hint.textContent = 'Signed in. Data will load later.';
       }
 
       await updateUserMenu();
@@ -404,14 +452,14 @@ function bindUserMenu() {
         state.preferences = await getPreferences();
         state.allProgress = await getAllProgress();
         state.courseGroups = await loadCourses();
-        state.courses = flattenCourses(state.courseGroups);
-        const activeCourse = Object.entries(state.allProgress)
+        state.units = flattenCourses(state.courseGroups);
+        const activeUnit = Object.entries(state.allProgress)
           .find(([, p]) => p.status === 'in_progress');
-        if (activeCourse) {
-          state.activeCourseId = activeCourse[0];
-          state.activeCourseGroupId = findCourseGroupId(activeCourse[0]);
-          state.progress = activeCourse[1];
-          state.view = 'course';
+        if (activeUnit) {
+          state.activeUnitId = activeUnit[0];
+          state.activeCourseGroupId = findCourseGroupId(activeUnit[0]);
+          state.progress = activeUnit[1];
+          state.view = 'unit';
         }
         render();
       });
@@ -422,9 +470,6 @@ function bindUserMenu() {
     dropdown.hidden = !opening;
     btn.setAttribute('aria-expanded', String(opening));
     if (opening) {
-      const ls = await getLastSync();
-      const statusEl = $('#dropdown-sync-status');
-      if (statusEl) statusEl.textContent = ls ? `Last synced ${formatTimeAgo(ls)}` : 'Not yet synced';
       bindDropdownActions();
     }
   });
@@ -474,7 +519,7 @@ function bindDropdownActions() {
         state.preferences = { name: '' };
         state.allProgress = {};
         state.progress = null;
-        state.activeCourseId = null;
+        state.activeUnitId = null;
         _onboardingStep = 1;
         _onboardingData = {};
         await updateUserMenu();
@@ -487,7 +532,7 @@ function bindDropdownActions() {
 }
 
 // View depth for determining transition direction
-const VIEW_DEPTH = { onboarding: 0, courses: 1, units: 2, course: 3, work: 1, 'work-detail': 2, settings: 1 };
+const VIEW_DEPTH = { onboarding: 0, courses: 1, units: 2, unit: 3, work: 1, 'work-detail': 2, settings: 1 };
 const ANIM_CLASSES = ['view-slide-left', 'view-slide-right', 'view-fade-up'];
 
 function animateMain(anim) {
@@ -527,7 +572,7 @@ function render() {
 
   document.querySelectorAll('[data-nav]').forEach((btn) => {
     const active = btn.dataset.nav === state.view ||
-      (btn.dataset.nav === 'courses' && (state.view === 'course' || state.view === 'units')) ||
+      (btn.dataset.nav === 'courses' && (state.view === 'unit' || state.view === 'units')) ||
       (btn.dataset.nav === 'work' && state.view === 'work-detail');
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
@@ -536,7 +581,7 @@ function render() {
     case 'onboarding': return renderOnboarding();
     case 'courses': return renderCourses();
     case 'units':   return renderUnits();
-    case 'course':  return renderCourse();
+    case 'unit':    return renderUnit();
     case 'work':    return renderWork();
     case 'work-detail': return renderWorkDetail();
     case 'settings': return renderSettings();
@@ -545,14 +590,23 @@ function render() {
 
 // -- Helpers ------------------------------------------------------------------
 
-function findCourseGroupId(courseId) {
-  const group = state.courseGroups.find(cg => cg.units?.some(u => u.courseId === courseId));
+function findCourseGroupId(unitId) {
+  const group = state.courseGroups.find(cg => cg.units?.some(u => u.unitId === unitId));
   return group?.courseId || null;
+}
+
+/** Strip the course group name and number prefix from a unit name (e.g. "Foundations 0: Basic WordPress" → "Basic WordPress"). */
+function shortUnitName(unitName, groupName) {
+  if (!groupName || !unitName.startsWith(groupName)) return unitName;
+  let stripped = unitName.slice(groupName.length).replace(/^\s+/, '');
+  // Remove leading "N:" or "N :" number prefix
+  stripped = stripped.replace(/^\d+\s*:\s*/, '');
+  return stripped || unitName;
 }
 
 function courseGroupStatus(cg) {
   const statuses = cg.units.map(u => {
-    const prog = state.allProgress[u.courseId];
+    const prog = state.allProgress[u.unitId];
     return prog ? prog.status : 'not_started';
   });
   if (statuses.every(s => s === 'completed')) return 'completed';
@@ -578,7 +632,7 @@ function renderCourses() {
       const status = courseGroupStatus(cg);
       const locked = !checkCourseGroupPrerequisite(cg);
       const completedCount = cg.units.filter(u => {
-        const prog = state.allProgress[u.courseId];
+        const prog = state.allProgress[u.unitId];
         return prog?.status === 'completed';
       }).length;
       const totalTime = cg.units.reduce((sum, u) => sum + u.learningObjectives.length * 5 + 2, 0);
@@ -609,9 +663,9 @@ function renderCourses() {
     return `
       <li>
         <button class="course-card${locked ? ' locked' : ''}"
-                data-course="${cg.courseId}"
+                data-unit="${cg.courseId}"
                 ${locked ? 'disabled' : ''}>
-          <span class="course-status" aria-hidden="true">${state.generating?.courseId === cg.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
+          <span class="course-status" aria-hidden="true">${state.generating?.unitId === cg.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
           <div class="course-info">
             <strong>${esc(cg.name)}</strong>
             <p>${esc(cg.description)}</p>
@@ -633,8 +687,8 @@ function renderCourses() {
     });
   });
 
-  main.querySelectorAll('[data-course]').forEach((btn) => {
-    btn.addEventListener('click', () => startOrResumeCourse(btn.dataset.course));
+  main.querySelectorAll('[data-unit]').forEach((btn) => {
+    btn.addEventListener('click', () => startOrResumeUnit(btn.dataset.unit));
   });
 }
 
@@ -645,22 +699,26 @@ function renderUnits() {
   const courseGroup = state.courseGroups.find(cg => cg.courseId === state.activeCourseGroupId);
   if (!courseGroup?.units) { navigate('courses'); return; }
 
+  // A unit is required if any other unit depends on it
+  const depTargets = new Set(courseGroup.units.map(u => u.dependsOn).filter(Boolean));
+
   const cards = courseGroup.units.map((u) => {
     const prereqMet = checkPrerequisite(u, state.allProgress);
-    const prog = state.allProgress[u.courseId];
+    const prog = state.allProgress[u.unitId];
     const status = prog ? prog.status : 'not_started';
     const locked = !prereqMet;
+    const isRequired = depTargets.has(u.unitId) || !!u.dependsOn;
 
     return `
       <li>
         <button class="course-card${locked ? ' locked' : ''}"
-                data-course="${u.courseId}"
+                data-unit="${u.unitId}"
                 ${locked ? 'disabled' : ''}>
-          <span class="course-status" aria-hidden="true">${state.generating?.courseId === u.courseId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
+          <span class="course-status" aria-hidden="true">${state.generating?.unitId === u.unitId ? '<span class="status-spinner"></span>' : statusIcon(status)}</span>
           <div class="course-info">
-            <strong>${esc(u.name)}</strong>
+            <strong>${esc(shortUnitName(u.name, courseGroup.name))}</strong>
             <p>${esc(u.description)}</p>
-            <small>${progressLabel(u, locked)} · ~${u.learningObjectives.length * 5 + 2} min</small>
+            <small>${locked ? `Requires ${esc(shortUnitName(courseGroup.units.find(d => d.unitId === u.dependsOn)?.name || u.dependsOn, courseGroup.name))}` : status === 'completed' ? 'Completed' : status === 'in_progress' ? `Activity ${prog.currentActivityIndex + 1} of ${prog.learningPlan?.activities?.length || '?'}` : 'Not started'} · ~${u.learningObjectives.length * 5 + 2} min · <span class="unit-badge ${isRequired ? 'unit-badge-required' : 'unit-badge-optional'}">${isRequired ? 'Required' : 'Optional'}</span></small>
           </div>
         </button>
       </li>`;
@@ -675,8 +733,8 @@ function renderUnits() {
 
   $('#units-back-btn').addEventListener('click', () => navigate('courses'));
 
-  main.querySelectorAll('[data-course]').forEach((btn) => {
-    btn.addEventListener('click', () => startOrResumeCourse(btn.dataset.course));
+  main.querySelectorAll('[data-unit]').forEach((btn) => {
+    btn.addEventListener('click', () => startOrResumeUnit(btn.dataset.unit));
   });
 }
 
@@ -688,7 +746,7 @@ function statusIcon(s) {
 
 function progressLabel(course, locked) {
   if (locked) return 'Requires ' + course.dependsOn;
-  if (state.generating?.courseId === course.courseId) return 'Generating…';
+  if (state.generating?.unitId === course.courseId) return 'Generating…';
   const prog = state.allProgress[course.courseId];
   if (!prog) return 'Not started';
   const workName = prog.learningPlan?.finalWorkProductDescription;
@@ -696,24 +754,30 @@ function progressLabel(course, locked) {
     return workName ? `Built: ${workName}` : 'Completed';
   }
   const total = prog.learningPlan?.activities?.length || '?';
-  const step = prog.currentActivityIndex + 1;
+  const current = prog.currentActivityIndex + 1;
   return workName
-    ? `Building ${workName} — step ${step} of ${total}`
-    : `Activity ${step} of ${total}`;
+    ? `Building ${workName} — activity ${current} of ${total}`
+    : `Activity ${current} of ${total}`;
 }
 
-// -- Active course ------------------------------------------------------------
+// -- Active unit --------------------------------------------------------------
 
-async function startOrResumeCourse(courseId) {
-  const course = state.courses.find((c) => c.courseId === courseId);
-  state.activeCourseGroupId = findCourseGroupId(courseId);
-  let progress = await getCourseProgress(courseId);
+async function startOrResumeUnit(unitId) {
+  const unit = state.units.find((c) => c.unitId === unitId);
+  state.activeCourseGroupId = findCourseGroupId(unitId);
+  let progress = await getUnitProgress(unitId);
+
+  // Clear diagnostic state from a different unit so it doesn't bleed into this one
+  if (state.activeUnitId && state.activeUnitId !== unitId) {
+    state.diagnostic = { phase: null, activity: null, messages: [], result: null, skipFor: null };
+    clearDiagnosticState();
+  }
 
   if (!progress) {
-    // If already generating this course, just navigate to it
-    if (state.generating?.courseId === courseId) {
-      state.activeCourseId = courseId;
-      state.view = 'course';
+    // If already generating this unit, just navigate to it
+    if (state.generating?.unitId === unitId) {
+      state.activeUnitId = unitId;
+      state.view = 'unit';
       render();
       return;
     }
@@ -725,20 +789,20 @@ async function startOrResumeCourse(courseId) {
       return;
     }
 
-    // Run diagnostic unless one already exists for this course
-    const hasDiagnosticResult = state.diagnostic.result?.courseId === courseId;
-    const skipped = state.diagnostic.skipFor === courseId;
+    // Run diagnostic unless one already exists for this unit
+    const hasDiagnosticResult = state.diagnostic.result?.unitId === unitId;
+    const skipped = state.diagnostic.skipFor === unitId;
     if (!hasDiagnosticResult && !skipped) {
-      state.activeCourseId = courseId;
+      state.activeUnitId = unitId;
       state.diagnostic.phase = 'generating';
       state.diagnostic.activity = null;
       state.diagnostic.messages = [];
-      state.view = 'course';
+      state.view = 'unit';
       saveDiagnosticState(state.diagnostic);
       render();
 
       try {
-        const activity = await orchestrator.generateDiagnosticActivity(course);
+        const activity = await orchestrator.generateDiagnosticActivity(unit);
         state.diagnostic.activity = activity;
         state.diagnostic.phase = 'activity';
         saveDiagnosticState(state.diagnostic);
@@ -749,9 +813,9 @@ async function startOrResumeCourse(courseId) {
       return;
     }
 
-    state.activeCourseId = courseId;
+    state.activeUnitId = unitId;
     state.diagnostic.phase = null;
-    state.view = 'course';
+    state.view = 'unit';
 
     const promise = (async () => {
       function showStep(label) {
@@ -762,22 +826,30 @@ async function startOrResumeCourse(courseId) {
       showStep('Analyzing your profile...');
 
       const profileSummary = await getLearnerProfileSummary();
-      const completedNames = Object.entries(state.allProgress)
+      const completedUnitNames = Object.entries(state.allProgress)
         .filter(([, p]) => p.status === 'completed')
-        .map(([id]) => state.courses.find(c => c.courseId === id)?.name)
+        .map(([id]) => state.units.find(c => c.unitId === id)?.name)
         .filter(Boolean);
 
       showStep('Building your learning plan...');
 
       const diagnosticResult = hasDiagnosticResult ? state.diagnostic.result.result : null;
       const plan = await orchestrator.createLearningPlan(
-        course, state.preferences, profileSummary, completedNames, diagnosticResult
+        unit, state.preferences, profileSummary, completedUnitNames, diagnosticResult
       );
 
+      // Capture the diagnostic conversation before it's cleared
+      const diagnosticChat = state.diagnostic.activity ? {
+        instruction: state.diagnostic.activity.instruction,
+        messages: state.diagnostic.messages || [],
+        result: diagnosticResult
+      } : null;
+
       const newProgress = {
-        courseId,
+        unitId,
         status: 'in_progress',
         currentActivityIndex: 0,
+        diagnostic: diagnosticChat,
         learningPlan: {
           activities: plan.activities,
           finalWorkProductDescription: plan.finalWorkProductDescription,
@@ -794,26 +866,27 @@ async function startOrResumeCourse(courseId) {
 
       const firstSlot = plan.activities[0];
       const generated = await orchestrator.generateNextActivity(
-        course, firstSlot, [], profileSummary, plan
+        unit, firstSlot, [], profileSummary, plan
       );
       newProgress.activities.push({
         ...firstSlot,
         instruction: generated.instruction,
-        tips: generated.tips
+        tips: generated.tips,
+        messages: []
       });
 
-      await saveCourseProgress(courseId, newProgress);
-      state.allProgress[courseId] = newProgress;
-      syncInBackground(`progress:${courseId}`);
+      await saveUnitProgress(unitId, newProgress);
+      state.allProgress[unitId] = newProgress;
+      syncInBackground(`unit:${unitId}`);
       // Clear diagnostic state now that the plan has been generated
       state.diagnostic.result = null;
       state.diagnostic.skipFor = null;
       clearDiagnosticState();
-      trackEvent('course_started', { courseId, totalActivities: plan.activities.length });
+      trackEvent('unit_started', { unitId, totalActivities: plan.activities.length });
       return newProgress;
     })();
 
-    state.generating = { courseId, promise };
+    state.generating = { unitId, promise };
     render();
 
     try {
@@ -827,60 +900,53 @@ async function startOrResumeCourse(courseId) {
     state.generating = null;
   }
 
-  state.activeCourseId = courseId;
+  state.activeUnitId = unitId;
   state.progress = progress;
-  state.view = 'course';
+  state.view = 'unit';
   render();
 }
 
-async function renderCourse() {
+async function renderUnit() {
   const main = $main();
-  const course = state.courses.find((c) => c.courseId === state.activeCourseId);
+  const unit = state.units.find((c) => c.unitId === state.activeUnitId);
   const p = state.progress;
   const planActivities = p?.learningPlan?.activities;
 
   // ── Header ──
-  let progressLabel = '';
-  if (planActivities) {
-    progressLabel = `Step ${p.currentActivityIndex + 1} of ${planActivities.length}`;
-  } else if (state.diagnostic.phase) {
-    progressLabel = 'Skills Check';
-  }
+  const courseGroupName = state.activeCourseGroupId ? state.courseGroups.find(cg => cg.courseId === state.activeCourseGroupId)?.name : null;
 
   let html = `<div class="course-layout">
     <div class="course-header">
       <button class="back-btn" aria-label="${state.activeCourseGroupId ? 'Back to units' : 'Back to courses'}" id="back-btn">&larr;</button>
       <div class="course-header-info">
-        <h2>${esc(course.name)}</h2>
-        ${progressLabel ? `<span class="progress-label">${esc(progressLabel)}</span>` : ''}
+        ${courseGroupName ? `<span class="course-header-group">${esc(courseGroupName)}</span>` : ''}
+        <h2>${esc(courseGroupName ? shortUnitName(unit.name, courseGroupName) : unit.name)}</h2>
       </div>
-      ${p ? '<button class="reset-btn" id="reset-course-btn" aria-label="Reset course" title="Reset course">&#8635;</button>' : ''}
+      ${p ? '<button class="reset-btn" id="reset-course-btn" aria-label="Reset unit" title="Reset unit">&#8635;</button>' : ''}
     </div>`;
-
-  // ── Activity track (only when plan exists) ──
-  if (planActivities) {
-    const activityPips = planActivities.map((_, i) => {
-      const cls = i < p.currentActivityIndex ? 'pip pip-done'
-                : i === p.currentActivityIndex ? 'pip pip-current'
-                : 'pip';
-      return `<span class="${cls}" aria-hidden="true"></span>`;
-    }).join('');
-    html += `<div class="activity-track" role="progressbar" aria-label="Activity ${p.currentActivityIndex + 1} of ${planActivities.length}" aria-valuenow="${p.currentActivityIndex + 1}" aria-valuemin="1" aria-valuemax="${planActivities.length}">${activityPips}</div>`;
-  }
 
   // ── Chat ──
   html += '<div class="chat" role="log" aria-label="Course conversation">';
 
   // ── Skills Check section ──
-  if (state.diagnostic.activity || state.diagnostic.phase === 'generating') {
+  // Show from live state (in-flight diagnostic) or from persisted progress
+  const liveDiag = state.diagnostic.activity || state.diagnostic.phase === 'generating';
+  const savedDiag = p?.diagnostic;
+  if (liveDiag || savedDiag) {
     html += '<div class="chat-section-heading" role="separator">Skills Check</div>';
   }
 
-  // Diagnostic conversation (rendered from structured messages)
   if (state.diagnostic.activity) {
+    // Active diagnostic conversation (in-flight)
     html += renderConversationMessages(
       state.diagnostic.messages,
       state.diagnostic.activity.instruction
+    );
+  } else if (savedDiag) {
+    // Persisted diagnostic from progress
+    html += renderConversationMessages(
+      savedDiag.messages,
+      savedDiag.instruction
     );
   }
 
@@ -890,25 +956,32 @@ async function renderCourse() {
   }
 
   // Course setup thinking (plan being generated)
-  if (!p?.learningPlan && state.generating?.courseId === course.courseId) {
+  if (!p?.learningPlan && state.generating?.unitId === unit.unitId) {
     html += `<div class="msg msg-response" role="status" aria-live="polite" id="setup-status"><span class="loading-spinner-inline" aria-hidden="true"></span> Setting up your course...</div>`;
+  }
+
+  // ── Completed activities ──
+  if (p?.activities) {
+    for (let ai = 0; ai < p.currentActivityIndex; ai++) {
+      const prevActivity = p.activities[ai];
+      if (!prevActivity) continue;
+      const prevTypeLabel = TYPE_LABELS[prevActivity.type] || prevActivity.type;
+      html += `<div class="completed-activity">`;
+      html += `<div class="chat-section-heading" role="separator">Activity ${ai + 1}: ${esc(prevActivity.goal || prevTypeLabel)}</div>`;
+      html += instructionMessage(prevActivity.instruction);
+      html += renderActivityTimeline(prevActivity, p.drafts, false);
+      html += `</div>`;
+    }
   }
 
   // ── Current activity section ──
   const activity = p?.activities?.[p?.currentActivityIndex];
   if (activity) {
     const typeLabel = TYPE_LABELS[activity.type] || activity.type;
-    html += `<div class="chat-section-heading" role="separator">Lesson ${p.currentActivityIndex + 1}: ${esc(activity.goal || typeLabel)}</div>`;
+    html += `<div class="chat-section-heading" role="separator">Activity ${p.currentActivityIndex + 1}: ${esc(activity.goal || typeLabel)}</div>`;
 
     html += instructionMessage(activity.instruction);
-
-    const draftsForActivity = p.drafts.filter((d) => d.activityId === activity.id);
-    for (let di = 0; di < draftsForActivity.length; di++) {
-      const draft = draftsForActivity[di];
-      const isLatest = di === draftsForActivity.length - 1;
-      html += draftMessage(draft);
-      html += feedbackCard(draft, isLatest);
-    }
+    html += renderActivityTimeline(activity, p.drafts, true);
   } else if (p?.learningPlan) {
     // Activity not generated yet — show thinking
     html += `<div class="msg msg-response" role="status" aria-live="polite"><span class="loading-spinner-inline" aria-hidden="true"></span> Preparing your next activity...</div>`;
@@ -916,7 +989,7 @@ async function renderCourse() {
 
   // Course completion summary
   if (p?.status === 'completed') {
-    html += completionSummary(course, p);
+    html += completionSummary(unit, p);
   }
 
   // Diagnostic skip (inside chat, after 2 user messages)
@@ -934,9 +1007,9 @@ async function renderCourse() {
     if (lastDraft && lastDraft.recommendation === 'advance') {
       // Agent asks if user wants to continue
       const remaining = planActivities.length - p.currentActivityIndex - 1;
-      html += `<div class="msg msg-response"><p>Great work — you've passed this activity! ${remaining > 0 ? `Ready to move on? You have ${remaining} ${remaining === 1 ? 'lesson' : 'lessons'} left.` : 'This was the final activity!'}</p></div>`;
+      html += `<div class="msg msg-response"><p>Great work — you've passed this activity! ${remaining > 0 ? `Ready to move on? You have ${remaining} ${remaining === 1 ? 'activity' : 'activities'} left.` : 'This was the final activity!'}</p></div>`;
       if (remaining > 0) {
-        html += '<button id="next-activity-btn" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue to next lesson</button>';
+        html += '<button id="next-activity-btn" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue to next activity</button>';
       }
     } else if (!hasDrafts) {
       // First recording — show Record button
@@ -973,16 +1046,16 @@ async function renderCourse() {
   const chatEl = main.querySelector('.chat');
   if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
 
-  // Confetti on first view after course completion
-  if (p?.status === 'completed' && !_confettiFired.has(p.courseId)) {
-    _confettiFired.add(p.courseId);
+  // Confetti on first view after unit completion
+  if (p?.status === 'completed' && !_confettiFired.has(p.unitId)) {
+    _confettiFired.add(p.unitId);
     launchConfetti();
   }
 
   // ── Event handlers ──
   $('#back-btn').addEventListener('click', () => navigate(state.activeCourseGroupId ? 'units' : 'courses'));
   if (p) {
-    $('#reset-course-btn')?.addEventListener('click', () => confirmResetCourse(course, p));
+    $('#reset-course-btn')?.addEventListener('click', () => confirmResetUnit(unit, p));
   }
 
   // Diagnostic compose handlers
@@ -996,11 +1069,11 @@ async function renderCourse() {
     diagInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        sendDiagnosticMessage(course);
+        sendDiagnosticMessage(unit);
       }
     });
-    $('#submit-diagnostic-btn')?.addEventListener('click', () => sendDiagnosticMessage(course));
-    $('#skip-diagnostic-btn')?.addEventListener('click', () => skipDiagnostic(course));
+    $('#submit-diagnostic-btn')?.addEventListener('click', () => sendDiagnosticMessage(unit));
+    $('#skip-diagnostic-btn')?.addEventListener('click', () => skipDiagnostic(unit));
   }
 
   // Activity compose handlers
@@ -1013,10 +1086,10 @@ async function renderCourse() {
     chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        handleComposeSend(course, p, activity);
+        handleComposeSend(unit, p, activity);
       }
     });
-    $('#send-btn')?.addEventListener('click', () => handleComposeSend(course, p, activity));
+    $('#send-btn')?.addEventListener('click', () => handleComposeSend(unit, p, activity));
   }
 
   $('#record-draft-btn')?.addEventListener('click', () => recordDraft(activity));
@@ -1025,7 +1098,7 @@ async function renderCourse() {
   main.querySelectorAll('.dispute-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const draft = p.drafts.find(d => d.id === btn.dataset.draftId);
-      if (draft) showDisputeModal(course, p, activity, draft);
+      if (draft) showDisputeModal(unit, p, activity, draft);
     });
   });
   main.querySelectorAll('.rerecord-btn').forEach(btn => {
@@ -1036,26 +1109,26 @@ async function renderCourse() {
   if (nextBtn) {
     nextBtn.addEventListener('click', async () => {
       p.currentActivityIndex++;
-      await saveCourseProgress(p.courseId, p);
-      syncInBackground(`progress:${p.courseId}`);
+      await saveUnitProgress(p.unitId, p);
+      syncInBackground(`unit:${p.unitId}`);
       render();
     });
   }
 
   $('#next-course-btn')?.addEventListener('click', () => navigate('courses'));
   $('#view-portfolio-btn')?.addEventListener('click', () => {
-    state.activeWorkCourseId = p.courseId;
+    state.activeWorkUnitId = p.unitId;
     navigate('work-detail');
   });
 
   // Track activity start time
   if (activity) {
-    const actMeta = { courseId: p.courseId, activityIndex: p.currentActivityIndex };
-    if (!_activityStartMeta || _activityStartMeta.courseId !== actMeta.courseId || _activityStartMeta.activityIndex !== actMeta.activityIndex) {
+    const actMeta = { unitId: p.unitId, activityIndex: p.currentActivityIndex };
+    if (!_activityStartMeta || _activityStartMeta.unitId !== actMeta.unitId || _activityStartMeta.activityIndex !== actMeta.activityIndex) {
       _activityStartMs = Date.now();
       _activityStartMeta = actMeta;
       trackEvent('activity_started', {
-        courseId: p.courseId,
+        unitId: p.unitId,
         activityIndex: p.currentActivityIndex,
         activityType: activity.type,
         activityGoal: activity.goal || '',
@@ -1064,14 +1137,14 @@ async function renderCourse() {
   }
 
   // ── Async generation (wait while showing in-chat thinking) ──
-  if (!p?.learningPlan && state.generating?.courseId === course.courseId) {
+  if (!p?.learningPlan && state.generating?.unitId === unit.unitId) {
     try {
       await state.generating.promise;
     } catch (e) {
       handleApiError(e);
       return;
     }
-    state.progress = state.allProgress[course.courseId];
+    state.progress = state.allProgress[unit.unitId];
     render();
     return;
   }
@@ -1079,9 +1152,9 @@ async function renderCourse() {
   if (p?.learningPlan && !p.activities[p.currentActivityIndex]) {
     const currentSlot = planActivities[p.currentActivityIndex];
 
-    if (state.generating?.courseId === p.courseId) {
+    if (state.generating?.unitId === p.unitId) {
       try { await state.generating.promise; } catch (e) { handleApiError(e); return; }
-      state.progress = state.allProgress[p.courseId];
+      state.progress = state.allProgress[p.unitId];
       render();
       return;
     }
@@ -1097,20 +1170,21 @@ async function renderCourse() {
         });
 
       const generated = await orchestrator.generateNextActivity(
-        course, currentSlot, progressSummary, profileSummary, p.learningPlan
+        unit, currentSlot, progressSummary, profileSummary, p.learningPlan
       );
 
       p.activities[p.currentActivityIndex] = {
         ...currentSlot,
         instruction: generated.instruction,
-        tips: generated.tips
+        tips: generated.tips,
+        messages: []
       };
 
-      await saveCourseProgress(p.courseId, p);
-      syncInBackground(`progress:${p.courseId}`);
+      await saveUnitProgress(p.unitId, p);
+      syncInBackground(`unit:${p.unitId}`);
     })();
 
-    state.generating = { courseId: p.courseId, promise };
+    state.generating = { unitId: p.unitId, promise };
 
     try { await promise; } catch (e) { state.generating = null; handleApiError(e); return; }
     state.generating = null;
@@ -1118,15 +1192,21 @@ async function renderCourse() {
   }
 }
 
-function handleComposeSend(course, p, activity) {
+function handleComposeSend(unit, p, activity) {
   const text = $('#chat-input')?.value?.trim();
   if (!text) return;
-  askAboutActivity(course, p, activity, text);
+  askAboutActivity(unit, p, activity, text);
 }
 
-async function askAboutActivity(course, p, activity, text) {
+async function askAboutActivity(unit, p, activity, text) {
   const chat = document.querySelector('.chat');
   const thinkingId = `qa-thinking-${Date.now()}`;
+
+  // Persist user message
+  if (!activity.messages) activity.messages = [];
+  activity.messages.push({ role: 'user', content: text, timestamp: Date.now() });
+  await saveUnitProgress(p.unitId, p);
+  syncInBackground(`unit:${p.unitId}`);
 
   chat.insertAdjacentHTML('beforeend',
     `<div class="msg msg-user"><p>${esc(text)}</p></div>
@@ -1150,17 +1230,35 @@ async function askAboutActivity(course, p, activity, text) {
       context += `\nAreas to improve: ${(lastDraft.improvements || []).join(', ')}`;
     }
 
-    const systemPrompt = `You are a learning coach for the course "${course.name}". A learner is working on an activity and has a question. Answer concisely (2-3 sentences). Be helpful, specific, and encouraging.\n\n${context}`;
+    const learnerName = state.preferences?.name || '';
+    const profileSummary = await getLearnerProfileSummary();
+    const learnerContext = [
+      learnerName ? `Learner name: ${learnerName}` : '',
+      profileSummary ? `Learner profile: ${profileSummary}` : ''
+    ].filter(Boolean).join('\n');
 
-    const response = await orchestrator.chatWithContext(systemPrompt, [
-      { role: 'user', content: text }
-    ]);
+    const systemPrompt = `You are a learning coach for the course "${unit.name}".${learnerName ? ` The learner's name is ${learnerName}.` : ''} Answer concisely (2-3 sentences). Be helpful, specific, and encouraging.\n\n${learnerContext}\n\n${context}`;
+
+    // Build conversation history from persisted messages
+    const history = (activity.messages || []).map(m => ({ role: m.role, content: m.content }));
+
+    const response = await orchestrator.chatWithContext(systemPrompt, history);
 
     const el = document.getElementById(thinkingId);
     if (el) { el.textContent = ''; el.insertAdjacentHTML('beforeend', `<p>${renderMd(response)}</p>`); }
+
+    // Persist assistant response
+    activity.messages.push({ role: 'assistant', content: response, timestamp: Date.now() });
+    await saveUnitProgress(p.unitId, p);
+    syncInBackground(`unit:${p.unitId}`);
   } catch (e) {
     const el = document.getElementById(thinkingId);
     if (el) { el.textContent = ''; el.insertAdjacentHTML('beforeend', `<p>Sorry, I couldn't answer that. Try again?</p>`); }
+
+    // Persist error response so the conversation stays consistent
+    activity.messages.push({ role: 'assistant', content: "Sorry, I couldn't answer that. Try again?", timestamp: Date.now() });
+    await saveUnitProgress(p.unitId, p);
+    syncInBackground(`unit:${p.unitId}`);
   }
 
   if (input) input.disabled = false;
@@ -1169,7 +1267,7 @@ async function askAboutActivity(course, p, activity, text) {
   if (chat) chat.scrollTop = chat.scrollHeight;
 }
 
-function showDisputeModal(course, p, activity, draft) {
+function showDisputeModal(unit, p, activity, draft) {
   showModal(`
     <h2>Dispute Assessment</h2>
     <p>Explain why you think this assessment is wrong. The AI will re-evaluate your work.</p>
@@ -1183,14 +1281,14 @@ function showDisputeModal(course, p, activity, draft) {
   $('#dispute-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      submitDisputeFromModal(course, p, activity, draft);
+      submitDisputeFromModal(unit, p, activity, draft);
     }
   });
   $('#cancel-dispute-btn').addEventListener('click', hideModal);
-  $('#submit-dispute-btn').addEventListener('click', () => submitDisputeFromModal(course, p, activity, draft));
+  $('#submit-dispute-btn').addEventListener('click', () => submitDisputeFromModal(unit, p, activity, draft));
 }
 
-async function submitDisputeFromModal(course, p, activity, draft) {
+async function submitDisputeFromModal(unit, p, activity, draft) {
   const feedbackText = $('#dispute-input')?.value?.trim();
   if (!feedbackText) return;
   hideModal();
@@ -1218,7 +1316,7 @@ async function submitDisputeFromModal(course, p, activity, draft) {
     };
 
     const result = await orchestrator.reassessDraft(
-      course, activity, screenshotDataUrl, draft.url,
+      unit, activity, screenshotDataUrl, draft.url,
       priorDrafts, profileSummary, previousAssessment, feedbackText
     );
 
@@ -1232,7 +1330,7 @@ async function submitDisputeFromModal(course, p, activity, draft) {
     draft.disputed = true;
 
     trackEvent('dispute', {
-      courseId: course.courseId, activityType: activity.type,
+      unitId: unit.unitId, activityType: activity.type,
       originalScore, revisedScore: result.score,
       scoreChanged: originalScore !== result.score,
     });
@@ -1250,14 +1348,14 @@ async function submitDisputeFromModal(course, p, activity, draft) {
       p.status = 'completed';
       p.completedAt = Date.now();
       p.finalWorkProductUrl = draft.url;
-      await saveWorkProduct({ courseId: p.courseId, courseName: course.name, url: draft.url, completedAt: p.completedAt });
+      await saveWorkProduct({ unitId: p.unitId, courseName: unit.name, url: draft.url, completedAt: p.completedAt });
     }
 
-    await saveCourseProgress(p.courseId, p);
-    state.allProgress[p.courseId] = p;
-    syncInBackground(`progress:${p.courseId}`);
-    if (justCompleted) { syncInBackground('work'); updateProfileOnCourseCompletionInBackground(course, p); }
-    updateProfileFromFeedbackInBackground(feedbackText, course, activity);
+    await saveUnitProgress(p.unitId, p);
+    state.allProgress[p.unitId] = p;
+    syncInBackground(`unit:${p.unitId}`);
+    if (justCompleted) { syncInBackground('work'); updateProfileOnUnitCompletionInBackground(unit, p); }
+    updateProfileFromFeedbackInBackground(feedbackText, unit, activity);
 
     // Re-render to update feedback card and action buttons
     render();
@@ -1267,24 +1365,24 @@ async function submitDisputeFromModal(course, p, activity, draft) {
   }
 }
 
-function confirmResetCourse(course, progress) {
+function confirmResetUnit(unit, progress) {
   showModal(`
-    <h2>Reset "${esc(course.name)}"?</h2>
-    <p>This will permanently delete all progress, drafts, and feedback for this course. This cannot be undone.</p>
+    <h2>Reset "${esc(unit.name)}"?</h2>
+    <p>This will permanently delete all progress, drafts, and feedback for this unit. This cannot be undone.</p>
     <div class="action-bar">
       <button id="cancel-reset-btn" class="secondary-btn">Cancel</button>
-      <button id="confirm-reset-btn" class="danger-btn">Reset Course</button>
+      <button id="confirm-reset-btn" class="danger-btn">Reset Unit</button>
     </div>`, 'alertdialog', 'Confirm reset');
 
   $('#cancel-reset-btn').addEventListener('click', hideModal);
   $('#confirm-reset-btn').addEventListener('click', async () => {
     hideModal();
-    await chrome.storage.local.remove(`progress-${progress.courseId}`);
-    delete state.allProgress[progress.courseId];
+    await chrome.storage.local.remove(`unit-${progress.unitId}`);
+    delete state.allProgress[progress.unitId];
     state.progress = null;
-    state.activeCourseId = null;
+    state.activeUnitId = null;
     state.view = 'courses';
-    announce(`${course.name} has been reset.`);
+    announce(`${unit.name} has been reset.`);
     render();
   });
 }
@@ -1342,13 +1440,13 @@ async function recordDraft(activity) {
   if (compose) compose.hidden = true;
 
   try {
-    const course = state.courses.find((c) => c.courseId === state.activeCourseId);
+    const unit = state.units.find((c) => c.unitId === state.activeUnitId);
     const p = state.progress;
     const profileSummary = await getLearnerProfileSummary();
     const priorDrafts = p.drafts.filter(d => d.activityId === activity.id);
 
     const result = await orchestrator.assessDraft(
-      course, activity, dataUrl, pageUrl, priorDrafts, profileSummary
+      unit, activity, dataUrl, pageUrl, priorDrafts, profileSummary
     );
 
     const draft = {
@@ -1368,7 +1466,7 @@ async function recordDraft(activity) {
 
     const attemptNumber = priorDrafts.length + 1;
     trackEvent('draft_submitted', {
-      courseId: p.courseId,
+      unitId: p.unitId,
       activityIndex: p.currentActivityIndex,
       activityType: activity.type,
       activityGoal: activity.goal,
@@ -1388,13 +1486,13 @@ async function recordDraft(activity) {
       p.completedAt = Date.now();
       p.finalWorkProductUrl = pageUrl;
       await saveWorkProduct({
-        courseId: p.courseId,
-        courseName: course.name,
+        unitId: p.unitId,
+        courseName: unit.name,
         url: pageUrl,
         completedAt: p.completedAt
       });
-      trackEvent('course_completed', {
-        courseId: p.courseId,
+      trackEvent('unit_completed', {
+        unitId: p.unitId,
         totalActivities: p.learningPlan.activities.length,
         elapsedMs: p.completedAt - p.startedAt,
       });
@@ -1403,7 +1501,7 @@ async function recordDraft(activity) {
     if (result.recommendation === 'advance') {
       const actDurationMs = _activityStartMs ? Date.now() - _activityStartMs : null;
       trackEvent('activity_completed', {
-        courseId: p.courseId, activityType: activity.type,
+        unitId: p.unitId, activityType: activity.type,
         activityIndex: p.currentActivityIndex,
         score: result.score, recommendation: result.recommendation,
         draftCount: attemptNumber,
@@ -1413,15 +1511,15 @@ async function recordDraft(activity) {
       _activityStartMeta = null;
     }
 
-    await saveCourseProgress(p.courseId, p);
-    state.allProgress[p.courseId] = p;
-    syncInBackground(`progress:${p.courseId}`);
+    await saveUnitProgress(p.unitId, p);
+    state.allProgress[p.unitId] = p;
+    syncInBackground(`unit:${p.unitId}`);
     if (justCompleted) syncInBackground('work');
     render();
 
     // Update learner profile in background (non-blocking)
-    updateProfileInBackground(result, course, activity);
-    if (justCompleted) updateProfileOnCourseCompletionInBackground(course, p);
+    updateProfileInBackground(result, unit, activity);
+    if (justCompleted) updateProfileOnUnitCompletionInBackground(unit, p);
   } catch (e) {
     handleApiError(e);
   }
@@ -1431,8 +1529,8 @@ function defaultProfile() {
   return {
     name: state.preferences?.name || '',
     goal: '',
-    completedCourses: [],
-    activeCourses: [],
+    completedUnits: [],
+    activeUnits: [],
     strengths: [],
     weaknesses: [],
     revisionPatterns: '',
@@ -1452,8 +1550,8 @@ function mergeProfile(existing, returned) {
   for (const key of ['name', 'goal', 'revisionPatterns', 'pacing']) {
     if (returned[key]) merged[key] = returned[key];
   }
-  // ID fields — always union so course records are never lost
-  for (const key of ['completedCourses', 'activeCourses']) {
+  // ID fields — always union so unit records are never lost
+  for (const key of ['completedUnits', 'activeUnits']) {
     const combined = [...(existing[key] || []), ...(returned[key] || [])];
     merged[key] = [...new Set(combined)];
   }
@@ -1498,11 +1596,11 @@ async function ensureProfileExists() {
   return profile;
 }
 
-function updateProfileInBackground(assessmentResult, course, activity) {
+function updateProfileInBackground(assessmentResult, unit, activity) {
   queueProfileUpdate(async () => {
     const profile = await ensureProfileExists();
     const result = await orchestrator.updateLearnerProfile(profile, assessmentResult, {
-      courseName: course.name,
+      courseName: unit.name,
       activityType: activity.type,
       activityGoal: activity.goal
     });
@@ -1514,11 +1612,11 @@ function updateProfileInBackground(assessmentResult, course, activity) {
   });
 }
 
-function updateProfileFromFeedbackInBackground(feedbackText, course, activity) {
+function updateProfileFromFeedbackInBackground(feedbackText, unit, activity) {
   queueProfileUpdate(async () => {
     const profile = await ensureProfileExists();
     const result = await orchestrator.updateProfileFromFeedback(profile, feedbackText, {
-      courseName: course.name,
+      courseName: unit.name,
       activityType: activity.type,
       activityGoal: activity.goal
     });
@@ -1530,13 +1628,13 @@ function updateProfileFromFeedbackInBackground(feedbackText, course, activity) {
   });
 }
 
-function updateProfileOnCourseCompletionInBackground(course, progress) {
+function updateProfileOnUnitCompletionInBackground(unit, progress) {
   queueProfileUpdate(async () => {
     const profile = await ensureProfileExists();
-    const result = await orchestrator.updateProfileOnCourseCompletion(profile, course, progress);
+    const result = await orchestrator.updateProfileOnUnitCompletion(profile, unit, progress);
     await saveProfileResult(profile, result);
     trackEvent('profile_updated', {
-      trigger: 'course_completion', courseId: course.courseId,
+      trigger: 'unit_completion', unitId: unit.unitId,
       strengthsCount: result?.profile?.strengths?.length || 0,
       weaknessesCount: result?.profile?.weaknesses?.length || 0,
     });
@@ -1568,18 +1666,18 @@ async function renderOnboarding() {
         state.preferences = await getPreferences();
         state.allProgress = await getAllProgress();
         state.courseGroups = await loadCourses();
-        state.courses = flattenCourses(state.courseGroups);
+        state.units = flattenCourses(state.courseGroups);
         await saveOnboardingComplete();
         await updateUserMenu();
         _onboardingStep = 1;
         _onboardingData = {};
-        const activeCourse = Object.entries(state.allProgress)
+        const activeUnit = Object.entries(state.allProgress)
           .find(([, p]) => p.status === 'in_progress');
-        if (activeCourse) {
-          state.activeCourseId = activeCourse[0];
-          state.activeCourseGroupId = findCourseGroupId(activeCourse[0]);
-          state.progress = activeCourse[1];
-          state.view = 'course';
+        if (activeUnit) {
+          state.activeUnitId = activeUnit[0];
+          state.activeCourseGroupId = findCourseGroupId(activeUnit[0]);
+          state.progress = activeUnit[1];
+          state.view = 'unit';
         } else {
           state.view = 'courses';
         }
@@ -1682,14 +1780,16 @@ async function renderOnboarding() {
     const userMsgCount = (_onboardingData.messages || []).filter(m => m.role === 'user').length;
     const hasExchanged = userMsgCount >= 2;
 
+    const isLoggedInOnboarding = await auth.isLoggedIn();
+
     main.innerHTML = `
       <div class="onboarding" style="padding-bottom: 0;">
-        <div class="onboarding-dots" role="progressbar" aria-label="Step 3 of 3" aria-valuenow="3" aria-valuemin="1" aria-valuemax="4">${dots(3)}</div>
-        <span class="onboarding-step-label">Step 3 of 3 — About You</span>
+        ${isLoggedInOnboarding ? '' : `<div class="onboarding-dots" role="progressbar" aria-label="Step 3 of 3" aria-valuenow="3" aria-valuemin="1" aria-valuemax="4">${dots(3)}</div>`}
+        <span class="onboarding-step-label">${isLoggedInOnboarding ? 'Tell us about yourself' : 'Step 3 of 3 — About You'}</span>
         <div class="chat" role="log" aria-label="Getting to know you" id="onboarding-chat">
           ${initialMsg}
-          ${hasExchanged && !showContinue ? '<button id="onboarding-skip" class="skip-step-btn">Skip to next step</button>' : ''}
-          ${showContinue ? '<button id="onboarding-next-chat" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">Continue to next step</button>' : ''}
+          ${hasExchanged && !showContinue ? `<button id="onboarding-skip" class="skip-step-btn">${isLoggedInOnboarding ? 'Skip to courses' : 'Skip to next step'}</button>` : ''}
+          ${showContinue ? `<button id="onboarding-next-chat" class="skip-step-btn" style="background:var(--color-primary);color:var(--color-primary-text);border-color:var(--color-primary);">${isLoggedInOnboarding ? 'Continue to courses' : 'Continue to next step'}</button>` : ''}
         </div>
         <div class="chat-compose" id="onboarding-compose">
           <div class="compose-input-row">
@@ -1857,6 +1957,7 @@ async function sendOnboardingMessage() {
 async function completeOnboarding() {
   state.preferences = { ...(state.preferences || {}), name: _onboardingData.name };
   await savePreferences(state.preferences);
+  syncInBackground('preferences');
   await saveOnboardingComplete();
   await clearOnboardingState();
   _onboardingStep = 1;
@@ -1914,7 +2015,7 @@ function showProfileFeedback() {
   }
 }
 
-async function sendDiagnosticMessage(course) {
+async function sendDiagnosticMessage(unit) {
   const input = $('#diagnostic-response');
   const text = input?.value?.trim();
   if (!text) { input?.focus(); return; }
@@ -1940,7 +2041,7 @@ async function sendDiagnosticMessage(course) {
 
   try {
     // Build context for the conversational diagnostic agent
-    const courseContext = `Course: ${course.name}\nDescription: ${course.description || ''}\nObjectives: ${(course.learningObjectives || []).map(o => o.name).join(', ')}`;
+    const courseContext = `Course: ${unit.name}\nDescription: ${unit.description || ''}\nObjectives: ${(unit.learningObjectives || []).map(o => typeof o === 'string' ? o : o.name).join(', ')}`;
     const result = await orchestrator.converse('diagnostic-conversation', [
       { role: 'user', content: courseContext },
       { role: 'assistant', content: JSON.stringify({ message: activity.instruction, done: false }) },
@@ -1952,8 +2053,7 @@ async function sendDiagnosticMessage(course) {
 
     // Show response
     const thinkingEl = document.getElementById(diagThinkingId);
-    thinkingEl.textContent = '';
-    thinkingEl.insertAdjacentHTML('beforeend', `<p>${esc(result.message)}</p>`);
+    if (thinkingEl) { thinkingEl.textContent = ''; thinkingEl.insertAdjacentHTML('beforeend', `<p>${esc(result.message)}</p>`); }
 
     // Persist conversation state
     saveDiagnosticState(state.diagnostic);
@@ -1968,10 +2068,10 @@ async function sendDiagnosticMessage(course) {
         recommendation: 'advance',
         passed: true
       };
-      state.diagnostic.result = { courseId: course.courseId, result: diagnosticResult };
+      state.diagnostic.result = { unitId: unit.unitId, result: diagnosticResult };
 
       trackEvent('diagnostic_assessed', {
-        courseId: course.courseId,
+        unitId: unit.unitId,
         activityGoal: activity.goal,
         score: diagnosticResult.score,
         feedback: diagnosticResult.feedback,
@@ -1979,12 +2079,12 @@ async function sendDiagnosticMessage(course) {
         improvements: diagnosticResult.improvements,
         recommendation: diagnosticResult.recommendation,
       });
-      updateProfileInBackground(diagnosticResult, course, activity);
+      updateProfileInBackground(diagnosticResult, unit, activity);
 
-      // Auto-start course after brief pause
+      // Auto-start unit after brief pause
       state.diagnostic.phase = null;
-      state.diagnostic.skipFor = state.activeCourseId;
-      startOrResumeCourse(state.activeCourseId);
+      state.diagnostic.skipFor = state.activeUnitId;
+      startOrResumeUnit(state.activeUnitId);
       return;
     }
 
@@ -1995,7 +2095,7 @@ async function sendDiagnosticMessage(course) {
     if (userCount >= 2 && !existingSkip) {
       chat.insertAdjacentHTML('beforeend',
         '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to course</button>');
-      $('#skip-diagnostic-btn').addEventListener('click', () => skipDiagnostic(course));
+      $('#skip-diagnostic-btn').addEventListener('click', () => skipDiagnostic(unit));
     }
 
     input.disabled = false;
@@ -2003,25 +2103,31 @@ async function sendDiagnosticMessage(course) {
     input.focus();
     chat.scrollTop = chat.scrollHeight;
   } catch (e) {
-    console.warn('Diagnostic conversation failed:', e);
-    try {
-      const thinkingEl = document.getElementById(diagThinkingId);
-      if (thinkingEl) {
-        thinkingEl.textContent = '';
-        thinkingEl.insertAdjacentHTML('beforeend', `<p>Let's move on to the course.</p>`);
-      }
-    } catch { /* DOM may have changed */ }
-    // Skip diagnostic and start course
-    state.diagnostic.phase = null;
-    state.diagnostic.skipFor = state.activeCourseId;
-    startOrResumeCourse(state.activeCourseId);
+    console.warn('Diagnostic conversation failed:', e?.message || e, e?.stack);
+    const thinkingEl = document.getElementById(diagThinkingId);
+    if (thinkingEl) {
+      thinkingEl.textContent = '';
+      thinkingEl.insertAdjacentHTML('beforeend', `<p>Something went wrong. You can try again or skip to the activities.</p>`);
+    }
+    // Re-enable input so user can retry
+    if (input) input.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+    if (input) input.focus();
+
+    // Add skip button if not already present
+    if (!document.getElementById('skip-diagnostic-btn')) {
+      chat.insertAdjacentHTML('beforeend',
+        '<button id="skip-diagnostic-btn" class="skip-step-btn">Skip to activities</button>');
+      $('#skip-diagnostic-btn').addEventListener('click', () => skipDiagnostic(unit));
+    }
+    if (chat) chat.scrollTop = chat.scrollHeight;
   }
 }
 
-function skipDiagnostic(course) {
+function skipDiagnostic(unit) {
   state.diagnostic.phase = null;
-  state.diagnostic.skipFor = state.activeCourseId;
-  startOrResumeCourse(state.activeCourseId);
+  state.diagnostic.skipFor = state.activeUnitId;
+  startOrResumeUnit(state.activeUnitId);
 }
 
 // -- Work ---------------------------------------------------------------------
@@ -2030,12 +2136,12 @@ async function renderWork() {
   const main = $main();
   const cards = [];
 
-  // Gather all courses that have progress (in-progress and completed)
-  for (const [courseId, p] of Object.entries(state.allProgress)) {
+  // Gather all units that have progress (in-progress and completed)
+  for (const [unitId, p] of Object.entries(state.allProgress)) {
     if (!p.learningPlan) continue;
-    const course = state.courses.find(c => c.courseId === courseId);
-    if (!course) continue;
-    const workName = p.learningPlan.finalWorkProductDescription || course.name;
+    const unit = state.units.find(c => c.unitId === unitId);
+    if (!unit) continue;
+    const workName = p.learningPlan.finalWorkProductDescription || unit.name;
     const total = p.learningPlan.activities?.length || 0;
     const completed = Math.min(p.currentActivityIndex + (p.status === 'completed' ? 0 : 0), total);
     // Count completed steps: for completed courses all are done; otherwise it's currentActivityIndex
@@ -2055,9 +2161,9 @@ async function renderWork() {
 
     cards.push(`
       <li>
-        <button class="work-card" data-work-course="${esc(courseId)}">
+        <button class="work-card" data-work-unit="${esc(unitId)}">
           <strong class="work-card-title">${esc(workName)}</strong>
-          <small class="work-card-course">${esc(course.name)}</small>
+          <small class="work-card-course">${esc(unit.name)}</small>
           <div class="progress-bar-segmented">${segments}</div>
           <div class="work-card-stats">
             <span>${recordingCount} recording${recordingCount !== 1 ? 's' : ''}</span>
@@ -2076,9 +2182,9 @@ async function renderWork() {
     <h2>Portfolio</h2>
     <ul class="work-list" role="list">${cards.join('')}</ul>`;
 
-  main.querySelectorAll('[data-work-course]').forEach(btn => {
+  main.querySelectorAll('[data-work-unit]').forEach(btn => {
     btn.addEventListener('click', () => {
-      state.activeWorkCourseId = btn.dataset.workCourse;
+      state.activeWorkUnitId = btn.dataset.workUnit;
       navigate('work-detail');
     });
   });
@@ -2086,11 +2192,11 @@ async function renderWork() {
 
 async function renderWorkDetail() {
   const main = $main();
-  const courseId = state.activeWorkCourseId;
-  const p = state.allProgress[courseId];
+  const unitId = state.activeWorkUnitId;
+  const p = state.allProgress[unitId];
   if (!p || !p.learningPlan) { navigate('work'); return; }
-  const course = state.courses.find(c => c.courseId === courseId);
-  const workName = p.learningPlan.finalWorkProductDescription || course?.name || 'Work Product';
+  const unit = state.units.find(c => c.unitId === unitId);
+  const workName = p.learningPlan.finalWorkProductDescription || unit?.name || 'Work Product';
   const planActivities = p.learningPlan.activities || [];
   const total = planActivities.length;
   const completedSteps = p.status === 'completed' ? total : p.currentActivityIndex;
@@ -2109,7 +2215,7 @@ async function renderWorkDetail() {
       <button class="back-btn" aria-label="Back to portfolio" id="back-btn">&larr;</button>
       <div class="course-header-info">
         <h2>${esc(workName)}</h2>
-        <small class="work-detail-course">${esc(course?.name || '')}</small>
+        <small class="work-detail-course">${esc(unit?.name || '')}</small>
       </div>
     </div>
     <div class="progress-bar-labeled">${segments}</div>
@@ -2204,6 +2310,7 @@ async function renderSettings() {
   const hasKey = !!(await getApiKey());
   const profileSummary = await getLearnerProfileSummary();
   const loggedIn = await auth.isLoggedIn();
+  const authUser = loggedIn ? await auth.getCurrentUser() : null;
   const currentProxy = await getProxyUrl();
 
   main.innerHTML = `
@@ -2212,7 +2319,7 @@ async function renderSettings() {
     <div class="settings-section">
       <h3>AI Provider</h3>
       ${loggedIn ? `
-        <p class="settings-hint">AI is provided by your 1111 Learn account.</p>
+        <p class="settings-hint">AI is provided by your <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a> account.</p>
       ` : `
         <p class="settings-hint">Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.</p>
         <div class="api-key-row">
@@ -2236,7 +2343,7 @@ async function renderSettings() {
 
     <hr>
 
-    <div class="settings-section">
+    ${loggedIn ? '' : `<div class="settings-section">
       <h3>Personalization</h3>
       <form id="prefs-form" class="settings-form" aria-label="Personalization">
         <label>
@@ -2248,7 +2355,7 @@ async function renderSettings() {
       </form>
     </div>
 
-    <hr>
+    <hr>`}
 
     <div class="settings-section">
       <h3>Learner Profile</h3>
@@ -2298,16 +2405,18 @@ async function renderSettings() {
     });
   }
 
-  // Personalization
+  // Personalization (only shown when not logged in)
   const prefsForm = $('#prefs-form');
-  prefsForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    state.preferences = { name: fd.get('name') };
-    await savePreferences(state.preferences);
-    syncInBackground('preferences');
-    showFormFeedback('prefs-feedback', 'Saved!');
-  });
+  if (prefsForm) {
+    prefsForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      state.preferences = { name: fd.get('name') };
+      await savePreferences(state.preferences);
+      syncInBackground('preferences');
+      showFormFeedback('prefs-feedback', 'Saved!');
+    });
+  }
 
   // Learner profile feedback
   $('#profile-feedback-btn').addEventListener('click', () => showProfileFeedback());
@@ -2396,6 +2505,44 @@ function renderConversationMessages(messages, initialMessage) {
       let text = msg.content;
       try { text = JSON.parse(msg.content).message || text; } catch { /* use raw content */ }
       html += `<div class="msg msg-response"><p>${renderMd(text)}</p></div>`;
+    }
+  }
+  return html;
+}
+
+/**
+ * Renders drafts/feedback and Q&A messages for an activity in chronological order.
+ * Drafts use `draft.timestamp`, Q&A messages use `msg.timestamp`.
+ * Messages without timestamps sort to the end.
+ */
+function renderActivityTimeline(activity, allDrafts, isCurrent) {
+  const drafts = allDrafts.filter(d => d.activityId === activity.id);
+  const messages = activity.messages || [];
+
+  // Build a unified timeline of events
+  const events = [];
+  for (let di = 0; di < drafts.length; di++) {
+    const draft = drafts[di];
+    events.push({ type: 'draft', draft, di, ts: draft.timestamp || 0 });
+  }
+  for (const m of messages) {
+    events.push({ type: 'message', message: m, ts: m.timestamp || 0 });
+  }
+  events.sort((a, b) => a.ts - b.ts);
+
+  let html = '';
+  for (const ev of events) {
+    if (ev.type === 'draft') {
+      const isLatest = isCurrent && ev.di === drafts.length - 1;
+      html += draftMessage(ev.draft);
+      html += feedbackCard(ev.draft, isLatest);
+    } else {
+      const m = ev.message;
+      if (m.role === 'user') {
+        html += `<div class="msg msg-user"><p>${esc(m.content)}</p></div>`;
+      } else {
+        html += `<div class="msg msg-response"><p>${renderMd(m.content)}</p></div>`;
+      }
     }
   }
   return html;
@@ -2498,14 +2645,8 @@ function formatDuration(ms) {
   return `${Math.max(1, days)} day${days !== 1 ? 's' : ''}`;
 }
 
-function formatTimeAgo(timestamp) {
-  const diff = Date.now() - timestamp;
-  if (diff < 60000) return 'just now';
-  return formatDuration(diff) + ' ago';
-}
-
-function completionSummary(course, p) {
-  const workName = p.learningPlan?.finalWorkProductDescription || course.name;
+function completionSummary(unit, p) {
+  const workName = p.learningPlan?.finalWorkProductDescription || unit.name;
   const totalSteps = p.learningPlan?.activities?.length || 0;
   const totalRecordings = p.drafts?.length || 0;
   const elapsed = p.startedAt && p.completedAt ? p.completedAt - p.startedAt : 0;
@@ -2515,7 +2656,7 @@ function completionSummary(course, p) {
     <p class="completion-eyebrow">Build Complete</p>
     <strong class="completion-title">${esc(workName)}</strong>
     <div class="completion-stats">
-      <span>${totalSteps} step${totalSteps !== 1 ? 's' : ''}</span>
+      <span>${totalSteps} activit${totalSteps !== 1 ? 'ies' : 'y'}</span>
       <span>${totalRecordings} recording${totalRecordings !== 1 ? 's' : ''}</span>
       <span>${durationLabel}</span>
     </div>

@@ -275,6 +275,26 @@ nav button:focus-visible {
   font-size: 0.75rem;
 }
 
+.unit-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.unit-badge-required {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.unit-badge-optional {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
 /* ── Units header ──────────────────────────────────────────────────────── */
 .units-header {
   display: flex;
@@ -692,6 +712,12 @@ hr {
 }
 
 .chat-section-heading:first-child { margin-top: 0; }
+
+.completed-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 .skip-step-btn {
   display: block;
@@ -1236,6 +1262,15 @@ hr {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.course-header-group {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
 }
 
 .course-header-info .progress-label {

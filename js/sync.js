@@ -1,6 +1,7 @@
 /**
- * Cloud sync module — pushes and pulls data to/from learn-service.
- * Only active when the user is logged in. Fire-and-forget, never blocks UI.
+ * Remote storage client for learn-service.
+ * When logged in, data is saved to and loaded from the server.
+ * Local storage is a read cache — populated from the server on startup.
  */
 
 import { authenticatedFetch, isLoggedIn } from './auth.js';
@@ -9,23 +10,24 @@ import {
   getLearnerProfileSummary, saveLearnerProfileSummary,
   getPreferences, savePreferences,
   getWorkProducts,
-  getCourseProgress, saveCourseProgress, getAllProgress,
-  getSyncVersions, saveSyncVersions,
-  saveLastSync
+  getUnitProgress, saveUnitProgress, getAllProgress,
 } from './storage.js';
 
+// In-memory version map — tracks the server's version per key for optimistic locking.
+// Populated on load, updated on save. Not persisted (rebuilt each session from the server).
+const _versions = {};
+
 /**
- * Push a single data key to the server.
- * Uses optimistic locking via version numbers.
+ * Save a key to the remote server.
+ * Reads the current local value and PUTs it.
  */
-export async function pushData(syncKey) {
+export async function save(syncKey) {
   if (!await isLoggedIn()) return;
 
   const data = await getLocalData(syncKey);
   if (data === null || data === undefined) return;
 
-  const versions = await getSyncVersions();
-  const version = versions[syncKey] || 0;
+  const version = _versions[syncKey] || 0;
 
   const res = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`, {
     method: 'PUT',
@@ -34,180 +36,92 @@ export async function pushData(syncKey) {
   });
 
   if (res.ok) {
-    const { version: newVersion } = await res.json();
-    versions[syncKey] = newVersion;
-    await saveSyncVersions(versions);
+    _versions[syncKey] = (await res.json()).version;
   } else if (res.status === 409) {
-    // Version conflict — pull server version and force-push merged data
-    const serverItem = await pullOne(syncKey);
-    if (serverItem) {
-      const merged = mergeData(syncKey, data, serverItem.data);
-      await saveLocalData(syncKey, merged);
-      const retryRes = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`, {
+    // Version mismatch — get the server's current version and retry
+    const current = await fetchOne(syncKey);
+    if (current) {
+      const retry = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: merged, version: serverItem.version }),
+        body: JSON.stringify({ data, version: current.version }),
       });
-      if (retryRes.ok) {
-        const { version: newVersion } = await retryRes.json();
-        versions[syncKey] = newVersion;
-        await saveSyncVersions(versions);
+      if (retry.ok) {
+        _versions[syncKey] = (await retry.json()).version;
       }
     }
   }
 }
 
 /**
- * Pull all data from the server and merge with local.
- * Keys that exist locally but were deleted on the server are removed.
- * Returns the set of keys that were removed (so syncAll can skip re-pushing them).
+ * Load all data from the server and write it into local storage.
+ * Removes any local data the server doesn't have.
  */
-export async function pullAll() {
-  if (!await isLoggedIn()) return new Set();
-
-  const res = await authenticatedFetch('/v1/sync');
-  if (!res.ok) return new Set();
-
-  const items = await res.json();
-  const versions = await getSyncVersions();
-  const serverKeys = new Set(items.map(i => i.dataKey));
-
-  for (const { dataKey, data, version } of items) {
-    const localData = await getLocalData(dataKey);
-    if (localData !== null && localData !== undefined) {
-      const merged = mergeData(dataKey, localData, data);
-      await saveLocalData(dataKey, merged);
-    } else {
-      await saveLocalData(dataKey, data);
-    }
-    versions[dataKey] = version;
-  }
-
-  // Remove local data for keys that no longer exist on the server
-  const removedKeys = new Set();
-  for (const localKey of Object.keys(versions)) {
-    if (!serverKeys.has(localKey)) {
-      await removeLocalData(localKey);
-      delete versions[localKey];
-      removedKeys.add(localKey);
-    }
-  }
-
-  await saveSyncVersions(versions);
-  await saveLastSync();
-  return removedKeys;
-}
-
-/**
- * Full sync: pull from server, merge, then push all local data back.
- * Keys deleted on the server are not re-pushed.
- */
-export async function syncAll() {
+export async function loadAll() {
   if (!await isLoggedIn()) return;
 
-  const removedKeys = await pullAll();
+  const res = await authenticatedFetch('/v1/sync');
+  if (!res.ok) return;
 
-  // Push all syncable keys, skipping any that were just deleted by the server
-  const keys = ['profile', 'profileSummary', 'preferences', 'work'];
+  const items = await res.json();
+  const serverKeys = new Set();
 
+  for (const { dataKey, data, version } of items) {
+    await saveLocalData(dataKey, data);
+    _versions[dataKey] = version;
+    serverKeys.add(dataKey);
+  }
+
+  // Remove local data the server doesn't have
   const allProgress = await getAllProgress();
-  for (const courseId of Object.keys(allProgress)) {
-    keys.push(`progress:${courseId}`);
+  for (const unitId of Object.keys(allProgress)) {
+    if (!serverKeys.has(`unit:${unitId}`)) {
+      await removeLocalData(`unit:${unitId}`);
+    }
   }
-
-  for (const key of keys) {
-    if (removedKeys.has(key)) continue;
-    try { await pushData(key); } catch { /* silent */ }
+  for (const key of ['profile', 'profileSummary', 'work']) {
+    if (!serverKeys.has(key)) {
+      const d = await getLocalData(key);
+      if (d !== null && d !== undefined) await removeLocalData(key);
+    }
   }
-
-  await saveLastSync();
 }
 
 // -- Internal helpers ---------------------------------------------------------
 
-async function pullOne(syncKey) {
+async function fetchOne(syncKey) {
   const res = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`);
   if (!res.ok) return null;
   return res.json();
 }
 
-async function getLocalData(syncKey) {
-  if (syncKey === 'profile') return await getLearnerProfile();
-  if (syncKey === 'profileSummary') return await getLearnerProfileSummary() || null;
-  if (syncKey === 'preferences') return await getPreferences();
-  if (syncKey === 'work') return await getWorkProducts();
-  if (syncKey.startsWith('progress:')) {
-    const courseId = syncKey.slice('progress:'.length);
-    return await getCourseProgress(courseId);
+function getLocalData(syncKey) {
+  if (syncKey === 'profile') return getLearnerProfile();
+  if (syncKey === 'profileSummary') return getLearnerProfileSummary().then(s => s || null);
+  if (syncKey === 'preferences') return getPreferences();
+  if (syncKey === 'work') return getWorkProducts();
+  if (syncKey.startsWith('unit:')) {
+    return getUnitProgress(syncKey.slice('unit:'.length));
   }
-  return null;
+  return Promise.resolve(null);
 }
 
-async function saveLocalData(syncKey, data) {
-  if (syncKey === 'profile') return await saveLearnerProfile(data);
-  if (syncKey === 'profileSummary') return await saveLearnerProfileSummary(data);
-  if (syncKey === 'preferences') return await savePreferences(data);
-  if (syncKey === 'work') return await chrome.storage.local.set({ work: data });
-  if (syncKey.startsWith('progress:')) {
-    const courseId = syncKey.slice('progress:'.length);
-    return await saveCourseProgress(courseId, data);
+function saveLocalData(syncKey, data) {
+  if (syncKey === 'profile') return saveLearnerProfile(data);
+  if (syncKey === 'profileSummary') return saveLearnerProfileSummary(data);
+  if (syncKey === 'preferences') return savePreferences(data);
+  if (syncKey === 'work') return chrome.storage.local.set({ work: data });
+  if (syncKey.startsWith('unit:')) {
+    return saveUnitProgress(syncKey.slice('unit:'.length), data);
   }
 }
 
-async function removeLocalData(syncKey) {
-  if (syncKey === 'profile') return await chrome.storage.local.remove('learnerProfile');
-  if (syncKey === 'profileSummary') return await chrome.storage.local.remove('learnerProfileSummary');
-  if (syncKey === 'preferences') return await chrome.storage.local.remove('preferences');
-  if (syncKey === 'work') return await chrome.storage.local.remove('work');
-  if (syncKey.startsWith('progress:')) {
-    const courseId = syncKey.slice('progress:'.length);
-    return await chrome.storage.local.remove(`progress-${courseId}`);
+function removeLocalData(syncKey) {
+  if (syncKey === 'profile') return chrome.storage.local.remove('learnerProfile');
+  if (syncKey === 'profileSummary') return chrome.storage.local.remove('learnerProfileSummary');
+  if (syncKey === 'preferences') return chrome.storage.local.remove('preferences');
+  if (syncKey === 'work') return chrome.storage.local.remove('work');
+  if (syncKey.startsWith('unit:')) {
+    return chrome.storage.local.remove(`unit-${syncKey.slice('unit:'.length)}`);
   }
-}
-
-function mergeData(syncKey, local, server) {
-  if (!local) return server;
-  if (!server) return local;
-
-  if (syncKey === 'profile') return mergeProfile(local, server);
-  if (syncKey === 'work') return mergeWork(local, server);
-  if (syncKey.startsWith('progress:')) return mergeProgress(local, server);
-
-  // For preferences, profileSummary: prefer local (most recent edit wins)
-  return local;
-}
-
-/** Merge learner profiles — union arrays, keep latest strings. */
-function mergeProfile(local, server) {
-  const merged = { ...server };
-  for (const key of ['name', 'goal', 'revisionPatterns', 'pacing']) {
-    merged[key] = local[key] || server[key];
-  }
-  for (const key of ['completedCourses', 'activeCourses']) {
-    const combined = [...(local[key] || []), ...(server[key] || [])];
-    merged[key] = [...new Set(combined)];
-  }
-  for (const key of ['strengths', 'weaknesses', 'accessibilityNeeds', 'recurringSupport']) {
-    merged[key] = (local[key]?.length > 0) ? local[key] : (server[key] || []);
-  }
-  merged.preferences = { ...(server.preferences || {}), ...(local.preferences || {}) };
-  merged.createdAt = Math.min(local.createdAt || Infinity, server.createdAt || Infinity);
-  merged.updatedAt = Math.max(local.updatedAt || 0, server.updatedAt || 0);
-  return merged;
-}
-
-/** Merge work products — union by courseId, local wins on conflict. */
-function mergeWork(local, server) {
-  const map = new Map();
-  for (const w of server) map.set(w.courseId, w);
-  for (const w of local) map.set(w.courseId, w);
-  return [...map.values()];
-}
-
-/** Merge course progress — prefer the more advanced version. */
-function mergeProgress(local, server) {
-  if (local.status === 'completed') return local;
-  if (server.status === 'completed') return server;
-  if ((local.currentActivityIndex || 0) >= (server.currentActivityIndex || 0)) return local;
-  return server;
 }

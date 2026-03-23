@@ -28,8 +28,8 @@ export function flattenCourses(courseGroups) {
   return result;
 }
 
-export function checkPrerequisite(course, allProgress) {
-  if (!course.dependsOn) return true;
-  const dep = allProgress[course.dependsOn];
+export function checkPrerequisite(unit, allProgress) {
+  if (!unit.dependsOn) return true;
+  const dep = allProgress[unit.dependsOn];
   return dep && dep.status === 'completed';
 }

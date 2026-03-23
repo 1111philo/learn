@@ -36,8 +36,8 @@ Update the old value — don't keep both. If the profile says "computer novice" 
 
 When the learner completes an entire course, you receive the full course context: name, learning objectives, and a summary of their performance across all activities. Use this to make a significant profile update:
 
-- Add the courseId to completedCourses.
-- Remove the courseId from activeCourses if present.
+- Add the unitId to completedUnits.
+- Remove the unitId from activeUnits if present.
 - Update strengths to reflect the skills the learner demonstrated across the course. Be specific — not "knows WordPress" but "can publish posts and navigate WordPress Playground".
 - Update weaknesses: remove any that are contradicted by course performance. If the profile says "WordPress beginner" but they just completed a WordPress course with strong scores, replace it.
 - Update experienceLevel if the course changes the picture (e.g. from "beginner" to "familiar with WordPress basics").
@@ -54,8 +54,8 @@ Respond with ONLY valid JSON, no markdown fencing:
   "profile": {
     "name": "...",
     "goal": "...",
-    "completedCourses": ["course-id", ...],
-    "activeCourses": ["course-id", ...],
+    "completedUnits": ["unit-id", ...],
+    "activeUnits": ["unit-id", ...],
     "strengths": ["...", ...],
     "weaknesses": ["...", ...],
     "revisionPatterns": "...",

@@ -21,6 +21,26 @@ const migrations = [
       // No data transformation. These are new keys that default to null
       // when absent (handled by getter functions in storage.js).
     }
+  },
+  {
+    version: 3,
+    description: 'Add messages array to activities in unit progress for Q&A persistence',
+    async run() {
+      const all = await chrome.storage.local.get(null);
+      for (const [key, value] of Object.entries(all)) {
+        if (!key.startsWith('unit-') || !value?.activities) continue;
+        let changed = false;
+        for (const activity of value.activities) {
+          if (activity && !activity.messages) {
+            activity.messages = [];
+            changed = true;
+          }
+        }
+        if (changed) {
+          await chrome.storage.local.set({ [key]: value });
+        }
+      }
+    }
   }
 ];
 

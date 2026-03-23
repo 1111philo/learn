@@ -33,8 +33,8 @@ When you have a good understanding (after at least 2 exchanges):
   "profile": {
     "name": "",
     "goal": "one sentence capturing their core purpose",
-    "completedCourses": [],
-    "activeCourses": [],
+    "completedUnits": [],
+    "activeUnits": [],
     "strengths": [],
     "weaknesses": [],
     "revisionPatterns": "",

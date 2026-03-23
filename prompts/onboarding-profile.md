@@ -16,8 +16,8 @@ Respond with ONLY valid JSON, no markdown fencing:
   "profile": {
     "name": "...",
     "goal": "...",
-    "completedCourses": [],
-    "activeCourses": [],
+    "completedUnits": [],
+    "activeUnits": [],
     "strengths": [],
     "weaknesses": [],
     "revisionPatterns": "",

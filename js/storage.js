@@ -1,6 +1,6 @@
 /**
  * Metadata storage via chrome.storage.local.
- * Keys: preferences, progress-{courseId}, work
+ * Keys: preferences, unit-{unitId}, work
  */
 
 export async function getPreferences() {
@@ -12,14 +12,14 @@ export async function savePreferences(prefs) {
   await chrome.storage.local.set({ preferences: prefs });
 }
 
-export async function getCourseProgress(courseId) {
-  const key = `progress-${courseId}`;
+export async function getUnitProgress(unitId) {
+  const key = `unit-${unitId}`;
   const result = await chrome.storage.local.get(key);
   return result[key] || null;
 }
 
-export async function saveCourseProgress(courseId, progress) {
-  const key = `progress-${courseId}`;
+export async function saveUnitProgress(unitId, progress) {
+  const key = `unit-${unitId}`;
   await chrome.storage.local.set({ [key]: progress });
 }
 
@@ -27,8 +27,8 @@ export async function getAllProgress() {
   const all = await chrome.storage.local.get(null);
   const out = {};
   for (const [k, v] of Object.entries(all)) {
-    if (k.startsWith('progress-')) {
-      out[k.replace('progress-', '')] = v;
+    if (k.startsWith('unit-')) {
+      out[k.replace('unit-', '')] = v;
     }
   }
   return out;
@@ -89,7 +89,7 @@ export async function saveAuthTokens({ accessToken, refreshToken }) {
 }
 
 export async function clearAuth() {
-  await chrome.storage.local.remove(['authAccessToken', 'authRefreshToken', 'authUser', 'syncVersions', 'lastSyncAt']);
+  await chrome.storage.local.remove(['authAccessToken', 'authRefreshToken', 'authUser']);
 }
 
 export async function getAuthUser() {
@@ -99,37 +99,6 @@ export async function getAuthUser() {
 
 export async function saveAuthUser(user) {
   await chrome.storage.local.set({ authUser: user });
-}
-
-// --- Sync versions (cloud sync) ---
-
-export async function getSyncVersions() {
-  const result = await chrome.storage.local.get('syncVersions');
-  return result.syncVersions || {};
-}
-
-export async function saveSyncVersions(versions) {
-  await chrome.storage.local.set({ syncVersions: versions });
-}
-
-export async function getLastSync() {
-  const result = await chrome.storage.local.get('lastSyncAt');
-  return result.lastSyncAt || null;
-}
-
-export async function saveLastSync() {
-  await chrome.storage.local.set({ lastSyncAt: Date.now() });
-}
-
-// --- Service credentials (telemetry) ---
-
-export async function getServiceCredentials() {
-  const result = await chrome.storage.local.get('serviceCredentials');
-  return result.serviceCredentials || null;
-}
-
-export async function saveServiceCredentials(creds) {
-  await chrome.storage.local.set({ serviceCredentials: creds });
 }
 
 // --- Bedrock proxy URL ---
@@ -210,12 +179,6 @@ export async function appendDevLog(entry) {
   // Keep last 500 entries to avoid storage bloat
   if (log.length > 500) log.splice(0, log.length - 500);
   await chrome.storage.local.set({ devLog: log });
-}
-
-export async function exportAllData() {
-  const metadata = await chrome.storage.local.get(null);
-  const blobs = await exportAllBlobs();
-  return { metadata, blobs };
 }
 
 // --- IndexedDB for binary assets (screenshots) ---

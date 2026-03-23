@@ -162,13 +162,13 @@ export async function initializeLearnerProfile(name, statement) {
 }
 
 /**
- * Generate a diagnostic activity that tests existing knowledge before a course.
+ * Generate a diagnostic activity that tests existing knowledge before a unit.
  */
-export async function generateDiagnosticActivity(course) {
+export async function generateDiagnosticActivity(unit) {
   const systemPrompt = await loadPrompt('diagnostic-creation');
 
   const userContent = JSON.stringify({
-    course: { name: course.name, learningObjectives: course.learningObjectives }
+    course: { name: unit.name, learningObjectives: unit.learningObjectives }
   });
 
   const callAgent = async () => {
@@ -183,29 +183,29 @@ export async function generateDiagnosticActivity(course) {
 
   const generated = await callWithValidation(callAgent, validateDiagnosticActivity, 'diagnostic-creation');
   return {
-    id: `diagnostic-${course.courseId}`,
+    id: `diagnostic-${unit.unitId}`,
     type: 'final',
-    goal: course.learningObjectives[course.learningObjectives.length - 1],
+    goal: unit.learningObjectives[unit.learningObjectives.length - 1],
     instruction: generated.instruction,
     tips: generated.tips
   };
 }
 
 /**
- * Create a learning plan for a course.
+ * Create a learning plan for a unit.
  */
-export async function createLearningPlan(course, preferences, profileSummary, completedCourseNames, diagnosticResult) {
+export async function createLearningPlan(unit, preferences, profileSummary, completedUnitNames, diagnosticResult) {
   const systemPrompt = await loadPrompt('course-creation');
 
   const userContent = JSON.stringify({
     course: {
-      courseId: course.courseId,
-      name: course.name,
-      description: course.description,
-      learningObjectives: course.learningObjectives
+      courseId: unit.unitId,
+      name: unit.name,
+      description: unit.description,
+      learningObjectives: unit.learningObjectives
     },
     learnerProfile: profileSummary || `${preferences.name || 'Learner'}`,
-    completedCourses: completedCourseNames,
+    completedCourses: completedUnitNames,
     diagnosticResult: diagnosticResult || null
   });
 
@@ -219,18 +219,18 @@ export async function createLearningPlan(course, preferences, profileSummary, co
     return parseJSON(content);
   };
 
-  const expectedCount = course.learningObjectives.length;
+  const expectedCount = unit.learningObjectives.length;
   return callWithValidation(callAgent, (p) => validatePlan(p, expectedCount), 'course-creation');
 }
 
 /**
  * Generate the next activity's instruction.
  */
-export async function generateNextActivity(course, planSlot, progressSummary, profileSummary, planContext) {
+export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext) {
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
-    course: { name: course.name, learningObjectives: course.learningObjectives },
+    course: { name: unit.name, learningObjectives: unit.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
     workProduct: planContext?.finalWorkProductDescription || '',
     workProductTool: planContext?.workProductTool || '',
@@ -254,7 +254,7 @@ export async function generateNextActivity(course, planSlot, progressSummary, pr
 /**
  * Assess a draft submission with vision.
  */
-export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
+export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -269,7 +269,7 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
   contentParts.push({
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -314,7 +314,7 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
  * Reassess a draft with learner feedback on the assessment.
  * Re-evaluates the same screenshot, factoring in the learner's dispute.
  */
-export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment') {
+export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -328,7 +328,7 @@ export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl
   contentParts.push({
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -377,13 +377,13 @@ export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl
 /**
  * Assess a diagnostic skills check from a short text response (no screenshot).
  */
-export async function assessTextResponse(course, activity, learnerResponse, profileSummary, promptName = 'diagnostic-assessment') {
+export async function assessTextResponse(unit, activity, learnerResponse, profileSummary, promptName = 'diagnostic-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const contentParts = [{
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -411,13 +411,13 @@ export async function assessTextResponse(course, activity, learnerResponse, prof
 /**
  * Reassess a diagnostic text response with learner feedback on the assessment.
  */
-export async function reassessTextResponse(course, activity, learnerResponse, profileSummary, previousAssessment, learnerFeedback, promptName = 'diagnostic-assessment') {
+export async function reassessTextResponse(unit, activity, learnerResponse, profileSummary, previousAssessment, learnerFeedback, promptName = 'diagnostic-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const contentParts = [{
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -515,10 +515,10 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
 }
 
 /**
- * Update the learner profile after completing an entire course.
- * Sends the full course context so the profile reflects all skills learned.
+ * Update the learner profile after completing an entire unit.
+ * Sends the full unit context so the profile reflects all skills learned.
  */
-export async function updateProfileOnCourseCompletion(fullProfile, course, progress) {
+export async function updateProfileOnUnitCompletion(fullProfile, unit, progress) {
   const systemPrompt = await loadPrompt('learner-profile-update');
 
   // Summarize performance across all activities
@@ -531,20 +531,20 @@ export async function updateProfileOnCourseCompletion(fullProfile, course, progr
   const userContent = JSON.stringify({
     currentProfile: fullProfile,
     courseCompletion: {
-      courseId: course.courseId,
-      courseName: course.name,
-      learningObjectives: course.learningObjectives,
+      unitId: unit.unitId,
+      courseName: unit.name,
+      learningObjectives: unit.learningObjectives,
       activitySummaries,
       workProduct: progress.learningPlan?.finalWorkProductDescription || null,
     },
     context: {
-      event: 'course_completed',
-      courseName: course.name,
+      event: 'unit_completed',
+      courseName: unit.name,
       timestamp: Date.now()
     }
   });
 
-  devLog('agent_request', { agent: 'profile-course-completion', courseId: course.courseId });
+  devLog('agent_request', { agent: 'profile-unit-completion', unitId: unit.unitId });
 
   const { content } = await callApi({
     model: MODEL_LIGHT,
@@ -554,6 +554,6 @@ export async function updateProfileOnCourseCompletion(fullProfile, course, progr
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-course-completion', response: parsed });
+  devLog('agent_response', { agent: 'profile-unit-completion', response: parsed });
   return parsed;
 }

@@ -5,7 +5,7 @@
     "description": "Build the professional foundation you need to succeed in any field — from identity and technology to self-management and social impact.",
     "units": [
       {
-        "courseId": "foundations-0-basic-wordpress",
+        "unitId": "foundations-0-basic-wordpress",
         "name": "Foundations 0: Basic WordPress",
         "description": "WordPress powers nearly half the web - understanding it opens the door to building almost anything online.",
         "dependsOn": null,
@@ -17,7 +17,7 @@
         ]
       },
       {
-        "courseId": "foundations-1-identity",
+        "unitId": "foundations-1-identity",
         "name": "Foundations 1: Identity",
         "description": "Knowing why you do what you do helps you make better decisions about where to go next.",
         "dependsOn": null,
@@ -29,7 +29,7 @@
         ]
       },
       {
-        "courseId": "foundations-2-technology",
+        "unitId": "foundations-2-technology",
         "name": "Foundations 2: Technology",
         "description": "Mapping the tools you know and the ones you need keeps your learning focused and intentional.",
         "dependsOn": "foundations-1-identity",
@@ -41,7 +41,7 @@
         ]
       },
       {
-        "courseId": "foundations-3-information",
+        "unitId": "foundations-3-information",
         "name": "Foundations 3: Information",
         "description": "Poor organization is the silent killer of good work — learning to manage information makes everything else easier.",
         "dependsOn": "foundations-2-technology",
@@ -54,7 +54,7 @@
         ]
       },
       {
-        "courseId": "foundations-4-self-management",
+        "unitId": "foundations-4-self-management",
         "name": "Foundations 4: Self-Management",
         "description": "Understanding your own focus patterns is the first step to working consistently without burning out.",
         "dependsOn": "foundations-3-information",
@@ -67,7 +67,7 @@
         ]
       },
       {
-        "courseId": "foundations-5-social-impact",
+        "unitId": "foundations-5-social-impact",
         "name": "Foundations 5: Social Impact",
         "description": "Connecting your work to something bigger than yourself gives it direction and staying power.",
         "dependsOn": "foundations-4-self-management",
@@ -80,7 +80,7 @@
         ]
       },
       {
-        "courseId": "foundations-6-influence",
+        "unitId": "foundations-6-influence",
         "name": "Foundations 6: Influence",
         "description": "Knowing who shapes your field helps you learn faster and find your place in the conversation.",
         "dependsOn": "foundations-5-social-impact",

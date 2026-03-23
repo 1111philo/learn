@@ -93,6 +93,50 @@ describe('migrations', () => {
     assert.equal(result._marker, true);
   });
 
+  it('v3 adds messages array to existing activities', async () => {
+    const { runMigrations } = await reimport();
+    await chrome.storage.local.set({
+      schemaVersion: 2,
+      'unit-course1': {
+        unitId: 'course1',
+        currentActivityIndex: 1,
+        activities: [
+          { id: 'a1', type: 'explore', instruction: 'Do something' },
+          { id: 'a2', type: 'apply', instruction: 'Do another thing' }
+        ],
+        drafts: []
+      }
+    });
+
+    await runMigrations();
+
+    const result = await chrome.storage.local.get('unit-course1');
+    const progress = result['unit-course1'];
+    assert.deepEqual(progress.activities[0].messages, []);
+    assert.deepEqual(progress.activities[1].messages, []);
+  });
+
+  it('v3 is idempotent — does not overwrite existing messages', async () => {
+    const { runMigrations } = await reimport();
+    const existingMessages = [{ role: 'user', content: 'hello' }];
+    await chrome.storage.local.set({
+      schemaVersion: 2,
+      'unit-course1': {
+        unitId: 'course1',
+        currentActivityIndex: 0,
+        activities: [
+          { id: 'a1', type: 'explore', instruction: 'Do something', messages: existingMessages }
+        ],
+        drafts: []
+      }
+    });
+
+    await runMigrations();
+
+    const result = await chrome.storage.local.get('unit-course1');
+    assert.deepEqual(result['unit-course1'].activities[0].messages, existingMessages);
+  });
+
   it('every migration has required fields', async () => {
     const { migrations } = await reimport();
 

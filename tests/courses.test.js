@@ -42,45 +42,45 @@ describe('courses.json', () => {
 
   it('every unit has required fields', () => {
     for (const unit of allUnits) {
-      assert.ok(unit.courseId && typeof unit.courseId === 'string',
-        `Unit missing courseId: ${JSON.stringify(unit)}`);
+      assert.ok(unit.unitId && typeof unit.unitId === 'string',
+        `Unit missing unitId: ${JSON.stringify(unit)}`);
       assert.ok(unit.name && typeof unit.name === 'string',
-        `Unit ${unit.courseId} missing name`);
+        `Unit ${unit.unitId} missing name`);
       assert.ok(unit.description && typeof unit.description === 'string',
-        `Unit ${unit.courseId} missing description`);
+        `Unit ${unit.unitId} missing description`);
       assert.ok(Array.isArray(unit.learningObjectives) && unit.learningObjectives.length > 0,
-        `Unit ${unit.courseId} must have at least one learning objective`);
+        `Unit ${unit.unitId} must have at least one learning objective`);
       for (const obj of unit.learningObjectives) {
         assert.ok(typeof obj === 'string' && obj.length > 0,
-          `Unit ${unit.courseId} has invalid learning objective`);
+          `Unit ${unit.unitId} has invalid learning objective`);
       }
     }
   });
 
-  it('courseId values are unique across groups and units', () => {
+  it('courseId and unitId values are unique across groups and units', () => {
     const ids = [
       ...courseGroups.map(g => g.courseId),
-      ...allUnits.map(u => u.courseId)
+      ...allUnits.map(u => u.unitId)
     ];
     const unique = new Set(ids);
-    assert.equal(ids.length, unique.size, `Duplicate courseIds: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
+    assert.equal(ids.length, unique.size, `Duplicate IDs: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
   });
 
-  it('dependsOn references a valid unit courseId or is null', () => {
-    const ids = new Set(allUnits.map(u => u.courseId));
+  it('dependsOn references a valid unit unitId or is null', () => {
+    const ids = new Set(allUnits.map(u => u.unitId));
     for (const unit of allUnits) {
       if (unit.dependsOn !== null && unit.dependsOn !== undefined) {
         assert.ok(ids.has(unit.dependsOn),
-          `Unit ${unit.courseId} depends on unknown courseId: ${unit.dependsOn}`);
+          `Unit ${unit.unitId} depends on unknown unitId: ${unit.dependsOn}`);
       }
     }
   });
 
   it('has no circular dependencies', () => {
-    const depMap = Object.fromEntries(allUnits.map(u => [u.courseId, u.dependsOn]));
+    const depMap = Object.fromEntries(allUnits.map(u => [u.unitId, u.dependsOn]));
     for (const unit of allUnits) {
       const visited = new Set();
-      let current = unit.courseId;
+      let current = unit.unitId;
       while (current) {
         assert.ok(!visited.has(current),
           `Circular dependency detected involving ${current}`);

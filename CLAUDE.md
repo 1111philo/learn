@@ -1,14 +1,15 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using nine AI agents powered by the Claude API. The user provides their own Anthropic API key via a first-run onboarding wizard. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots). Optional cloud sync via `learn-service` enables cross-device data persistence for logged-in users.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that guides learners through predefined courses using ten AI agents powered by the Claude API. Courses contain units; each unit has a diagnostic (skills check) and a sequence of activities. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All data is stored locally using `chrome.storage.local` for metadata and IndexedDB for binary assets (screenshots). When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
-Nine agents drive the learning experience:
+Ten agents drive the learning experience:
 - **Onboarding Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that gets to know the learner and builds their initial profile
 - **Onboarding Profile Agent** (`MODEL_LIGHT`) -- creates an initial learner profile (fallback when conversation is skipped)
 - **Diagnostic Agent** (`MODEL_LIGHT`) -- generates a skills check question before every new course
 - **Diagnostic Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that assesses prior knowledge through follow-up questions
+- **Diagnostic Assessment Agent** (`MODEL_LIGHT`) -- evaluates learner text responses during the diagnostic and re-evaluates on dispute
 - **Course Creation Agent** (`MODEL_LIGHT`) -- generates a personalized learning plan skeleton, informed by the diagnostic result
 - **Activity Creation Agent** (`MODEL_LIGHT`) -- fills in one activity at a time as the learner reaches it
 - **Activity Assessment Agent** (`MODEL_HEAVY` + vision) -- evaluates screenshots of learner work
@@ -21,13 +22,13 @@ Agent prompts live in `prompts/*.md` and can be edited independently of code. Th
 All activity, assessment, and course plan outputs pass through deterministic validators in `js/validators.js` (imported by `js/orchestrator.js`) before reaching the user. Activities are checked for: ending with "Record", max 4 steps, no platform-specific shortcuts, no multi-site instructions, no non-browser apps, viewport-sized output, and content safety. Course plans are validated for: activity count matching learning objective count exactly, no consecutive duplicate activity types, last activity being type "final", and required fields. Assessments are checked for valid score/recommendation/fields and safety. On failure, the agent call is retried once automatically.
 
 ### Onboarding
-On first run, a three-step wizard collects: name → API key → "about you" conversation. The "about you" step is a multi-turn chat: the Onboarding Conversation Agent asks follow-up questions until it has a good picture of the learner, then creates their profile. The user can skip at any time. Conversation state is persisted to `chrome.storage.local` under `onboardingState` so it survives panel reload. Completion is tracked via an `onboardingComplete` flag (independent of the API key). In development, `.env.js` seeds the key into storage but onboarding still runs.
+On first run, a three-step wizard collects: name → API key → "about you" conversation. The "about you" step is a multi-turn chat: the Onboarding Conversation Agent asks follow-up questions until it has a good picture of the learner, then creates their profile. The user can skip at any time. Conversation state is persisted to `chrome.storage.local` under `onboardingState` so it survives panel reload. Completion is tracked via an `onboardingComplete` flag (independent of the API key). If the user is already logged in on startup, onboarding is skipped entirely and the flag is stamped automatically. In development, `.env.js` seeds the key into storage but onboarding still runs.
 
 ### Diagnostic skills check
-Before every new course, a skills check runs as a multi-turn conversation inside the course chat (not a separate view). The Diagnostic Agent generates an initial question, then the Diagnostic Conversation Agent asks follow-up questions to gauge depth. After 2-3 exchanges, it provides a score and assessment. The result is passed to the Course Creation Agent to adjust activity depth (not count -- activity count is always locked to one per learning objective). The user can skip the diagnostic at any time. Diagnostic conversation state is persisted to `chrome.storage.local` under `diagnosticState`.
+Before every new course, a skills check runs as a multi-turn conversation inside the course chat (not a separate view). The Diagnostic Agent generates an initial question, then the Diagnostic Conversation Agent asks follow-up questions to gauge depth. After 2-3 exchanges, it provides a score and assessment. The result is passed to the Course Creation Agent to adjust activity depth (not count -- activity count is always locked to one per learning objective). The user can skip the diagnostic at any time. During the diagnostic, conversation state is persisted to `chrome.storage.local` under `diagnosticState`. Once the course plan is created, the diagnostic conversation (instruction, messages, and result) is saved into the `progress.diagnostic` field of the course progress object so it remains visible in the course chat history.
 
 ### Conversational UX
-The entire course experience — diagnostic, course setup, activities, assessments — happens in a single chat interface per course. All loading states appear as in-chat thinking indicators (not full-screen spinners). The course header and compose bar are fixed (top and bottom); the chat scrolls between them. Users can ask questions about any activity or assessment at any time via the compose bar, powered by the Activity Q&A Agent.
+The entire course experience — diagnostic, course setup, activities, assessments — happens in a single chat interface per course. All loading states appear as in-chat thinking indicators (not full-screen spinners). The course header and compose bar are fixed (top and bottom); the chat scrolls between them. Users can ask questions about any activity or assessment at any time via the compose bar, powered by the Activity Q&A Agent. Q&A messages are persisted in `activity.messages[]` (each with `role`, `content`, `timestamp`) so they survive panel reloads and appear in the correct chronological position in the chat history alongside drafts and feedback. Completed activities remain visible above the current activity in the chat, creating a full scrollable history of the course. The Q&A agent receives the learner's name, profile summary, and full conversation history for context.
 
 ### Learner profile updates
 The profile updates after assessments, diagnostic results, learner feedback, and course completion. All updates run through a sequential queue (`_profileUpdateQueue`) to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. On course completion, `updateProfileOnCourseCompletion()` sends the full course context (objectives, per-activity scores) so the profile reflects all skills learned. A code-level `mergeProfile()` in `app.js` unions array fields and merges preferences so agent responses can never accidentally lose accumulated data.
@@ -44,18 +45,20 @@ Time-based telemetry tracks three dimensions:
 - **Page hopping:** `navigation` events fire on every view transition with `fromView`/`toView` fields.
 
 ### Cloud sync
-Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the extension works fully offline/locally. When logged in, data is synced to the cloud after significant operations (draft submission, course completion, profile updates, settings changes).
+Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the extension works fully offline/locally. When logged in, the server is the source of truth: data is written to the server after every local save, and pulled from the server on startup/login. Local storage acts as a read cache for fast access.
 
-- **Auth:** `js/auth.js` handles login/logout/token refresh via JWT access tokens (15 min) + refresh tokens (30 day, rotated on use). Tokens are stored in `chrome.storage.local` under `authAccessToken`, `authRefreshToken`, `authUser`.
-- **Sync:** `js/sync.js` pushes/pulls data to/from `/v1/sync` endpoints on `learn-service`. Uses optimistic locking (version numbers) with automatic conflict resolution. Sync keys: `profile`, `profileSummary`, `preferences`, `work`, `progress:{courseId}`.
+- **Auth:** `js/auth.js` handles login/logout/token refresh via JWT access tokens (15 min) + refresh tokens (30 day, rotated on use). Tokens are stored in `chrome.storage.local` under `authAccessToken`, `authRefreshToken`, `authUser`. On login, the auth user's name is synced into local preferences. If logged in, the onboarding wizard is skipped. The Personalization section in Settings is hidden when logged in (name comes from the service).
+- **Remote storage:** `js/sync.js` is a thin client for `/v1/sync` endpoints on `learn-service`. `sync.save(key)` PUTs local data to the server (handles version conflicts by retrying with the server's version). `sync.loadAll()` GETs all data from the server and replaces local storage, removing any local data the server doesn't have. Version numbers are tracked in memory (not persisted) and rebuilt each session.
 - **AI provider routing:** `js/orchestrator.js` routes API calls based on priority: (1) logged in → learn-service Bedrock proxy `/v1/ai/messages` via JWT auth, (2) proxy URL configured → custom Bedrock proxy, (3) Anthropic API key → direct Anthropic API. Logged-in users need no API key.
 - **API key provisioning:** On login, if no local API key exists, the extension checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it.
-- **Merge strategy:** Profile uses array union (same as `mergeProfile()`), work products union by courseId, course progress prefers the more advanced version.
-- **Settings UI:** "Cloud Sync" section in Settings shows login form (when signed out) or account info + Sync Now / Sign Out (when signed in).
+- **Startup:** On bootstrap, if logged in, `sync.loadAll()` runs before reading local data. This ensures the extension reflects the server state. Falls back to local cache if offline.
+- **Settings UI:** When signed out, the Personalization section shows a name field and the AI Provider section shows the API key input. When signed in, Personalization is hidden (name comes from the service) and the API key section shows a note that AI is provided by the 1111 Learn account. Sign Out is in the header user dropdown, not the Settings page.
+
+## Content hierarchy
+Courses → Units → Diagnostic + Activities. `data/courses.json` defines courses, each containing a `units` array. Each unit has a `unitId`, `learningObjectives` that drive activity generation, and an optional `dependsOn` prerequisite (referencing another unit's `unitId`). Progress is tracked per unit in `chrome.storage.local` under `unit-{unitId}` and synced as `unit:{unitId}`. `js/courses.js` provides `flattenCourses()` to extract all playable units into a flat list stored in `state.units`.
 
 ## Key conventions
 - All source is vanilla JS (ES modules), CSS, and HTML -- no local build step, no frameworks. CI packages the extension into a zip on push to `main`.
-- Course definitions live in `data/courses.json`. Courses can contain `units` arrays (grouped courses) or standalone `learningObjectives`. `js/courses.js` provides `flattenCourses()` to extract all playable units into a flat list.
 - The app entry point is `sidepanel.html`, which loads `js/app.js` as a module.
 - Storage is abstracted in `js/storage.js` (chrome.storage.local for metadata, IndexedDB for screenshots).
 - API calls go through `js/api.js`; agent orchestration through `js/orchestrator.js`.
