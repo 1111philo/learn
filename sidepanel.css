@@ -275,6 +275,36 @@ nav button:focus-visible {
   font-size: 0.75rem;
 }
 
+/* ── Units header ──────────────────────────────────────────────────────── */
+.units-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.units-header h2 {
+  margin: 0;
+}
+
+/* ── Coming soon ───────────────────────────────────────────────────────── */
+.coming-soon-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 88px;
+  padding: var(--space);
+  border: 3px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: transparent;
+  opacity: 0.45;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
 /* ── Chat / course view ─────────────────────────────────────────────────── */
 .course-layout {
   display: flex;
