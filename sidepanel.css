@@ -30,6 +30,13 @@ body {
   flex-direction: column;
 }
 
+#root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* ── Header ─────────────────────────────────────────────────────────────── */
 header {
   display: flex;
@@ -39,6 +46,8 @@ header {
   background: var(--color-primary);
   color: var(--color-primary-text);
   flex-shrink: 0;
+  position: relative;
+  z-index: 50;
 }
 
 .logo {
@@ -96,6 +105,7 @@ header {
   top: calc(100% + 6px);
   right: 0;
   width: 260px;
+  z-index: 60;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -420,6 +430,15 @@ nav button:focus-visible {
   border-radius: var(--radius);
   max-width: 95%;
   font-size: 0.9rem;
+}
+
+.msg ul, .msg ol {
+  padding-left: 1.2em;
+  margin: 4px 0;
+}
+
+.msg li {
+  margin-bottom: 2px;
 }
 
 .msg-app {
@@ -759,9 +778,8 @@ hr {
 /* -- Modal overlay ---------------------------------------------------------- */
 #modal-overlay {
   position: fixed;
-  left: 0;
-  right: 0;
-  /* top and height set dynamically in JS to match main's visible bounds */
+  inset: 0;
+  z-index: 200;
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -1146,6 +1164,37 @@ hr {
 .api-key-row input:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
+}
+
+.password-field {
+  position: relative;
+  flex: 1;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.password-toggle:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 
 .key-feedback {
@@ -1576,11 +1625,65 @@ hr {
 }
 
 /* ── Onboarding ─────────────────────────────────────────────────────────── */
+/* ── Onboarding backdrop + animated background ─────────────────────────── */
+
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8eaef;
+  overflow: hidden;
+}
+
+.onboarding-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: blur(2.5px);
+}
+
+.onboarding-card {
+  position: relative;
+  z-index: 1;
+  background: var(--color-bg);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  width: calc(100% - 32px);
+  max-width: 420px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  animation: onboarding-card-in 0.4s ease-out;
+}
+
+@keyframes onboarding-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.onboarding-logo-link {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.onboarding-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: block;
+}
+
 .onboarding {
   display: flex;
   flex-direction: column;
   gap: calc(var(--space) * 1.25);
-  padding: calc(var(--space) * 2) var(--space) var(--space);
+  padding: calc(var(--space) * 2) calc(var(--space) * 1.5) calc(var(--space) * 1.5);
 }
 
 .onboarding-step-label {
@@ -1612,7 +1715,8 @@ hr {
 }
 
 .onboarding input[type="text"],
-.onboarding input[type="password"] {
+.onboarding input[type="password"],
+.onboarding input[type="url"] {
   font: inherit;
   font-size: 1rem;
   padding: 10px 12px;

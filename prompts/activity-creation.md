@@ -4,12 +4,12 @@ Generate a brief instruction for one learning activity.
 
 ## THE ONE RULE
 
-Every activity ends with one screenshot of the learner's browser tab. The learner clicks "Record" to capture their active browser tab. An AI then looks at that single screenshot to assess their work.
+Every activity ends with one screenshot of the learner's browser tab. The learner clicks "Capture" to capture their active browser tab. An AI then looks at that single screenshot to assess their work.
 
 This means:
 - The ENTIRE activity MUST happen inside a browser tab. The screenshot only captures what is in the browser.
 - The activity MUST lead to exactly ONE visible result on ONE page.
-- The LAST step MUST always be exactly: "Hit Record to capture your screen."
+- The LAST step MUST always be exactly: "Hit Capture to capture your screen."
 - Everything the learner produced must be visible in a SINGLE VIEWPORT — no scrolling. The screenshot captures only what fits on screen. This means the output must be SHORT: a few sentences, a short list, or a small visible change. NEVER ask the learner to write an essay, a full report, multiple paragraphs, or anything that would require scrolling to see.
 - Never ask the learner to visit multiple sites, compare pages, or do multiple separate tasks.
 - Never ask the learner to do something invisible (read, think, click, find).
@@ -60,6 +60,7 @@ Bad: "Research the WordPress freedoms and write about them in your post." (no st
 ## Use the learner profile and course scope
 
 If a learner profile is provided, personalize the activity:
+- Match the learner's communication style (noted in the profile). Use vocabulary and tone that feel natural to them — never talk down or over-explain to experienced learners, and never use jargon with beginners.
 - Reference their interests, goals, or field when framing the activity.
 - Build on demonstrated strengths rather than re-teaching basics.
 - Address known gaps specifically.
@@ -81,19 +82,19 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 - "Open VS Code / Notepad / TextEdit / Terminal" — desktop apps are NOT in the browser
 - "Create a file on your computer" — file system is not visible in a screenshot
 - "Run this command in your terminal" — terminal is not in the browser
-- "Visit site A, then visit site B" — only one page can be recorded
+- "Visit site A, then visit site B" — only one page can be captured
 - "Find X on the page" — finding leaves no visible trace
 - "Click the button" — clicking is invisible in a screenshot
-- "Try different options" — vague, no single recordable outcome
+- "Try different options" — vague, no single capturable outcome
 - "Write a detailed explanation of..." — too long, won't fit in one screenshot
 - "Create a full report/essay/summary" — too much content to capture in one viewport
 
 ## Format
 
 - One short sentence explaining the goal.
-- Numbered steps (1, 2, 3). Each step is one short sentence. Aim for 3 steps plus the Record step (4 total). Never exceed 4 steps and never use fewer than 3 steps before the Record step.
+- Numbered steps (1, 2, 3). Each step is one short sentence. Aim for 3 steps plus the Capture step (4 total). Never exceed 4 steps and never use fewer than 3 steps before the Capture step.
 - Each step should be one action only — do not pack multiple actions or sub-tasks into a single step.
-- The final step is ALWAYS: "Hit Record to capture your screen."
+- The final step is ALWAYS: "Hit Capture to capture your screen."
 - Plain, simple language. No jargon. 5 minutes or less.
 - Include 2-3 tips (one short sentence each).
 - Calibration check: if your instruction feels thin (fewer than 3 real steps), add one more concrete action; if it feels dense (any step contains a colon, a dash, or more than 15 words), split or trim it.
@@ -102,7 +103,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 ## Example
 
-"Learn about common web accessibility barriers and start your document.\n\n1. Create a new [workProductTool] called '[workProduct]'.\n2. Visit https://www.w3.org/WAI/people-use-web/abilities-barriers/ and read about the types of barriers people face.\n3. In your document, write about the barriers that surprised you or stood out — in your own words.\n4. Hit Record to capture your screen."
+"Learn about common web accessibility barriers and start your document.\n\n1. Create a new [workProductTool] called '[workProduct]'.\n2. Visit https://www.w3.org/WAI/people-use-web/abilities-barriers/ and read about the types of barriers people face.\n3. In your document, write about the barriers that surprised you or stood out — in your own words.\n4. Hit Capture to capture your screen."
 
 Respond with ONLY valid JSON, no markdown fencing:
 

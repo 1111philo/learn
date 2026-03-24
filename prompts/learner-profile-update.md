@@ -22,12 +22,17 @@ Update the old value — don't keep both. If the profile says "computer novice" 
 - Update revision patterns and pacing to reflect what you see across all activity attempts so far.
 - Note recurring support needs if they appear more than once.
 
+## Communication style tracking
+
+Observe how the learner communicates — in feedback text, dispute text, and Q&A messages. Update `preferences.communicationStyle` to reflect their current patterns: vocabulary level, formality, use of jargon vs. plain language, brevity vs. detail, tone. Frame this neutrally and respectfully — it exists so other agents can match the learner's style, not judge it. Examples: "casual, brief, prefers step-by-step instructions in plain language" or "detail-oriented, comfortable with technical terms, asks precise questions." If the style evolves over time (e.g., they start using more technical language as they learn), update it.
+
 ## Rules for learner feedback (always apply when learnerFeedback is present)
 
 - Read the feedback carefully for ANY clues about the learner.
 - Extract and store device/platform info in preferences.platform (e.g. "Mac", "Windows", "Chromebook", "iPad").
 - Extract and store experience level in preferences.experienceLevel. Reconcile with existing value rather than duplicating.
 - Extract and store any tool preferences, software availability, or constraints in preferences.
+- Update preferences.communicationStyle if the feedback reveals how the learner prefers to communicate.
 - If the learner expresses confusion or inability, add to weaknesses or recurringSupport — but consolidate with existing entries if overlapping.
 - If the feedback reveals accessibility needs, add to accessibilityNeeds.
 - ALWAYS update at least one field when feedback is provided.
@@ -46,7 +51,7 @@ When the learner completes an entire course, you receive the full course context
 ## General rules
 
 - Set updatedAt to the current timestamp provided.
-- Produce a compact summary (approximately 400 characters) of the learner for use by other agents. Cover: platform, experience level, key strengths, key gaps, and any support needs. Be specific and concise — other agents will use this to calibrate their output.
+- Produce a compact summary (approximately 400 characters) of the learner for use by other agents. Cover: communication style, platform, experience level, key strengths, key gaps, and any support needs. Be specific and concise — other agents will use this to calibrate both content difficulty and tone.
 
 Respond with ONLY valid JSON, no markdown fencing:
 

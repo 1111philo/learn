@@ -21,7 +21,6 @@
   },
   "host_permissions": [
     "https://api.anthropic.com/*",
-    "https://learn-dashboard.philosophers.group/*",
     "https://learn.philosophers.group/*"
   ],
   "optional_host_permissions": [
@@ -29,6 +28,9 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "version_name": "0.6.3-RC35"
 }
