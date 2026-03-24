@@ -21,12 +21,15 @@
   },
   "host_permissions": [
     "https://api.anthropic.com/*",
-    "https://czrqy8ea0a.execute-api.us-east-1.amazonaws.com/*"
+    "https://learn.philosophers.group/*"
   ],
   "optional_host_permissions": [
     "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   }
 }

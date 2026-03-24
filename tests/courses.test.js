@@ -6,52 +6,81 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
-const courses = JSON.parse(readFileSync(resolve(root, 'data', 'courses.json'), 'utf8'));
+const courseGroups = JSON.parse(readFileSync(resolve(root, 'data', 'courses.json'), 'utf8'));
+
+// Flatten all playable units/courses
+const allUnits = [];
+for (const group of courseGroups) {
+  if (group.units) {
+    allUnits.push(...group.units);
+  } else {
+    allUnits.push(group);
+  }
+}
 
 describe('courses.json', () => {
   it('is a non-empty array', () => {
-    assert.ok(Array.isArray(courses));
-    assert.ok(courses.length > 0, 'No courses defined');
+    assert.ok(Array.isArray(courseGroups));
+    assert.ok(courseGroups.length > 0, 'No courses defined');
   });
 
-  it('every course has required fields', () => {
-    for (const course of courses) {
-      assert.ok(course.courseId && typeof course.courseId === 'string',
-        `Course missing courseId: ${JSON.stringify(course)}`);
-      assert.ok(course.name && typeof course.name === 'string',
-        `Course ${course.courseId} missing name`);
-      assert.ok(course.description && typeof course.description === 'string',
-        `Course ${course.courseId} missing description`);
-      assert.ok(Array.isArray(course.learningObjectives) && course.learningObjectives.length > 0,
-        `Course ${course.courseId} must have at least one learning objective`);
-      for (const obj of course.learningObjectives) {
+  it('every course group has required fields', () => {
+    for (const group of courseGroups) {
+      assert.ok(group.courseId && typeof group.courseId === 'string',
+        `Course group missing courseId: ${JSON.stringify(group)}`);
+      assert.ok(group.name && typeof group.name === 'string',
+        `Course group ${group.courseId} missing name`);
+      assert.ok(group.description && typeof group.description === 'string',
+        `Course group ${group.courseId} missing description`);
+      // Must have either units or learningObjectives (standalone course)
+      const hasUnits = Array.isArray(group.units) && group.units.length > 0;
+      const hasObjectives = Array.isArray(group.learningObjectives) && group.learningObjectives.length > 0;
+      assert.ok(hasUnits || hasObjectives,
+        `Course group ${group.courseId} must have either units or learningObjectives`);
+    }
+  });
+
+  it('every unit has required fields', () => {
+    for (const unit of allUnits) {
+      assert.ok(unit.unitId && typeof unit.unitId === 'string',
+        `Unit missing unitId: ${JSON.stringify(unit)}`);
+      assert.ok(unit.name && typeof unit.name === 'string',
+        `Unit ${unit.unitId} missing name`);
+      assert.ok(unit.description && typeof unit.description === 'string',
+        `Unit ${unit.unitId} missing description`);
+      assert.ok(Array.isArray(unit.learningObjectives) && unit.learningObjectives.length > 0,
+        `Unit ${unit.unitId} must have at least one learning objective`);
+      for (const obj of unit.learningObjectives) {
         assert.ok(typeof obj === 'string' && obj.length > 0,
-          `Course ${course.courseId} has invalid learning objective`);
+          `Unit ${unit.unitId} has invalid learning objective`);
       }
     }
   });
 
-  it('courseId values are unique', () => {
-    const ids = courses.map(c => c.courseId);
+  it('courseId and unitId values are unique across groups and units', () => {
+    const ids = [
+      ...courseGroups.map(g => g.courseId),
+      ...allUnits.map(u => u.unitId)
+    ];
     const unique = new Set(ids);
-    assert.equal(ids.length, unique.size, `Duplicate courseIds: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
+    assert.equal(ids.length, unique.size, `Duplicate IDs: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
   });
 
-  it('dependsOn references a valid courseId or is null', () => {
-    const ids = new Set(courses.map(c => c.courseId));
-    for (const course of courses) {
-      if (course.dependsOn !== null && course.dependsOn !== undefined) {
-        assert.ok(ids.has(course.dependsOn),
-          `Course ${course.courseId} depends on unknown courseId: ${course.dependsOn}`);
+  it('dependsOn references a valid unit unitId or is null', () => {
+    const ids = new Set(allUnits.map(u => u.unitId));
+    for (const unit of allUnits) {
+      if (unit.dependsOn !== null && unit.dependsOn !== undefined) {
+        assert.ok(ids.has(unit.dependsOn),
+          `Unit ${unit.unitId} depends on unknown unitId: ${unit.dependsOn}`);
       }
     }
   });
 
   it('has no circular dependencies', () => {
-    const depMap = Object.fromEntries(courses.map(c => [c.courseId, c.dependsOn]));
-    for (const course of courses) {
+    const depMap = Object.fromEntries(allUnits.map(u => [u.unitId, u.dependsOn]));
+    for (const unit of allUnits) {
       const visited = new Set();
-      let current = course.courseId;
+      let current = unit.unitId;
       while (current) {
         assert.ok(!visited.has(current),
           `Circular dependency detected involving ${current}`);

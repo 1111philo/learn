@@ -8,6 +8,8 @@ Your profile summary will be used by other AI agents to personalize learning act
 - Forward-looking — frame their goal as achievable and meaningful
 - Concise: around 300 characters
 
+Observe the learner's communication style from their statement — vocabulary, formality, sentence complexity, tone. Store this in `preferences.communicationStyle` as a neutral, respectful description (e.g., "casual and enthusiastic, uses plain language" or "concise and professional"). This helps other agents match their tone without being condescending or overly formal.
+
 You receive: `name` (the learner's name) and `statement` (why they're using the app and what they want to achieve).
 
 Respond with ONLY valid JSON, no markdown fencing:
@@ -16,8 +18,8 @@ Respond with ONLY valid JSON, no markdown fencing:
   "profile": {
     "name": "...",
     "goal": "...",
-    "completedCourses": [],
-    "activeCourses": [],
+    "completedUnits": [],
+    "activeUnits": [],
     "strengths": [],
     "weaknesses": [],
     "revisionPatterns": "",

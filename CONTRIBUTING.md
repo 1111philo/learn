@@ -5,31 +5,37 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 ## Getting started
 
 1. Fork and clone the repository.
-2. Copy `.env.example.js` to `.env.js` and fill in your Anthropic API key and name. This file is gitignored and will never be committed. On app load, these values automatically seed storage — but the onboarding wizard still runs on first use. To skip onboarding in development, complete it once (or clear `chrome.storage.local` and let the seeded key pre-fill the API key step). To reset and re-run onboarding, clear `chrome.storage.local` and remove the `onboardingComplete` flag.
+2. Copy `.env.example.js` to `.env.js` and fill in your Anthropic API key and name. This file is gitignored and will never be committed. On app load, these values automatically seed storage — but the onboarding wizard still runs on first use. To reset and re-run onboarding, clear extension storage via Chrome's developer tools.
 3. Load the extension in Chrome using developer mode (see README.md).
 4. Make your changes and test them in the side panel.
 
 ## Development workflow
 
-- There is no build step. Edit the source files directly and reload the extension in `chrome://extensions`.
-- All source is vanilla JS (ES modules), CSS, and HTML.
+- The UI is a React app built with Vite. Run `npm run dev` for the dev server, or `npm run build` to produce the extension in `dist/`.
+- Load the `dist/` directory as an unpacked extension in Chrome (`chrome://extensions` → Developer mode → Load unpacked).
+- React components live in `src/`. Service modules (storage, orchestrator, auth, sync) live in `js/` and are imported by React.
 - Course definitions live in `data/courses.json`.
 - Agent system prompts live in `prompts/*.md` -- edit these to change agent behavior without touching code.
-- `.env.js` seeds your API key and name into storage on every load (values only written if not already set). The onboarding wizard still runs regardless — it is controlled by the `onboardingComplete` storage flag, not by whether a key is present. This lets you develop against a pre-seeded key while still exercising the onboarding flow.
-- Enable **Share data with 11:11** in Settings > Data Management to log all agent interactions locally and send anonymous telemetry to `learn-service`. A consent notice explains what is and isn't sent. Export the JSON to inspect agent requests, responses, and errors.
+- `.env.js` seeds your API key and name into storage on every load (values only written if not already set).
+- Use Chrome DevTools on the side panel to inspect state and debug issues.
 
 ## Architecture
 
-The app uses six AI agents orchestrated through `js/orchestrator.js`:
+The app uses nine AI agents orchestrated through `js/orchestrator.js`:
 
-1. **Onboarding Profile Agent** -- creates an inspiring initial learner profile from name and personal statement
-2. **Diagnostic Agent** -- generates a skills check activity before every new course
-3. **Course Creation Agent** -- generates a learning plan skeleton, informed by the diagnostic result
-4. **Activity Creation Agent** -- generates detailed instructions per activity
-5. **Activity Assessment Agent** -- evaluates screenshots with vision
-6. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after assessments, diagnostics, feedback, and course completion
+1. **Onboarding Conversation Agent** -- multi-turn chat that gets to know the learner and builds their initial profile
+2. **Onboarding Profile Agent** -- creates an initial learner profile (fallback when conversation is skipped)
+3. **Diagnostic Agent** -- generates a skills check question before every new course
+4. **Diagnostic Conversation Agent** -- multi-turn chat that assesses prior knowledge through follow-up questions
+5. **Course Creation Agent** -- generates a learning plan skeleton, informed by the diagnostic result
+6. **Activity Creation Agent** -- generates detailed instructions per activity
+7. **Activity Assessment Agent** -- evaluates screenshots with vision
+8. **Activity Q&A Agent** -- answers learner questions about activities and assessments inline
+9. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after assessments, diagnostics, feedback, and course completion
 
-All activity, assessment, and course plan outputs pass through deterministic validators before reaching the user. Validators check for format compliance, safety, and constraints (browser-only, single page, viewport-sized output, ends with "Record"). Course plans are validated for activity count matching learning objective count exactly, no consecutive duplicate activity types, and required fields.
+The entire course experience (diagnostic, setup, activities, assessments) happens in a single conversational chat interface. Multi-turn conversations use `orchestrator.converse()` with prompts in `prompts/`. One-off Q&A uses `orchestrator.chatWithContext()` with inline system prompts.
+
+All activity, assessment, and course plan outputs pass through deterministic validators before reaching the user. Validators check for format compliance, safety, and constraints (browser-only, single page, viewport-sized output, ends with "Capture"). Course plans are validated for activity count matching learning objective count exactly, no consecutive duplicate activity types, and required fields.
 
 See `js/api.js` for the API client and model constants.
 
@@ -38,7 +44,7 @@ See `js/api.js` for the API client and model constants.
 Activities must:
 - Happen entirely in the browser tab (the screenshot only captures the active tab)
 - Lead to exactly one visible result on one page, small enough to fit in a single viewport (no scrolling)
-- End with "Hit Record to capture your screen."
+- End with "Hit Capture to capture your screen."
 - Not reference desktop apps, terminals, or file system operations
 - Not use platform-specific keyboard shortcuts
 - Take 5 minutes or less
@@ -49,7 +55,7 @@ Activities must:
 
 - **Accessibility is required.** Every interactive element must be keyboard-operable and have an accessible name. Test with a screen reader when adding UI.
 - **Keep it lightweight.** No frameworks, no heavy dependencies. The app must perform well on Chromebooks and Android tablets.
-- **Local-first.** External calls go to the Anthropic API (user's own key) and, when data sharing is enabled, anonymous telemetry to `learn-service`. Screenshots and API keys are never sent, but feedback text the user writes may be included. A consent dialog is shown before enabling data sharing.
+- **Local-first.** External calls go to the Anthropic API (user's own key) or learn-service (when logged in). No telemetry is collected. All data stays on-device unless the user logs in to sync.
 - **Update documentation.** If your change adds, removes, or renames a feature, file, or permission, update README.md and CLAUDE.md accordingly.
 - **Test prompts.** When editing `prompts/*.md`, test with a real API key to verify the agent returns valid JSON.
 
@@ -61,7 +67,11 @@ Tests use Node's built-in test runner (no dependencies to install):
 npm test
 ```
 
-Tests validate `manifest.json` structure, `courses.json` data integrity, and the output validator functions used by the agent orchestrator. All tests must pass before merging.
+Tests validate `manifest.json` structure, `courses.json` data integrity, SQLite storage round-trips, and the output validator functions used by the agent orchestrator. All tests must pass before merging.
+
+## Schema changes
+
+Data is stored in SQLite (via sql.js WASM). When adding or modifying tables/columns, update the schema DDL in `js/db.js` (uses `CREATE TABLE IF NOT EXISTS`). Update the corresponding getter/setter functions in `js/storage.js` and add round-trip tests in `tests/storage.test.js`.
 
 ## Submitting changes
 
@@ -80,8 +90,8 @@ Versioning is fully automated across two branches:
 ### Staging (release candidates)
 When commits are pushed to `staging`, a GitHub Actions workflow:
 1. Runs tests.
-2. Analyzes commits with Claude to determine the candidate semver version.
-3. Appends an RC number (e.g., `0.7.0-RC1`). The RC number increments on each push and resets when a new candidate version is determined.
+2. Reads `main`'s current version as the base (e.g., `0.6.3`).
+3. Counts non-bump commits since `staging` diverged from `main` to determine the RC number (e.g., `0.6.3-RC2`). The RC number resets when `staging` is merged into `main`.
 4. Creates a GitHub **pre-release** with the extension zip. RCs are not published to the Chrome Web Store.
 
 ### Production (main)

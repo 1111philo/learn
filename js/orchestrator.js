@@ -3,19 +3,10 @@
  * parses structured JSON responses.
  */
 
-import { callClaude, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
-import { getApiKey, getDevMode, appendDevLog } from './storage.js';
-import { trackEvent } from './telemetry.js';
-import { validateSafety, validateActivity, validateDiagnosticActivity, validateAssessment, validatePlan } from './validators.js';
-
-async function devLog(type, data) {
-  try {
-    if (await getDevMode()) {
-      await appendDevLog({ type, ...data });
-      trackEvent(type, data);
-    }
-  } catch { /* non-blocking */ }
-}
+import { callClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
+import { isLoggedIn, authenticatedFetch } from './auth.js';
+import { getApiKey } from './storage.js';
+import { validateSafety, validateActivity, validateAssessment, validatePlan } from './validators.js';
 
 // Prompt cache (loaded once per session)
 const promptCache = {};
@@ -52,15 +43,14 @@ async function callWithValidation(agentFn, validator, agentName) {
   const parsed = await agentFn();
   const error = validator(parsed);
   if (!error) {
-    devLog('agent_response', { agent: agentName, response: parsed });
+  
     return parsed;
   }
   console.warn(`Validation failed (retrying): ${error}`);
-  devLog('validation_failure', { agent: agentName, error, response: parsed });
+
   // Retry once
   const retry = await agentFn();
   const retryError = validator(retry);
-  devLog('agent_response', { agent: agentName, response: retry, retried: true, retryError });
   if (retryError) {
     console.warn(`Validation failed after retry: ${retryError}`);
     if (retryError.includes('unsafe')) throw new ApiError('safety', retryError);
@@ -68,29 +58,73 @@ async function callWithValidation(agentFn, validator, agentName) {
   return retry;
 }
 
-async function requireKey() {
-  const key = await getApiKey();
-  if (!key) throw new ApiError('invalid_key', 'No API key set. Add your key in Settings.');
-  return key;
+/**
+ * Route an API call to the right backend based on auth state and configuration.
+ * Priority: logged in (learn-service Bedrock) > direct Anthropic API key.
+ */
+async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
+  // 1. Logged in → learn-service Bedrock proxy (JWT auth)
+  if (await isLoggedIn()) {
+    const resp = await authenticatedFetch('/v1/ai/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages }),
+    });
+    return parseResponse(resp);
+  }
+
+  // 2. Direct Anthropic API with user's key
+  const apiKey = await getApiKey();
+  if (apiKey) {
+    return callClaude({ apiKey, model, systemPrompt, messages, maxTokens });
+  }
+
+  throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
 }
 
 /**
- * Check if the orchestrator is ready (API key is set).
+ * Check if the orchestrator is ready (has a usable AI provider).
  */
 export async function isReady() {
+  if (await isLoggedIn()) return true;
   const key = await getApiKey();
   return !!key;
+}
+
+/**
+ * Multi-turn conversation agent. Send a system prompt + message history,
+ * get back a parsed JSON response (typically { message, done, ...extras }).
+ */
+export async function converse(promptName, messages, maxTokens = 512) {
+  const systemPrompt = await loadPrompt(promptName);
+
+
+  const { content } = await callApi({
+    model: MODEL_LIGHT,
+    systemPrompt,
+    messages,
+    maxTokens
+  });
+
+  const parsed = parseJSON(content);
+  return parsed;
+}
+
+/**
+ * Free-form chat with an inline system prompt. Returns raw text (not parsed JSON).
+ */
+export async function chatWithContext(systemPrompt, messages, maxTokens = 512) {
+  const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
+  return content;
 }
 
 /**
  * Initialize a learner profile from onboarding name + statement.
  */
 export async function initializeLearnerProfile(name, statement) {
-  const apiKey = await requireKey();
   const systemPrompt = await loadPrompt('onboarding-profile');
 
-  const { content } = await callClaude({
-    apiKey,
+  const { content } = await callApi({
     model: MODEL_LIGHT,
     systemPrompt,
     messages: [{ role: 'user', content: JSON.stringify({ name, statement }) }],
@@ -98,64 +132,31 @@ export async function initializeLearnerProfile(name, statement) {
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'onboarding-profile', response: parsed });
   return parsed;
 }
 
-/**
- * Generate a diagnostic activity that tests existing knowledge before a course.
- */
-export async function generateDiagnosticActivity(course) {
-  const apiKey = await requireKey();
-  const systemPrompt = await loadPrompt('diagnostic-creation');
-
-  const userContent = JSON.stringify({
-    course: { name: course.name, learningObjectives: course.learningObjectives }
-  });
-
-  const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  const generated = await callWithValidation(callAgent, validateDiagnosticActivity, 'diagnostic-creation');
-  return {
-    id: `diagnostic-${course.courseId}`,
-    type: 'final',
-    goal: course.learningObjectives[course.learningObjectives.length - 1],
-    instruction: generated.instruction,
-    tips: generated.tips
-  };
-}
 
 /**
- * Create a learning plan for a course.
+ * Create a learning plan for a unit.
  */
-export async function createLearningPlan(course, preferences, profileSummary, completedCourseNames, diagnosticResult) {
-  const apiKey = await requireKey();
+export async function createLearningPlan(unit, preferences, profileSummary, completedUnitNames, diagnosticResult, courseScope) {
   const systemPrompt = await loadPrompt('course-creation');
 
   const userContent = JSON.stringify({
     course: {
-      courseId: course.courseId,
-      name: course.name,
-      description: course.description,
-      learningObjectives: course.learningObjectives
+      courseId: unit.unitId,
+      name: unit.name,
+      description: unit.description,
+      learningObjectives: unit.learningObjectives
     },
     learnerProfile: profileSummary || `${preferences.name || 'Learner'}`,
-    completedCourses: completedCourseNames,
-    diagnosticResult: diagnosticResult || null
+    completedCourses: completedUnitNames,
+    diagnosticResult: diagnosticResult || null,
+    courseScope: courseScope || null
   });
 
   const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
+    const { content } = await callApi({
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
@@ -164,29 +165,28 @@ export async function createLearningPlan(course, preferences, profileSummary, co
     return parseJSON(content);
   };
 
-  const expectedCount = course.learningObjectives.length;
+  const expectedCount = unit.learningObjectives.length;
   return callWithValidation(callAgent, (p) => validatePlan(p, expectedCount), 'course-creation');
 }
 
 /**
  * Generate the next activity's instruction.
  */
-export async function generateNextActivity(course, planSlot, progressSummary, profileSummary, planContext) {
-  const apiKey = await requireKey();
+export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope) {
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
-    course: { name: course.name, learningObjectives: course.learningObjectives },
+    course: { name: unit.name, learningObjectives: unit.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
     workProduct: planContext?.finalWorkProductDescription || '',
     workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
-    learnerProfile: profileSummary || 'No profile yet'
+    learnerProfile: profileSummary || 'No profile yet',
+    courseScope: courseScope || null
   });
 
   const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
+    const { content } = await callApi({
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
@@ -199,46 +199,9 @@ export async function generateNextActivity(course, planSlot, progressSummary, pr
 }
 
 /**
- * Regenerate an activity based on learner feedback.
- */
-export async function regenerateActivity(course, planSlot, progressSummary, profileSummary, previousInstruction, previousTips, learnerFeedback, planContext) {
-  const apiKey = await requireKey();
-  const systemPrompt = await loadPrompt('activity-creation');
-
-  const userContent = JSON.stringify({
-    course: { name: course.name, learningObjectives: course.learningObjectives },
-    activity: { type: planSlot.type, goal: planSlot.goal },
-    workProduct: planContext?.finalWorkProductDescription || '',
-    workProductTool: planContext?.workProductTool || '',
-    priorActivities: progressSummary,
-    learnerProfile: profileSummary || 'No profile yet'
-  });
-
-  const messages = [
-    { role: 'user', content: userContent },
-    { role: 'assistant', content: JSON.stringify({ instruction: previousInstruction, tips: previousTips || [] }) },
-    { role: 'user', content: `The learner has feedback about this activity: "${learnerFeedback}"\n\nGenerate a new version of this activity that addresses their feedback. You MUST keep the same learning goal: "${planSlot.goal}". The activity must still align with the course learning objectives.\n\nInclude a brief "changeNote" (1-2 sentences) explaining what you changed and why, so the learner knows their feedback was heard.` }
-  ];
-
-  const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages,
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  return callWithValidation(callAgent, validateActivity, 'activity-regeneration');
-}
-
-/**
  * Assess a draft submission with vision.
  */
-export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
-  const apiKey = await requireKey();
+export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -253,7 +216,7 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
   contentParts.push({
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -282,8 +245,7 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
   }
 
   const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
+    const { content } = await callApi({
       model: MODEL_HEAVY,
       systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
@@ -299,8 +261,7 @@ export async function assessDraft(course, activity, screenshotDataUrl, pageUrl, 
  * Reassess a draft with learner feedback on the assessment.
  * Re-evaluates the same screenshot, factoring in the learner's dispute.
  */
-export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment') {
-  const apiKey = await requireKey();
+export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -314,7 +275,7 @@ export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl
   contentParts.push({
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -348,8 +309,7 @@ export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl
   ];
 
   const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
+    const { content } = await callApi({
       model: MODEL_HEAVY,
       systemPrompt,
       messages,
@@ -364,14 +324,13 @@ export async function reassessDraft(course, activity, screenshotDataUrl, pageUrl
 /**
  * Assess a diagnostic skills check from a short text response (no screenshot).
  */
-export async function assessTextResponse(course, activity, learnerResponse, profileSummary, promptName = 'diagnostic-assessment') {
-  const apiKey = await requireKey();
+export async function assessTextResponse(unit, activity, learnerResponse, profileSummary, promptName = 'diagnostic-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const contentParts = [{
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -384,8 +343,7 @@ export async function assessTextResponse(course, activity, learnerResponse, prof
   }];
 
   const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
+    const { content } = await callApi({
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
@@ -400,14 +358,13 @@ export async function assessTextResponse(course, activity, learnerResponse, prof
 /**
  * Reassess a diagnostic text response with learner feedback on the assessment.
  */
-export async function reassessTextResponse(course, activity, learnerResponse, profileSummary, previousAssessment, learnerFeedback, promptName = 'diagnostic-assessment') {
-  const apiKey = await requireKey();
+export async function reassessTextResponse(unit, activity, learnerResponse, profileSummary, previousAssessment, learnerFeedback, promptName = 'diagnostic-assessment') {
   const systemPrompt = await loadPrompt(promptName);
 
   const contentParts = [{
     type: 'text',
     text: JSON.stringify({
-      course: { name: course.name, learningObjectives: course.learningObjectives },
+      course: { name: unit.name, learningObjectives: unit.learningObjectives },
       activity: {
         id: activity.id,
         type: activity.type,
@@ -426,8 +383,7 @@ export async function reassessTextResponse(course, activity, learnerResponse, pr
   ];
 
   const callAgent = async () => {
-    const { content } = await callClaude({
-      apiKey,
+    const { content } = await callApi({
       model: MODEL_LIGHT,
       systemPrompt,
       messages,
@@ -443,7 +399,6 @@ export async function reassessTextResponse(course, activity, learnerResponse, pr
  * Update the learner profile after learner feedback on an activity.
  */
 export async function updateProfileFromFeedback(fullProfile, feedbackText, activityContext) {
-  const apiKey = await requireKey();
   const systemPrompt = await loadPrompt('learner-profile-update');
 
   const userContent = JSON.stringify({
@@ -457,10 +412,8 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
     }
   });
 
-  devLog('agent_request', { agent: 'profile-from-feedback', feedback: feedbackText, context: activityContext });
 
-  const { content } = await callClaude({
-    apiKey,
+  const { content } = await callApi({
     model: MODEL_LIGHT,
     systemPrompt,
     messages: [{ role: 'user', content: userContent }],
@@ -468,7 +421,6 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-from-feedback', response: parsed });
   return parsed;
 }
 
@@ -476,7 +428,6 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
  * Update the learner profile after an assessment.
  */
 export async function updateLearnerProfile(fullProfile, assessmentResult, activityContext) {
-  const apiKey = await requireKey();
   const systemPrompt = await loadPrompt('learner-profile-update');
 
   const userContent = JSON.stringify({
@@ -496,8 +447,7 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
     }
   });
 
-  const { content } = await callClaude({
-    apiKey,
+  const { content } = await callApi({
     model: MODEL_LIGHT,
     systemPrompt,
     messages: [{ role: 'user', content: userContent }],
@@ -505,16 +455,14 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-update', response: parsed });
   return parsed;
 }
 
 /**
- * Update the learner profile after completing an entire course.
- * Sends the full course context so the profile reflects all skills learned.
+ * Update the learner profile after completing an entire unit.
+ * Sends the full unit context so the profile reflects all skills learned.
  */
-export async function updateProfileOnCourseCompletion(fullProfile, course, progress) {
-  const apiKey = await requireKey();
+export async function updateProfileOnUnitCompletion(fullProfile, unit, progress) {
   const systemPrompt = await loadPrompt('learner-profile-update');
 
   // Summarize performance across all activities
@@ -527,23 +475,21 @@ export async function updateProfileOnCourseCompletion(fullProfile, course, progr
   const userContent = JSON.stringify({
     currentProfile: fullProfile,
     courseCompletion: {
-      courseId: course.courseId,
-      courseName: course.name,
-      learningObjectives: course.learningObjectives,
+      unitId: unit.unitId,
+      courseName: unit.name,
+      learningObjectives: unit.learningObjectives,
       activitySummaries,
       workProduct: progress.learningPlan?.finalWorkProductDescription || null,
     },
     context: {
-      event: 'course_completed',
-      courseName: course.name,
+      event: 'unit_completed',
+      courseName: unit.name,
       timestamp: Date.now()
     }
   });
 
-  devLog('agent_request', { agent: 'profile-course-completion', courseId: course.courseId });
 
-  const { content } = await callClaude({
-    apiKey,
+  const { content } = await callApi({
     model: MODEL_LIGHT,
     systemPrompt,
     messages: [{ role: 'user', content: userContent }],
@@ -551,6 +497,5 @@ export async function updateProfileOnCourseCompletion(fullProfile, course, progr
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-course-completion', response: parsed });
   return parsed;
 }

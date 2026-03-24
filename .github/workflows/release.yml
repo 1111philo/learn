@@ -19,10 +19,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run tests
         run: npm test
+
+      - name: Build extension
+        run: npm run build
 
       - name: Get current version and commits since last release
         id: context
@@ -147,24 +153,9 @@ jobs:
           NEW_VERSION="${{ steps.claude.outputs.new_version }}"
           ZIP_NAME="1111-learn-v${NEW_VERSION}.zip"
 
-          zip -r "$ZIP_NAME" . \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x ".env.js" \
-            -x ".env.example.js" \
-            -x ".gitignore" \
-            -x ".DS_Store" \
-            -x "*.crx" \
-            -x "*.pem" \
-            -x "*.zip" \
-            -x "node_modules/*" \
-            -x "tests/*" \
-            -x "package.json" \
-            -x "package-lock.json" \
-            -x "scripts/*" \
-            -x "CLAUDE.md" \
-            -x "CONTRIBUTING.md" \
-            -x "LICENSE"
+          cd dist
+          zip -r "../$ZIP_NAME" .
+          cd ..
 
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_ENV"
 
