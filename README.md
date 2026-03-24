@@ -25,67 +25,51 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 - **Portfolio** -- work cards show progress bars and recording counts; tap into a Build Detail view with full draft timeline and on-demand screenshots
 - **Build narrative** -- activity type labels (Research, Practice, Draft, Deliver) and a completion summary card celebrate your process
 - **Keyboard shortcuts** -- Enter submits inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs
-- **Fully local** -- screenshots are stored in IndexedDB; metadata in `chrome.storage.local`. Only API calls to Anthropic are made (with the user's own key).
-- **Cloud sync** (optional) -- sign in via learn-service to sync your profile, preferences, progress, and portfolio across devices. Login is never required; everything works without an account. Admins can pre-assign API keys that auto-install on login.
-- **Accessible** -- keyboard-operable, screen-reader-friendly, respects `prefers-reduced-motion` and `forced-colors`
-- **Lightweight** -- vanilla JS, no frameworks, no local build step; designed for Chromebooks and Android tablets
+- **Fully local** -- data stored in SQLite (via sql.js WASM), screenshots in IndexedDB. No data leaves your device unless you sign in to sync.
+- **Cloud sync** (optional) -- sign in via learn-service to sync your profile, preferences, progress, screenshots, and portfolio across devices. Login is never required; everything works without an account. Admins can pre-assign API keys that auto-install on login.
+- **Accessible** -- keyboard-operable, screen-reader-friendly, focus-trapped modals, aria-live announcements, respects `prefers-reduced-motion` and `forced-colors`
+- **React + Vite** -- React 18 UI with Vite build, vanilla JS service modules for storage, orchestration, and sync
 
 ## Install (developer mode)
 
 1. Clone this repository.
-2. Open `chrome://extensions` in Chrome.
-3. Enable **Developer mode**.
-4. Click **Load unpacked** and select the project folder.
-5. Click the 1111 extension icon to open the side panel.
-6. Complete the onboarding wizard: enter your name, your Anthropic API key, and chat with the AI about your goals (or skip).
+2. Run `npm install` to install dependencies.
+3. Run `npm run build` to build the extension into `dist/`.
+4. Open `chrome://extensions` in Chrome.
+5. Enable **Developer mode**.
+6. Click **Load unpacked** and select the `dist/` folder.
+7. Click the 1111 extension icon to open the side panel.
+8. Complete the onboarding wizard: sign in or enter your name, your Anthropic API key, and chat with the AI about your goals (or skip).
 
 ## File structure
 
 ```
 manifest.json            Chrome extension manifest (Manifest V3)
 background.js            Opens the side panel on icon click
-sidepanel.html           Main UI entry point
-sidepanel.css            Styles
-js/
-  app.js                 App shell, routing, views, event handling
-  storage.js             chrome.storage.local + IndexedDB abstraction
+sidepanel.html           Vite entry point (mounts React)
+sidepanel.css            Global styles
+vite.config.js           Vite build configuration
+js/                      Service modules (vanilla JS, imported by React)
+  db.js                  SQLite database lifecycle
+  storage.js             SQLite query layer + IndexedDB for screenshots
   courses.js             Course loading and prerequisite checking
   api.js                 Anthropic API client
-  orchestrator.js        Agent orchestration (prompt loading, context assembly, model routing)
-  validators.js          Pure validation functions (used by orchestrator + tests)
-  telemetry.js           Anonymous usage telemetry (opt-in via data sharing toggle)
+  orchestrator.js        Agent orchestration
+  validators.js          Pure validation functions
   auth.js                Authentication module for learn-service
-  sync.js                Cloud data sync (push/pull with optimistic locking)
-  migrations.js          Forward-only data migration runner
-prompts/
-  onboarding-profile.md     System prompt for Onboarding Profile Agent (fallback)
-  onboarding-conversation.md System prompt for multi-turn onboarding chat
-  diagnostic-creation.md    System prompt for Diagnostic (Skills Check) Agent
-  diagnostic-conversation.md System prompt for multi-turn diagnostic chat
-  diagnostic-assessment.md  System prompt for Diagnostic Assessment Agent
-  course-creation.md        System prompt for Course Creation Agent
-  activity-creation.md      System prompt for Activity Creation Agent
-  activity-assessment.md    System prompt for Activity Assessment Agent
-  learner-profile-update.md System prompt for Learner Profile Agent
-data/
-  courses.json           Predefined course definitions
-assets/
-  icon.png               Source icon
-  icon-{16,32,48,128}.png  Resized icons for Chrome
-  logo.svg               Logo for README
-tests/
-  manifest.test.js       Manifest validation tests
-  courses.test.js        Course data validation tests
-  validators.test.js     Output validator unit tests
-  migrations.test.js     Data migration unit tests
-package.json             Test runner config (no dependencies)
-scripts/
-  setup-branch-protection.sh  One-time branch protection setup
-PRIVACY.md               Privacy policy
-.github/
-  workflows/
-    release.yml          Production release on push to main
-    staging.yml          Release candidate on push to staging
+  sync.js                Cloud data sync
+src/                     React app (pages, components, contexts, hooks, lib)
+  main.jsx               Entry point
+  App.jsx                Routes
+  contexts/              AppContext, AuthContext, ModalContext
+  pages/                 CoursesList, UnitChat, Settings, Portfolio, onboarding/*
+  components/            AppShell, PasswordField, chat/*, modals/*
+  lib/                   unitEngine, profileQueue, syncDebounce, helpers
+prompts/                 Agent system prompts (markdown)
+data/courses.json        Predefined course definitions
+assets/                  Icons and images
+tests/                   Service-layer tests (manifest, courses, validators, storage)
+dist/                    Build output (loadable as extension)
 ```
 
 ## Releases
@@ -168,7 +152,6 @@ Each course in `data/courses.json` has:
 | Host                        | Why                                    |
 |-----------------------------|----------------------------------------|
 | `https://api.anthropic.com/*` | Send requests to the Claude API with the user's own key |
-| `https://learn-dashboard.philosophers.group/*` | Send anonymous telemetry when data sharing is enabled |
 | `https://learn.philosophers.group/*` | Cloud sync and authentication (optional, only when signed in) |
 
 ## Privacy

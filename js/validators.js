@@ -33,14 +33,14 @@ export function validateActivity(parsed) {
   const safety = validateSafety(instr + ' ' + parsed.tips.join(' '));
   if (safety) return safety;
 
-  // Must end with "Record"
+  // Must end with "Capture"
   const lines = instr.split('\n').filter(l => l.trim());
   const lastLine = lines[lines.length - 1]?.toLowerCase() || '';
-  if (!lastLine.includes('record')) return 'Last step must tell the learner to hit Record.';
+  if (!lastLine.includes('capture')) return 'Last step must tell the learner to hit Capture.';
 
-  // Max 4 content steps + the mandatory Record step = 5 total
+  // Max 4 content steps + the mandatory Capture step = 5 total
   const steps = instr.match(/^\d+\.\s/gm);
-  if (steps && steps.length > 5) return 'Too many steps (max 4 plus Record).';
+  if (steps && steps.length > 5) return 'Too many steps (max 4 plus Capture).';
 
   // No platform-specific shortcuts
   if (PLATFORM_SHORTCUTS.test(instr)) return 'Contains platform-specific keyboard shortcuts.';

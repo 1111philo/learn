@@ -11,6 +11,8 @@ import {
   getPreferences, savePreferences,
   getWorkProducts,
   getUnitProgress, saveUnitProgress, getAllProgress,
+  deleteProfile, deleteProfileSummary, deletePreferences,
+  deleteWorkProducts, deleteUnitProgress,
 } from './storage.js';
 
 // In-memory version map — tracks the server's version per key for optimistic locking.
@@ -75,8 +77,8 @@ export async function loadAll() {
   // Remove local data the server doesn't have
   const allProgress = await getAllProgress();
   for (const unitId of Object.keys(allProgress)) {
-    if (!serverKeys.has(`unit:${unitId}`)) {
-      await removeLocalData(`unit:${unitId}`);
+    if (!serverKeys.has(`progress:${unitId}`)) {
+      await removeLocalData(`progress:${unitId}`);
     }
   }
   for (const key of ['profile', 'profileSummary', 'work']) {
@@ -95,33 +97,62 @@ async function fetchOne(syncKey) {
   return res.json();
 }
 
-function getLocalData(syncKey) {
+async function getLocalData(syncKey) {
   if (syncKey === 'profile') return getLearnerProfile();
   if (syncKey === 'profileSummary') return getLearnerProfileSummary().then(s => s || null);
   if (syncKey === 'preferences') return getPreferences();
   if (syncKey === 'work') return getWorkProducts();
-  if (syncKey.startsWith('unit:')) {
-    return getUnitProgress(syncKey.slice('unit:'.length));
+  if (syncKey.startsWith('progress:')) {
+    const progress = await getUnitProgress(syncKey.slice('progress:'.length));
+    if (!progress) return null;
+    // Embed screenshots in drafts for cloud sync
+    const { getScreenshot } = await import('./storage.js');
+    const draftsWithScreenshots = await Promise.all(
+      (progress.drafts || []).map(async (d) => {
+        if (!d.screenshotKey) return d;
+        const dataUrl = await getScreenshot(d.screenshotKey);
+        return dataUrl ? { ...d, screenshotDataUrl: dataUrl } : d;
+      })
+    );
+    return { ...progress, drafts: draftsWithScreenshots };
   }
-  return Promise.resolve(null);
+  return null;
 }
 
-function saveLocalData(syncKey, data) {
+async function saveLocalData(syncKey, data) {
   if (syncKey === 'profile') return saveLearnerProfile(data);
   if (syncKey === 'profileSummary') return saveLearnerProfileSummary(data);
   if (syncKey === 'preferences') return savePreferences(data);
-  if (syncKey === 'work') return chrome.storage.local.set({ work: data });
-  if (syncKey.startsWith('unit:')) {
-    return saveUnitProgress(syncKey.slice('unit:'.length), data);
+  if (syncKey === 'work') {
+    // Work is an array — replace all work products
+    return (async () => {
+      const { deleteWorkProducts, saveWorkProduct } = await import('./storage.js');
+      await deleteWorkProducts();
+      for (const product of data) await saveWorkProduct(product);
+    })();
+  }
+  if (syncKey.startsWith('progress:')) {
+    // Extract and store embedded screenshots, then save progress without them
+    const { saveScreenshot } = await import('./storage.js');
+    const cleanDrafts = await Promise.all(
+      (data.drafts || []).map(async (d) => {
+        if (d.screenshotDataUrl && d.screenshotKey) {
+          await saveScreenshot(d.screenshotKey, d.screenshotDataUrl);
+        }
+        const { screenshotDataUrl, ...rest } = d;
+        return rest;
+      })
+    );
+    return saveUnitProgress(syncKey.slice('progress:'.length), { ...data, drafts: cleanDrafts });
   }
 }
 
 function removeLocalData(syncKey) {
-  if (syncKey === 'profile') return chrome.storage.local.remove('learnerProfile');
-  if (syncKey === 'profileSummary') return chrome.storage.local.remove('learnerProfileSummary');
-  if (syncKey === 'preferences') return chrome.storage.local.remove('preferences');
-  if (syncKey === 'work') return chrome.storage.local.remove('work');
-  if (syncKey.startsWith('unit:')) {
-    return chrome.storage.local.remove(`unit-${syncKey.slice('unit:'.length)}`);
+  if (syncKey === 'profile') return deleteProfile();
+  if (syncKey === 'profileSummary') return deleteProfileSummary();
+  if (syncKey === 'preferences') return deletePreferences();
+  if (syncKey === 'work') return deleteWorkProducts();
+  if (syncKey.startsWith('progress:')) {
+    return deleteUnitProgress(syncKey.slice('progress:'.length));
   }
 }

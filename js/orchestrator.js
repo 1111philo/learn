@@ -3,20 +3,10 @@
  * parses structured JSON responses.
  */
 
-import { callClaude, callProxy, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
+import { callClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
-import { getApiKey, getProxyUrl, getDevMode, appendDevLog } from './storage.js';
-import { trackEvent } from './telemetry.js';
+import { getApiKey } from './storage.js';
 import { validateSafety, validateActivity, validateAssessment, validatePlan } from './validators.js';
-
-async function devLog(type, data) {
-  try {
-    if (await getDevMode()) {
-      await appendDevLog({ type, ...data });
-      trackEvent(type, data);
-    }
-  } catch { /* non-blocking */ }
-}
 
 // Prompt cache (loaded once per session)
 const promptCache = {};
@@ -53,15 +43,14 @@ async function callWithValidation(agentFn, validator, agentName) {
   const parsed = await agentFn();
   const error = validator(parsed);
   if (!error) {
-    devLog('agent_response', { agent: agentName, response: parsed });
+  
     return parsed;
   }
   console.warn(`Validation failed (retrying): ${error}`);
-  devLog('validation_failure', { agent: agentName, error, response: parsed });
+
   // Retry once
   const retry = await agentFn();
   const retryError = validator(retry);
-  devLog('agent_response', { agent: agentName, response: retry, retried: true, retryError });
   if (retryError) {
     console.warn(`Validation failed after retry: ${retryError}`);
     if (retryError.includes('unsafe')) throw new ApiError('safety', retryError);
@@ -71,7 +60,7 @@ async function callWithValidation(agentFn, validator, agentName) {
 
 /**
  * Route an API call to the right backend based on auth state and configuration.
- * Priority: logged in (learn-service proxy) > proxy URL > direct Anthropic API key.
+ * Priority: logged in (learn-service Bedrock) > direct Anthropic API key.
  */
 async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
   // 1. Logged in → learn-service Bedrock proxy (JWT auth)
@@ -84,16 +73,7 @@ async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
     return parseResponse(resp);
   }
 
-  // 2. Custom proxy URL configured → proxy (no auth)
-  const proxyUrl = await getProxyUrl();
-  if (proxyUrl) {
-    return callProxy({
-      url: `${proxyUrl.replace(/\/+$/, '')}/v1/ai/messages`,
-      model, systemPrompt, messages, maxTokens,
-    });
-  }
-
-  // 3. Direct Anthropic API with user's key
+  // 2. Direct Anthropic API with user's key
   const apiKey = await getApiKey();
   if (apiKey) {
     return callClaude({ apiKey, model, systemPrompt, messages, maxTokens });
@@ -107,7 +87,6 @@ async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
  */
 export async function isReady() {
   if (await isLoggedIn()) return true;
-  if (await getProxyUrl()) return true;
   const key = await getApiKey();
   return !!key;
 }
@@ -119,7 +98,6 @@ export async function isReady() {
 export async function converse(promptName, messages, maxTokens = 512) {
   const systemPrompt = await loadPrompt(promptName);
 
-  devLog('agent_request', { agent: promptName, messages });
 
   const { content } = await callApi({
     model: MODEL_LIGHT,
@@ -129,7 +107,6 @@ export async function converse(promptName, messages, maxTokens = 512) {
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: promptName, response: parsed });
   return parsed;
 }
 
@@ -137,9 +114,7 @@ export async function converse(promptName, messages, maxTokens = 512) {
  * Free-form chat with an inline system prompt. Returns raw text (not parsed JSON).
  */
 export async function chatWithContext(systemPrompt, messages, maxTokens = 512) {
-  devLog('agent_request', { agent: 'chat', messages });
   const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
-  devLog('agent_response', { agent: 'chat', response: content });
   return content;
 }
 
@@ -157,7 +132,6 @@ export async function initializeLearnerProfile(name, statement) {
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'onboarding-profile', response: parsed });
   return parsed;
 }
 
@@ -438,7 +412,6 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
     }
   });
 
-  devLog('agent_request', { agent: 'profile-from-feedback', feedback: feedbackText, context: activityContext });
 
   const { content } = await callApi({
     model: MODEL_LIGHT,
@@ -448,7 +421,6 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-from-feedback', response: parsed });
   return parsed;
 }
 
@@ -483,7 +455,6 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-update', response: parsed });
   return parsed;
 }
 
@@ -517,7 +488,6 @@ export async function updateProfileOnUnitCompletion(fullProfile, unit, progress)
     }
   });
 
-  devLog('agent_request', { agent: 'profile-unit-completion', unitId: unit.unitId });
 
   const { content } = await callApi({
     model: MODEL_LIGHT,
@@ -527,6 +497,5 @@ export async function updateProfileOnUnitCompletion(fullProfile, unit, progress)
   });
 
   const parsed = parseJSON(content);
-  devLog('agent_response', { agent: 'profile-unit-completion', response: parsed });
   return parsed;
 }

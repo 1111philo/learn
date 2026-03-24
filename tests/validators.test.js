@@ -12,7 +12,7 @@ import {
 
 function validActivity(overrides = {}) {
   return {
-    instruction: '1. Write a short paragraph about your goals\n2. Hit Record to capture your screen.',
+    instruction: '1. Write a short paragraph about your goals\n2. Hit Capture to capture your screen.',
     tips: ['Be specific', 'Keep it brief'],
     ...overrides,
   };
@@ -106,7 +106,7 @@ describe('validateActivity', () => {
     assert.ok(validateActivity(validActivity({ tips: 'nope' })));
   });
 
-  it('rejects instruction not ending with Record', () => {
+  it('rejects instruction not ending with Capture', () => {
     assert.ok(validateActivity(validActivity({
       instruction: '1. Write something\n2. Submit your work.',
     })));
@@ -114,49 +114,49 @@ describe('validateActivity', () => {
 
   it('rejects too many steps (>5 total)', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Step one\n2. Step two\n3. Step three\n4. Step four\n5. Step five\n6. Hit Record to capture your screen.',
+      instruction: '1. Step one\n2. Step two\n3. Step three\n4. Step four\n5. Step five\n6. Hit Capture to capture your screen.',
     })));
   });
 
-  it('allows up to 5 steps (4 content + Record)', () => {
+  it('allows up to 5 steps (4 content + Capture)', () => {
     assert.equal(validateActivity(validActivity({
-      instruction: '1. Write a heading\n2. Add a paragraph\n3. Edit the layout\n4. Create a footer\n5. Hit Record to capture your screen.',
+      instruction: '1. Write a heading\n2. Add a paragraph\n3. Edit the layout\n4. Create a footer\n5. Hit Capture to capture your screen.',
     })), null);
   });
 
   it('rejects platform-specific shortcuts', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Press Ctrl+Shift+I to open tools\n2. Write something\n3. Hit Record to capture your screen.',
+      instruction: '1. Press Ctrl+Shift+I to open tools\n2. Write something\n3. Hit Capture to capture your screen.',
     })));
   });
 
   it('rejects multi-site instructions', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Visit google.com then visit bing.com\n2. Write your findings\n3. Hit Record to capture your screen.',
+      instruction: '1. Visit google.com then visit bing.com\n2. Write your findings\n3. Hit Capture to capture your screen.',
     })));
   });
 
   it('rejects non-browser apps', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Open your terminal\n2. Type a command\n3. Hit Record to capture your screen.',
+      instruction: '1. Open your terminal\n2. Type a command\n3. Hit Capture to capture your screen.',
     })));
   });
 
   it('rejects DevTools references', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Open DevTools\n2. Write something\n3. Hit Record to capture your screen.',
+      instruction: '1. Open DevTools\n2. Write something\n3. Hit Capture to capture your screen.',
     })));
   });
 
   it('rejects activity with no visible work', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Visit the homepage\n2. Look around\n3. Hit Record to capture your screen.',
+      instruction: '1. Visit the homepage\n2. Look around\n3. Hit Capture to capture your screen.',
     })));
   });
 
   it('rejects unsafe content', () => {
     assert.ok(validateActivity(validActivity({
-      instruction: '1. Write about how to steal passwords\n2. Hit Record to capture your screen.',
+      instruction: '1. Write about how to steal passwords\n2. Hit Capture to capture your screen.',
     })));
   });
 });
