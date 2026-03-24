@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "1111 Learn",
-  "version": "0.6.3.35",
+  "version": "0.6.3.39",
   "description": "An agentic learning app by 11:11 Philosopher's Group.",
   "permissions": [
     "sidePanel",
@@ -32,5 +32,5 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
-  "version_name": "0.6.3-RC35"
+  "version_name": "0.6.3-RC39"
 }
