@@ -14,9 +14,12 @@ async function bootstrap() {
   if (initialized) return;
   initialized = true;
 
-  // Seed from .env.js if present (dev convenience)
+  // Seed from .env.js if present (dev convenience — file is gitignored)
   try {
-    const { ENV } = await import('../.env.js');
+    const envModules = import.meta.glob('../.env.js', { eager: true });
+    const envMod = envModules['../.env.js'];
+    if (!envMod) throw new Error('no .env.js');
+    const { ENV } = envMod;
     const { getApiKey, saveApiKey, getPreferences, savePreferences } = await import('../js/storage.js');
     if (ENV.apiKey && !(await getApiKey())) await saveApiKey(ENV.apiKey);
     if (ENV.name) {
