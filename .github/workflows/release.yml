@@ -172,6 +172,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.context.outputs.skip != 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -179,7 +180,7 @@ jobs:
           gh release create "v${NEW_VERSION}" \
             "${{ env.zip_name }}" \
             --title "v${NEW_VERSION}" \
-            --notes-file /tmp/release_notes.md
+            --notes-file /tmp/release_notes.md || echo "Release already exists, continuing to publish."
 
       - name: Publish to Chrome Web Store
         if: steps.context.outputs.skip != 'true'
