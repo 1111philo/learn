@@ -31,7 +31,7 @@ export default function UnitsList() {
   const navigate = useNavigate();
   const { state } = useApp();
   const { courseGroups, allProgress } = state;
-
+  const { dispatch } = useApp();
   const { show: showModal } = useModal();
   const group = courseGroups.find(cg => cg.courseId === courseGroupId);
 
@@ -44,6 +44,9 @@ export default function UnitsList() {
         onConfirm={async () => {
           const { deleteCourseProgress } = await import('../../js/storage.js');
           await deleteCourseProgress(courseGroupId);
+          // Clear unit progress from app state
+          const unitIds = (group.units || []).map(u => u.unitId);
+          for (const uid of unitIds) dispatch({ type: 'RESET_UNIT', unitId: uid });
           navigate('/courses');
         }}
       />
