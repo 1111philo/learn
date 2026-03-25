@@ -96,7 +96,8 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
       }
 
       const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
-      if (!response?.dataUrl) throw new Error('Screenshot capture failed.');
+      if (response?.error) throw new Error(response.error);
+      if (!response?.dataUrl) throw new Error('No screenshot data returned.');
 
       // Save screenshot to IndexedDB
       const screenshotKey = `onboarding-${Date.now()}`;
@@ -125,7 +126,7 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
       console.warn('Screenshot capture failed:', e);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: JSON.stringify({ message: e.message || 'Capture failed. Try navigating to a webpage first, or just tell me about yourself.' })
+        content: JSON.stringify({ message: `Capture failed: ${e.message || 'Unknown error'}. Make sure you have a webpage open in the main browser window.` })
       }]);
       setCapturing(false);
     }
