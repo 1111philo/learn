@@ -13,6 +13,18 @@ export default function FeedbackCard({ draft, isLatest, isPassed, onDispute, onR
         <span className="score-badge">{scorePercent}%</span>
         <span className={`rec-label ${recClass}`}>{recLabel}</span>
       </div>
+      {draft.rubricCriteriaScores?.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+          {draft.rubricCriteriaScores.map((cs, i) => (
+            <span key={i} style={{
+              fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px',
+              background: 'var(--color-surface-alt, #f0f0f0)', color: 'var(--color-text-secondary)',
+            }}>
+              {cs.criterion}: {cs.level}
+            </span>
+          ))}
+        </div>
+      )}
       <p dangerouslySetInnerHTML={{ __html: renderMd(draft.feedback || '') }} />
       {(draft.strengths?.length > 0 || draft.improvements?.length > 0) && (
         <details className="feedback-details">

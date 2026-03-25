@@ -13,6 +13,10 @@ import {
   getUnitProgress, saveUnitProgress, getAllProgress,
   deleteProfile, deleteProfileSummary, deletePreferences,
   deleteWorkProducts, deleteUnitProgress,
+  getSummative, saveSummative,
+  getSummativeAttempts, saveSummativeAttempt,
+  getGapAnalysis, saveGapAnalysis,
+  getJourney, saveJourney,
 } from './storage.js';
 
 // In-memory version map — tracks the server's version per key for optimistic locking.
@@ -102,6 +106,10 @@ async function getLocalData(syncKey) {
   if (syncKey === 'profileSummary') return getLearnerProfileSummary().then(s => s || null);
   if (syncKey === 'preferences') return getPreferences();
   if (syncKey === 'work') return getWorkProducts();
+  if (syncKey.startsWith('summative:')) return getSummative(syncKey.slice('summative:'.length));
+  if (syncKey.startsWith('summative-attempts:')) return getSummativeAttempts(syncKey.slice('summative-attempts:'.length));
+  if (syncKey.startsWith('gap:')) return getGapAnalysis(syncKey.slice('gap:'.length));
+  if (syncKey.startsWith('journey:')) return getJourney(syncKey.slice('journey:'.length));
   if (syncKey.startsWith('progress:')) {
     const progress = await getUnitProgress(syncKey.slice('progress:'.length));
     if (!progress) return null;
@@ -131,6 +139,16 @@ async function saveLocalData(syncKey, data) {
       for (const product of data) await saveWorkProduct(product);
     })();
   }
+  if (syncKey.startsWith('summative:')) return saveSummative(syncKey.slice('summative:'.length), data);
+  if (syncKey.startsWith('summative-attempts:')) {
+    // Attempts come as an array — save each one
+    for (const attempt of (Array.isArray(data) ? data : [data])) {
+      await saveSummativeAttempt(syncKey.slice('summative-attempts:'.length), attempt);
+    }
+    return;
+  }
+  if (syncKey.startsWith('gap:')) return saveGapAnalysis(syncKey.slice('gap:'.length), data);
+  if (syncKey.startsWith('journey:')) return saveJourney(syncKey.slice('journey:'.length), data);
   if (syncKey.startsWith('progress:')) {
     // Extract and store embedded screenshots, then save progress without them
     const { saveScreenshot } = await import('./storage.js');

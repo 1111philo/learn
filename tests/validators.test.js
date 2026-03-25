@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   validateSafety,
   validateActivity,
-  validateDiagnosticActivity,
   validateAssessment,
-  validatePlan,
+  validateSummative,
+  validateSummativeAssessment,
+  validateGapAnalysis,
+  validateJourney,
 } from '../js/validators.js';
 
 // -- Helpers ------------------------------------------------------------------
@@ -29,22 +31,74 @@ function validAssessment(overrides = {}) {
   };
 }
 
-function validPlan(activityCount, overrides = {}) {
-  const types = ['explore', 'apply', 'create', 'final'];
-  const activities = Array.from({ length: activityCount }, (_, i) => ({
-    type: i === activityCount - 1 ? 'final' : types[i % 3],
-    goal: `Objective ${i + 1}`,
-  }));
-  // Ensure no consecutive duplicates
-  for (let i = 1; i < activities.length - 1; i++) {
-    if (activities[i].type === activities[i - 1].type) {
-      activities[i].type = activities[i].type === 'explore' ? 'apply' : 'explore';
-    }
-  }
+function validSummative(overrides = {}) {
   return {
-    activities,
-    finalWorkProductDescription: 'A completed project',
-    workProductTool: 'WordPress',
+    task: {
+      steps: [
+        { instruction: 'Create a professional portfolio page in Google Docs.' },
+        { instruction: 'Add a header with your name and professional summary.' },
+      ],
+    },
+    rubric: [
+      {
+        name: 'Professional communication',
+        levels: {
+          beginning: 'No clear structure',
+          developing: 'Basic structure present',
+          proficient: 'Clear, professional structure',
+          mastery: 'Exceptional communication with consistent voice',
+        },
+      },
+      {
+        name: 'Technical proficiency',
+        levels: {
+          beginning: 'Unable to use the tool',
+          developing: 'Basic tool usage',
+          proficient: 'Effective tool usage',
+          mastery: 'Advanced tool usage with creative solutions',
+        },
+      },
+    ],
+    exemplar: 'A well-structured portfolio page with clear headings, professional summary, and organized sections.',
+    ...overrides,
+  };
+}
+
+function validSummativeAssessment(overrides = {}) {
+  return {
+    criteriaScores: [
+      { criterion: 'Professional communication', level: 'proficient', score: 0.75, feedback: 'Good structure.' },
+      { criterion: 'Technical proficiency', level: 'developing', score: 0.5, feedback: 'Needs more practice.' },
+    ],
+    overallScore: 0.625,
+    mastery: false,
+    feedback: 'Good progress, keep working on technical skills.',
+    nextSteps: ['Practice formatting', 'Review examples'],
+    ...overrides,
+  };
+}
+
+function validGapAnalysis(overrides = {}) {
+  return {
+    gaps: [
+      { criterion: 'Technical proficiency', currentLevel: 'developing', targetLevel: 'proficient', priority: 'high' },
+      { criterion: 'Professional communication', currentLevel: 'proficient', targetLevel: 'mastery', priority: 'medium' },
+    ],
+    ...overrides,
+  };
+}
+
+function validJourney(overrides = {}) {
+  return {
+    units: [
+      {
+        unitId: 'foundations-0-basic-wordpress',
+        activities: [
+          { type: 'explore', goal: 'Research portfolio layouts', rubricCriteria: ['Technical proficiency'] },
+          { type: 'create', goal: 'Build a draft portfolio', rubricCriteria: ['Professional communication', 'Technical proficiency'] },
+        ],
+      },
+    ],
     ...overrides,
   };
 }
@@ -60,34 +114,6 @@ describe('validateSafety', () => {
     assert.ok(validateSafety('how to hack a website'));
     assert.ok(validateSafety('kill yourself'));
     assert.ok(validateSafety('self-harm methods'));
-  });
-});
-
-// -- validateDiagnosticActivity -----------------------------------------------
-
-describe('validateDiagnosticActivity', () => {
-  it('accepts valid diagnostic activity', () => {
-    assert.equal(validateDiagnosticActivity({ instruction: 'Do the thing', tips: ['tip1'] }), null);
-  });
-
-  it('rejects missing instruction', () => {
-    assert.ok(validateDiagnosticActivity({ tips: ['tip1'] }));
-  });
-
-  it('rejects non-string instruction', () => {
-    assert.ok(validateDiagnosticActivity({ instruction: 123, tips: [] }));
-  });
-
-  it('rejects missing tips array', () => {
-    assert.ok(validateDiagnosticActivity({ instruction: 'Do it', tips: 'not an array' }));
-  });
-
-  it('rejects unsafe content in instruction', () => {
-    assert.ok(validateDiagnosticActivity({ instruction: 'how to hack a server', tips: [] }));
-  });
-
-  it('rejects unsafe content in tips', () => {
-    assert.ok(validateDiagnosticActivity({ instruction: 'Do the thing', tips: ['kill yourself'] }));
   });
 });
 
@@ -207,52 +233,182 @@ describe('validateAssessment', () => {
   });
 });
 
-// -- validatePlan -------------------------------------------------------------
+// -- validateSummative --------------------------------------------------------
 
-describe('validatePlan', () => {
-  it('accepts a valid plan', () => {
-    assert.equal(validatePlan(validPlan(3), 3), null);
+describe('validateSummative', () => {
+  it('accepts a valid summative', () => {
+    assert.equal(validateSummative(validSummative()), null);
   });
 
-  it('rejects wrong activity count', () => {
-    assert.ok(validatePlan(validPlan(3), 4));
+  it('rejects missing task', () => {
+    assert.ok(validateSummative(validSummative({ task: null })));
   });
 
-  it('rejects missing activities array', () => {
-    assert.ok(validatePlan({ finalWorkProductDescription: 'x', workProductTool: 'y' }, 1));
+  it('rejects task with empty steps', () => {
+    assert.ok(validateSummative(validSummative({ task: { steps: [] } })));
   });
 
-  it('rejects missing finalWorkProductDescription', () => {
-    const plan = validPlan(2);
-    delete plan.finalWorkProductDescription;
-    assert.ok(validatePlan(plan, 2));
+  it('rejects step missing instruction', () => {
+    assert.ok(validateSummative(validSummative({
+      task: { steps: [{ instruction: 'Good' }, {}] },
+    })));
   });
 
-  it('rejects missing workProductTool', () => {
-    const plan = validPlan(2);
-    delete plan.workProductTool;
-    assert.ok(validatePlan(plan, 2));
+  it('rejects empty rubric', () => {
+    assert.ok(validateSummative(validSummative({ rubric: [] })));
   });
 
-  it('rejects plan where last activity is not type final', () => {
-    const plan = validPlan(3);
-    plan.activities[2].type = 'explore';
-    assert.ok(validatePlan(plan, 3));
+  it('rejects rubric criterion missing name', () => {
+    const s = validSummative();
+    s.rubric[0].name = '';
+    assert.ok(validateSummative(s));
   });
 
-  it('rejects consecutive duplicate activity types', () => {
-    const plan = validPlan(4);
-    plan.activities[0].type = 'explore';
-    plan.activities[1].type = 'explore';
-    assert.ok(validatePlan(plan, 4));
+  it('rejects rubric criterion missing a level', () => {
+    const s = validSummative();
+    delete s.rubric[0].levels.mastery;
+    assert.ok(validateSummative(s));
   });
 
-  it('accepts single-activity plan with type final', () => {
-    const plan = {
-      activities: [{ type: 'final', goal: 'Do the thing' }],
-      finalWorkProductDescription: 'A thing',
-      workProductTool: 'Browser',
+  it('rejects missing exemplar', () => {
+    assert.ok(validateSummative(validSummative({ exemplar: '' })));
+  });
+
+  it('rejects unsafe content in exemplar', () => {
+    assert.ok(validateSummative(validSummative({ exemplar: 'how to hack a database' })));
+  });
+});
+
+// -- validateSummativeAssessment ----------------------------------------------
+
+describe('validateSummativeAssessment', () => {
+  it('accepts a valid summative assessment', () => {
+    assert.equal(validateSummativeAssessment(validSummativeAssessment()), null);
+  });
+
+  it('rejects empty criteriaScores', () => {
+    assert.ok(validateSummativeAssessment(validSummativeAssessment({ criteriaScores: [] })));
+  });
+
+  it('rejects criterion with invalid level', () => {
+    const a = validSummativeAssessment();
+    a.criteriaScores[0].level = 'expert';
+    assert.ok(validateSummativeAssessment(a));
+  });
+
+  it('rejects criterion score out of range', () => {
+    const a = validSummativeAssessment();
+    a.criteriaScores[0].score = 1.5;
+    assert.ok(validateSummativeAssessment(a));
+  });
+
+  it('rejects overallScore out of range', () => {
+    assert.ok(validateSummativeAssessment(validSummativeAssessment({ overallScore: -0.1 })));
+  });
+
+  it('rejects non-boolean mastery', () => {
+    assert.ok(validateSummativeAssessment(validSummativeAssessment({ mastery: 1 })));
+  });
+
+  it('rejects missing feedback', () => {
+    assert.ok(validateSummativeAssessment(validSummativeAssessment({ feedback: '' })));
+  });
+
+  it('enforces ratchet rule — rejects lower score than prior attempt', () => {
+    const priorAttempt = {
+      criteriaScores: [
+        { criterion: 'Professional communication', score: 0.8 },
+        { criterion: 'Technical proficiency', score: 0.5 },
+      ],
     };
-    assert.equal(validatePlan(plan, 1), null);
+    const current = validSummativeAssessment();
+    current.criteriaScores[0].score = 0.7; // lower than prior 0.8
+    assert.ok(validateSummativeAssessment(current, priorAttempt));
+  });
+
+  it('allows equal or higher scores with prior attempt', () => {
+    const priorAttempt = {
+      criteriaScores: [
+        { criterion: 'Professional communication', score: 0.7 },
+        { criterion: 'Technical proficiency', score: 0.4 },
+      ],
+    };
+    assert.equal(validateSummativeAssessment(validSummativeAssessment(), priorAttempt), null);
+  });
+
+  it('passes with no prior attempt', () => {
+    assert.equal(validateSummativeAssessment(validSummativeAssessment(), null), null);
+  });
+});
+
+// -- validateGapAnalysis ------------------------------------------------------
+
+describe('validateGapAnalysis', () => {
+  it('accepts a valid gap analysis', () => {
+    assert.equal(validateGapAnalysis(validGapAnalysis()), null);
+  });
+
+  it('rejects empty gaps', () => {
+    assert.ok(validateGapAnalysis({ gaps: [] }));
+  });
+
+  it('rejects gap missing criterion', () => {
+    const g = validGapAnalysis();
+    g.gaps[0].criterion = '';
+    assert.ok(validateGapAnalysis(g));
+  });
+
+  it('rejects invalid currentLevel', () => {
+    const g = validGapAnalysis();
+    g.gaps[0].currentLevel = 'expert';
+    assert.ok(validateGapAnalysis(g));
+  });
+
+  it('rejects invalid priority', () => {
+    const g = validGapAnalysis();
+    g.gaps[0].priority = 'critical';
+    assert.ok(validateGapAnalysis(g));
+  });
+});
+
+// -- validateJourney ----------------------------------------------------------
+
+describe('validateJourney', () => {
+  it('accepts a valid journey', () => {
+    assert.equal(validateJourney(validJourney()), null);
+  });
+
+  it('rejects empty units', () => {
+    assert.ok(validateJourney({ units: [] }));
+  });
+
+  it('rejects unit missing unitId', () => {
+    const j = validJourney();
+    j.units[0].unitId = '';
+    assert.ok(validateJourney(j));
+  });
+
+  it('rejects unit with no activities', () => {
+    const j = validJourney();
+    j.units[0].activities = [];
+    assert.ok(validateJourney(j));
+  });
+
+  it('rejects activity missing type', () => {
+    const j = validJourney();
+    delete j.units[0].activities[0].type;
+    assert.ok(validateJourney(j));
+  });
+
+  it('rejects activity missing goal', () => {
+    const j = validJourney();
+    delete j.units[0].activities[0].goal;
+    assert.ok(validateJourney(j));
+  });
+
+  it('rejects activity with empty rubricCriteria', () => {
+    const j = validJourney();
+    j.units[0].activities[0].rubricCriteria = [];
+    assert.ok(validateJourney(j));
   });
 });

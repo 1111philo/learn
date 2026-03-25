@@ -1,74 +1,65 @@
 /**
- * Async unit lifecycle — diagnostic, plan generation, activity generation,
- * draft recording, dispute, Q&A. Extracted from app.js so React components stay thin.
+ * Course + unit lifecycle — summative assessment, gap analysis, journey generation,
+ * formative activity generation, draft recording, dispute, Q&A.
  */
 
 import {
   getUnitProgress, saveUnitProgress, getLearnerProfileSummary,
   saveWorkProduct, saveScreenshot, getScreenshot,
-  getDiagnosticState, saveDiagnosticState, clearDiagnosticState,
+  getSummative, saveSummative, getSummativeAttempts, saveSummativeAttempt,
+  getGapAnalysis, saveGapAnalysis,
+  getJourney, saveJourney, updateJourneyPhase,
+  saveRubricReviewState, clearRubricReviewState,
 } from '../../js/storage.js';
 import * as orchestrator from '../../js/orchestrator.js';
 import { syncInBackground } from './syncDebounce.js';
 import {
   updateProfileInBackground, updateProfileFromFeedbackInBackground,
-  updateProfileOnUnitCompletionInBackground, ensureProfileExists,
+  updateProfileOnSummativeAttemptInBackground,
+  ensureProfileExists,
 } from './profileQueue.js';
 
-/** Build course scope context for agent calls. */
-export function buildCourseScope(unitId, courseGroups, units, allProgress) {
-  const group = courseGroups.find(cg => cg.units?.some(u => u.unitId === unitId));
-  if (!group) return null;
-  const groupUnits = group.units || [];
-  return {
-    courseName: group.name,
-    isRequired: !groupUnits.find(u => u.unitId === unitId)?.optional,
-    siblingUnits: groupUnits.map(u => ({
-      name: u.name, unitId: u.unitId, description: u.description,
-      completed: allProgress[u.unitId]?.status === 'completed',
-    })),
-  };
+// -- Course-level functions ---------------------------------------------------
+
+/** Collect all learning objectives across all units in a course group. */
+function collectObjectives(courseGroup) {
+  return (courseGroup.units || []).flatMap(u => u.learningObjectives || []);
 }
 
-/** Start the diagnostic conversation for a unit. Returns the initial result. */
-export async function startDiagnostic(unit, courseGroups, units, allProgress) {
+/** Initialize a course: generate the summative assessment. */
+export async function initCourse(courseGroup) {
+  await ensureProfileExists();
   const profileSummary = await getLearnerProfileSummary();
-  const courseScope = buildCourseScope(unit.unitId, courseGroups, units, allProgress);
+  const allObjectives = collectObjectives(courseGroup);
 
-  const context = JSON.stringify({
-    unitName: unit.name,
-    unitDescription: unit.description,
-    learningObjectives: unit.learningObjectives,
-    learnerProfile: profileSummary,
-    courseScope,
-  });
+  const summativeResult = await orchestrator.generateSummative(
+    courseGroup, allObjectives, profileSummary
+  );
 
-  const result = await orchestrator.converse('diagnostic-conversation', [
-    { role: 'user', content: context },
-  ], 1024);
-
-  const activity = {
-    id: `diagnostic-${unit.unitId}`,
-    type: 'final',
-    goal: unit.learningObjectives?.[unit.learningObjectives.length - 1] || '',
-    instruction: result.message,
-    tips: [],
+  const summativeData = {
+    task: summativeResult.task,
+    rubric: summativeResult.rubric,
+    exemplar: summativeResult.exemplar,
+    tool: summativeResult.task?.tool || null,
+    createdAt: Date.now(),
   };
+  await saveSummative(courseGroup.courseId, summativeData);
+  await saveJourney(courseGroup.courseId, { plan: {}, phase: 'rubric_review' });
+  syncInBackground(`summative:${courseGroup.courseId}`);
 
-  return { result, activity };
+  return summativeData;
 }
 
-/** Send a message in the diagnostic conversation. */
-export async function sendDiagnosticMessage(text, unit, diagnosticActivity, messages, courseGroups, units, allProgress) {
+/** Send a message in the rubric review conversation. */
+export async function sendRubricReviewMessage(courseId, text, summative, messages, courseGroup) {
   const profileSummary = await getLearnerProfileSummary();
-  const courseScope = buildCourseScope(unit.unitId, courseGroups, units, allProgress);
+  const allObjectives = collectObjectives(courseGroup);
 
   const context = JSON.stringify({
-    unitName: unit.name,
-    unitDescription: unit.description,
-    learningObjectives: unit.learningObjectives,
+    summative: { task: summative.task, rubric: summative.rubric, exemplar: summative.exemplar },
+    courseName: courseGroup.name,
+    learningObjectives: allObjectives,
     learnerProfile: profileSummary,
-    courseScope,
   });
 
   const fullMessages = [
@@ -78,53 +69,256 @@ export async function sendDiagnosticMessage(text, unit, diagnosticActivity, mess
   ];
 
   const result = await orchestrator.converse('diagnostic-conversation', fullMessages, 1024);
-  return result;
+
+  // Persist conversation state
+  const updatedMessages = [...messages,
+    { role: 'user', content: text, timestamp: Date.now() },
+    { role: 'assistant', content: result.message, timestamp: Date.now() + 1 },
+  ];
+  await saveRubricReviewState(courseId, { messages: updatedMessages });
+
+  // If the learner requested regeneration, regenerate the summative
+  if (result.regenerate && result.regenerationNotes) {
+    const newSummative = await orchestrator.generateSummative(
+      courseGroup, collectObjectives(courseGroup),
+      profileSummary, result.regenerationNotes
+    );
+    const summativeData = {
+      task: newSummative.task,
+      rubric: newSummative.rubric,
+      exemplar: newSummative.exemplar,
+      tool: newSummative.task?.tool || null,
+      personalized: true,
+      createdAt: Date.now(),
+    };
+    await saveSummative(courseId, summativeData);
+    syncInBackground(`summative:${courseId}`);
+    return { result, summative: summativeData, messages: updatedMessages };
+  }
+
+  return { result, summative: null, messages: updatedMessages };
 }
 
-/** Generate a learning plan and first activity for a unit. */
-export async function generatePlanAndFirstActivity(unit, diagnosticResult, courseGroups, units, allProgress, preferences) {
-  const profileSummary = await getLearnerProfileSummary();
-  const completedUnitNames = Object.entries(allProgress)
-    .filter(([, p]) => p.status === 'completed')
-    .map(([id]) => units.find(c => c.unitId === id)?.name)
-    .filter(Boolean);
-  const courseScope = buildCourseScope(unit.unitId, courseGroups, units, allProgress);
+/** Confirm rubric review is done, transition to baseline attempt. */
+export async function confirmRubric(courseId) {
+  await updateJourneyPhase(courseId, 'baseline_attempt');
+  await clearRubricReviewState(courseId);
+  syncInBackground(`journey:${courseId}`);
+}
 
-  const plan = await orchestrator.createLearningPlan(
-    unit, preferences, profileSummary, completedUnitNames, diagnosticResult, courseScope
+/** Capture a screenshot for one step of the multi-step summative. */
+export async function recordSummativeCapture(courseId, stepIndex) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const pageUrl = tab?.url || '';
+
+  if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('about:') || pageUrl.startsWith('edge://')) {
+    throw new Error('Navigate to a webpage before capturing.');
+  }
+
+  const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+  if (!hasPermission) {
+    const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+    if (!granted) throw new Error('Permission needed to capture screenshots.');
+  }
+
+  const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
+  if (!response?.dataUrl) throw new Error('Screenshot capture failed.');
+
+  const screenshotKey = `summative-${courseId}-step${stepIndex}-${Date.now()}`;
+  await saveScreenshot(screenshotKey, response.dataUrl);
+
+  return { screenshotKey, dataUrl: response.dataUrl, stepIndex, url: pageUrl };
+}
+
+/** Submit a summative attempt (all steps captured). */
+export async function submitSummativeAttempt(courseId, courseGroup, captures) {
+  const summative = await getSummative(courseId);
+  const priorAttempts = await getSummativeAttempts(courseId);
+  const profileSummary = await getLearnerProfileSummary();
+
+  const screenshots = captures.map(c => ({ dataUrl: c.dataUrl, stepIndex: c.stepIndex }));
+
+  const result = await orchestrator.assessSummativeAttempt(
+    courseGroup, summative, screenshots, priorAttempts, profileSummary
   );
 
-  const firstSlot = plan.activities[0];
+  const attempt = {
+    id: `attempt-${courseId}-${Date.now()}`,
+    attemptNumber: priorAttempts.length + 1,
+    screenshots: captures.map(c => ({ screenshot_key: c.screenshotKey, step_index: c.stepIndex, url: c.url })),
+    criteriaScores: result.criteriaScores,
+    overallScore: result.overallScore,
+    mastery: result.mastery,
+    feedback: result.feedback,
+    nextSteps: result.nextSteps || [],
+    isBaseline: priorAttempts.length === 0,
+    timestamp: Date.now(),
+  };
+
+  await saveSummativeAttempt(courseId, attempt);
+  syncInBackground(`summative-attempts:${courseId}`);
+
+  // Update profile in background
+  updateProfileOnSummativeAttemptInBackground(courseGroup, attempt);
+
+  return { attempt, mastery: result.mastery };
+}
+
+/** Run gap analysis and generate the learning journey. */
+export async function generateGapAndJourney(courseId, courseGroup) {
+  const summative = await getSummative(courseId);
+  const attempts = await getSummativeAttempts(courseId);
+  const latestAttempt = attempts[attempts.length - 1];
+  const profileSummary = await getLearnerProfileSummary();
+
+  // Gap analysis
+  await updateJourneyPhase(courseId, 'gap_analysis');
+  const gapResult = await orchestrator.analyzeGaps(
+    courseGroup, summative.rubric, latestAttempt, profileSummary
+  );
+  await saveGapAnalysis(courseId, {
+    gaps: gapResult.gaps,
+    suggestedFocus: gapResult.suggestedFocus || [],
+  });
+  syncInBackground(`gap:${courseId}`);
+
+  // Journey generation
+  await updateJourneyPhase(courseId, 'journey_generation');
+  const journeyResult = await orchestrator.generateJourney(
+    courseGroup, courseGroup.units, gapResult, summative.rubric, profileSummary
+  );
+
+  await saveJourney(courseId, {
+    plan: journeyResult,
+    phase: 'formative_learning',
+  });
+  syncInBackground(`journey:${courseId}`);
+
+  // Initialize unit records for each journey unit
+  for (let i = 0; i < journeyResult.units.length; i++) {
+    const ju = journeyResult.units[i];
+    await saveUnitProgress(ju.unitId, {
+      status: 'not_started',
+      currentActivityIndex: 0,
+      journeyOrder: i,
+      rubricCriteria: ju.activities.flatMap(a => a.rubricCriteria || []).filter((v, idx, arr) => arr.indexOf(v) === idx),
+      activities: [],
+      drafts: [],
+    });
+  }
+
+  return { gapAnalysis: gapResult, journey: journeyResult };
+}
+
+/** Request a summative retake after formative learning. */
+export async function requestSummativeRetake(courseId) {
+  await updateJourneyPhase(courseId, 'summative_retake');
+  syncInBackground(`journey:${courseId}`);
+}
+
+/** Generate remediation formative activities after a failed retake. */
+export async function generateRemediationActivities(courseId, courseGroup, weakCriteria) {
+  const summative = await getSummative(courseId);
+  const profileSummary = await getLearnerProfileSummary();
+  const existingJourney = await getJourney(courseId);
+
+  // Get completed formative summaries
+  const completedFormatives = [];
+  if (existingJourney?.plan?.units) {
+    for (const ju of existingJourney.plan.units) {
+      const progress = await getUnitProgress(ju.unitId);
+      if (progress) {
+        for (const a of progress.activities || []) {
+          const drafts = (progress.drafts || []).filter(d => d.activityId === a.id);
+          const best = drafts.reduce((max, d) => d.score > max ? d.score : max, 0);
+          completedFormatives.push({ type: a.type, goal: a.goal, bestScore: best });
+        }
+      }
+    }
+  }
+
+  // Re-analyze gaps with latest attempt
+  const attempts = await getSummativeAttempts(courseId);
+  const latestAttempt = attempts[attempts.length - 1];
+  const gapResult = await orchestrator.analyzeGaps(
+    courseGroup, summative.rubric, latestAttempt, profileSummary
+  );
+  await saveGapAnalysis(courseId, {
+    gaps: gapResult.gaps,
+    suggestedFocus: gapResult.suggestedFocus || [],
+  });
+
+  // Generate new journey segment targeting weak criteria
+  const journeyResult = await orchestrator.generateJourney(
+    courseGroup, courseGroup.units, gapResult, summative.rubric,
+    profileSummary, completedFormatives
+  );
+
+  await saveJourney(courseId, {
+    plan: journeyResult,
+    phase: 'formative_learning',
+  });
+  syncInBackground(`journey:${courseId}`);
+
+  return { gapAnalysis: gapResult, journey: journeyResult };
+}
+
+// -- Unit-level functions (formative activities) ------------------------------
+
+/** Generate the first formative activity for a unit from the journey plan. */
+export async function generateFirstActivity(unit, journeyPlan, courseGroup) {
+  const profileSummary = await getLearnerProfileSummary();
+  const journeyUnit = journeyPlan.units?.find(u => u.unitId === unit.unitId);
+  if (!journeyUnit?.activities?.length) throw new Error('No activities planned for this unit.');
+
+  const slot = journeyUnit.activities[0];
+  const planContext = {
+    workProductDescription: journeyPlan.workProductDescription,
+    workProductTool: journeyPlan.workProductTool,
+  };
+
   const generated = await orchestrator.generateNextActivity(
-    unit, firstSlot, [], profileSummary, plan, courseScope
+    unit, slot, [], profileSummary, planContext
   );
 
-  return { plan, firstActivity: { ...firstSlot, instruction: generated.instruction, tips: generated.tips, messages: [] } };
+  return {
+    ...slot,
+    instruction: generated.instruction,
+    tips: generated.tips,
+    messages: [],
+  };
 }
 
-/** Generate the next activity for a unit. */
-export async function generateNextActivity(unit, progress, courseGroups, units, allProgress) {
+/** Generate the next formative activity for a unit. */
+export async function generateNextActivity(unit, progress, journeyPlan) {
   const profileSummary = await getLearnerProfileSummary();
-  const courseScope = buildCourseScope(unit.unitId, courseGroups, units, allProgress);
-  const plan = progress.learningPlan;
-  const slot = plan.activities[progress.currentActivityIndex];
+  const journeyUnit = journeyPlan.units?.find(u => u.unitId === unit.unitId);
+  if (!journeyUnit) throw new Error('Unit not found in journey plan.');
+
+  const slot = journeyUnit.activities[progress.currentActivityIndex];
+  if (!slot) throw new Error('No more activities planned for this unit.');
+
+  const planContext = {
+    workProductDescription: journeyPlan.workProductDescription,
+    workProductTool: journeyPlan.workProductTool,
+  };
 
   const progressSummary = progress.activities
     .slice(0, progress.currentActivityIndex)
-    .map((a, i) => {
+    .map(a => {
       const drafts = progress.drafts.filter(d => d.activityId === a.id);
       const best = drafts.reduce((max, d) => d.score > max ? d.score : max, 0);
       return `${a.type}: ${a.goal} (best score: ${Math.round(best * 100)}%)`;
     }).join('\n');
 
   const generated = await orchestrator.generateNextActivity(
-    unit, slot, progressSummary, profileSummary, plan, courseScope
+    unit, slot, progressSummary, profileSummary, planContext
   );
 
   return { ...slot, instruction: generated.instruction, tips: generated.tips, messages: [] };
 }
 
-/** Record a draft (capture screenshot + assess). */
+/** Record a formative draft (capture screenshot + assess). */
 export async function recordDraft(unit, progress, activity) {
   // Get active tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -134,14 +328,12 @@ export async function recordDraft(unit, progress, activity) {
     throw new Error('Navigate to a webpage before recording.');
   }
 
-  // Request permission if needed
   const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
   if (!hasPermission) {
     const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
     if (!granted) throw new Error('Permission needed to capture screenshots.');
   }
 
-  // Capture screenshot
   const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
   if (!response?.dataUrl) throw new Error('Screenshot capture failed.');
   const dataUrl = response.dataUrl;
@@ -164,6 +356,7 @@ export async function recordDraft(unit, progress, activity) {
     improvements: result.improvements,
     score: result.score,
     recommendation: result.recommendation,
+    rubricCriteriaScores: result.rubricCriteriaScores || null,
     timestamp: Date.now(),
   };
 
@@ -171,20 +364,11 @@ export async function recordDraft(unit, progress, activity) {
   const newProgress = { ...progress };
   newProgress.drafts = [...newProgress.drafts, draft];
 
-  const justCompleted = activity.type === 'final' && result.passed;
-  if (justCompleted) {
-    newProgress.status = 'completed';
-    newProgress.completedAt = Date.now();
-    newProgress.finalWorkProductUrl = pageUrl;
-    await saveWorkProduct({ unitId: unit.unitId, courseName: unit.name, url: pageUrl, completedAt: newProgress.completedAt });
-  }
-
   await saveUnitProgress(unit.unitId, newProgress);
   syncInBackground(`progress:${unit.unitId}`);
-  if (justCompleted) { syncInBackground('work'); updateProfileOnUnitCompletionInBackground(unit, newProgress); }
   updateProfileInBackground(result, unit, activity);
 
-  return { newProgress, draft, justCompleted };
+  return { newProgress, draft };
 }
 
 /** Submit a dispute on a draft assessment. */
@@ -203,7 +387,6 @@ export async function submitDispute(unit, progress, activity, draft, feedbackTex
     priorDrafts, profileSummary, previousAssessment, feedbackText
   );
 
-  // Update draft in place
   const newDrafts = progress.drafts.map(d => d.id === draft.id ? {
     ...d, feedback: result.feedback, strengths: result.strengths,
     improvements: result.improvements, score: result.score,
@@ -212,20 +395,11 @@ export async function submitDispute(unit, progress, activity, draft, feedbackTex
 
   const newProgress = { ...progress, drafts: newDrafts };
 
-  const justCompleted = activity.type === 'final' && result.passed && progress.status !== 'completed';
-  if (justCompleted) {
-    newProgress.status = 'completed';
-    newProgress.completedAt = Date.now();
-    newProgress.finalWorkProductUrl = draft.url;
-    await saveWorkProduct({ unitId: unit.unitId, courseName: unit.name, url: draft.url, completedAt: newProgress.completedAt });
-  }
-
   await saveUnitProgress(unit.unitId, newProgress);
   syncInBackground(`progress:${unit.unitId}`);
-  if (justCompleted) { syncInBackground('work'); updateProfileOnUnitCompletionInBackground(unit, newProgress); }
   updateProfileFromFeedbackInBackground(feedbackText, unit, activity);
 
-  return { newProgress, justCompleted };
+  return { newProgress };
 }
 
 /** Ask a Q&A question about an activity. */
@@ -242,7 +416,7 @@ Learner profile: ${profileSummary}
 Respond in plain text (not JSON). Be brief and direct.`;
 
   const history = (activity.messages || []).map(m => ({ role: m.role, content: m.content }));
-  history.push({ role: 'user', content: `Learner name: ${progress.unitId}\n\nLearner question: ${text}` });
+  history.push({ role: 'user', content: `Learner question: ${text}` });
 
   const response = await orchestrator.chatWithContext(systemPrompt, history);
 
@@ -253,7 +427,6 @@ Respond in plain text (not JSON). Be brief and direct.`;
     { role: 'assistant', content: response, timestamp: now + 1 },
   ];
 
-  // Update progress with new messages
   const newActivities = progress.activities.map(a =>
     a.id === activity.id ? { ...a, messages: newMessages } : a
   );

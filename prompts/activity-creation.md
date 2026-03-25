@@ -57,6 +57,13 @@ Good: "The four WordPress freedoms are: (1) use the software for any purpose, (2
 Good: "Search the web for 'WordPress major milestones timeline'. In your post, write about three milestones that surprised you or stood out."
 Bad: "Research the WordPress freedoms and write about them in your post." (no starting point — the learner doesn't know where to look or what the freedoms are)
 
+## Rubric criteria (assessment-backward design)
+
+If `rubricCriteria` is provided, this activity targets specific criteria from the course's summative rubric. The activity must build the learner's ability on these criteria:
+- Frame the activity so the learner practices skills that directly address the rubric criteria.
+- If `gapObservation` is provided, address what the learner was missing — don't re-teach what they already demonstrated.
+- The activity should move the learner from their current level toward proficiency on these criteria.
+
 ## Use the learner profile and course scope
 
 If a learner profile is provided, personalize the activity:

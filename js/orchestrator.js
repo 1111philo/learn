@@ -6,7 +6,10 @@
 import { callClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
-import { validateSafety, validateActivity, validateAssessment, validatePlan } from './validators.js';
+import {
+  validateSafety, validateActivity, validateAssessment,
+  validateSummative, validateSummativeAssessment, validateGapAnalysis, validateJourney,
+} from './validators.js';
 
 // Prompt cache (loaded once per session)
 const promptCache = {};
@@ -43,7 +46,7 @@ async function callWithValidation(agentFn, validator, agentName) {
   const parsed = await agentFn();
   const error = validator(parsed);
   if (!error) {
-  
+
     return parsed;
   }
   console.warn(`Validation failed (retrying): ${error}`);
@@ -98,7 +101,6 @@ export async function isReady() {
 export async function converse(promptName, messages, maxTokens = 512) {
   const systemPrompt = await loadPrompt(promptName);
 
-
   const { content } = await callApi({
     model: MODEL_LIGHT,
     systemPrompt,
@@ -135,24 +137,112 @@ export async function initializeLearnerProfile(name, statement) {
   return parsed;
 }
 
+// -- Summative ----------------------------------------------------------------
 
 /**
- * Create a learning plan for a unit.
+ * Generate a summative assessment (task + rubric + exemplar) for a course.
  */
-export async function createLearningPlan(unit, preferences, profileSummary, completedUnitNames, diagnosticResult, courseScope) {
-  const systemPrompt = await loadPrompt('course-creation');
+export async function generateSummative(course, allObjectives, profileSummary, personalizationNotes) {
+  const systemPrompt = await loadPrompt('summative-generation');
 
   const userContent = JSON.stringify({
-    course: {
-      courseId: unit.unitId,
-      name: unit.name,
-      description: unit.description,
-      learningObjectives: unit.learningObjectives
-    },
-    learnerProfile: profileSummary || `${preferences.name || 'Learner'}`,
-    completedCourses: completedUnitNames,
-    diagnosticResult: diagnosticResult || null,
-    courseScope: courseScope || null
+    courseName: course.name,
+    courseDescription: course.description,
+    learningObjectives: allObjectives,
+    learnerProfile: profileSummary || 'No profile yet',
+    personalizationNotes: personalizationNotes || null,
+  });
+
+  const callAgent = async () => {
+    const { content } = await callApi({
+      model: MODEL_LIGHT,
+      systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      maxTokens: 4096
+    });
+    return parseJSON(content);
+  };
+
+  return callWithValidation(callAgent, validateSummative, 'summative-generation');
+}
+
+/**
+ * Assess a summative attempt (multi-capture, vision-based).
+ * screenshots is an array of { dataUrl, stepIndex }.
+ */
+export async function assessSummativeAttempt(course, summative, screenshots, priorAttempts, profileSummary) {
+  const systemPrompt = await loadPrompt('diagnostic-assessment');
+
+  const contentParts = [];
+
+  // Text context
+  contentParts.push({
+    type: 'text',
+    text: JSON.stringify({
+      courseName: course.name,
+      task: summative.task,
+      rubric: summative.rubric,
+      attemptNumber: (priorAttempts?.length || 0) + 1,
+      isBaseline: !priorAttempts?.length,
+      priorAttemptScores: priorAttempts?.length
+        ? priorAttempts[priorAttempts.length - 1].criteriaScores
+        : null,
+      learnerProfile: profileSummary || 'No profile yet',
+    })
+  });
+
+  // Add image blocks for each step screenshot
+  for (const ss of screenshots) {
+    if (ss.dataUrl) {
+      const match = ss.dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (match) {
+        contentParts.push({
+          type: 'text',
+          text: `Screenshot for step ${ss.stepIndex + 1}:`
+        });
+        contentParts.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: match[1],
+            data: match[2]
+          }
+        });
+      }
+    }
+  }
+
+  const bestPrior = priorAttempts?.length ? priorAttempts[priorAttempts.length - 1] : null;
+
+  const callAgent = async () => {
+    const { content } = await callApi({
+      model: MODEL_HEAVY,
+      systemPrompt,
+      messages: [{ role: 'user', content: contentParts }],
+      maxTokens: 2048
+    });
+    return parseJSON(content);
+  };
+
+  return callWithValidation(
+    callAgent,
+    (p) => validateSummativeAssessment(p, bestPrior),
+    'summative-assessment'
+  );
+}
+
+/**
+ * Analyze gaps between baseline summative attempt and mastery.
+ */
+export async function analyzeGaps(course, rubric, baselineResult, profileSummary) {
+  const systemPrompt = await loadPrompt('gap-analysis');
+
+  const userContent = JSON.stringify({
+    courseName: course.name,
+    rubric,
+    baselineScores: baselineResult.criteriaScores,
+    overallScore: baselineResult.overallScore,
+    learnerProfile: profileSummary || 'No profile yet',
   });
 
   const callAgent = async () => {
@@ -165,12 +255,46 @@ export async function createLearningPlan(unit, preferences, profileSummary, comp
     return parseJSON(content);
   };
 
-  const expectedCount = unit.learningObjectives.length;
-  return callWithValidation(callAgent, (p) => validatePlan(p, expectedCount), 'course-creation');
+  return callWithValidation(callAgent, validateGapAnalysis, 'gap-analysis');
 }
 
+// -- Journey ------------------------------------------------------------------
+
 /**
- * Generate the next activity's instruction.
+ * Generate a personalized learning journey from gap analysis.
+ */
+export async function generateJourney(course, units, gapAnalysis, rubric, profileSummary, completedFormatives) {
+  const systemPrompt = await loadPrompt('course-creation');
+
+  const userContent = JSON.stringify({
+    courseName: course.name,
+    units: units.map(u => ({
+      unitId: u.unitId, name: u.name, description: u.description,
+      learningObjectives: u.learningObjectives, dependsOn: u.dependsOn,
+    })),
+    gapAnalysis,
+    rubric,
+    learnerProfile: profileSummary || 'No profile yet',
+    completedFormatives: completedFormatives || [],
+  });
+
+  const callAgent = async () => {
+    const { content } = await callApi({
+      model: MODEL_LIGHT,
+      systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      maxTokens: 4096
+    });
+    return parseJSON(content);
+  };
+
+  return callWithValidation(callAgent, validateJourney, 'journey-generation');
+}
+
+// -- Formative activities -----------------------------------------------------
+
+/**
+ * Generate the next formative activity's instruction.
  */
 export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope) {
   const systemPrompt = await loadPrompt('activity-creation');
@@ -178,7 +302,9 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
   const userContent = JSON.stringify({
     course: { name: unit.name, learningObjectives: unit.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
-    workProduct: planContext?.finalWorkProductDescription || '',
+    rubricCriteria: planSlot.rubricCriteria || null,
+    gapObservation: planSlot.gapObservation || null,
+    workProduct: planContext?.workProductDescription || planContext?.finalWorkProductDescription || '',
     workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
     learnerProfile: profileSummary || 'No profile yet',
@@ -199,7 +325,7 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
 }
 
 /**
- * Assess a draft submission with vision.
+ * Assess a formative draft submission with vision.
  */
 export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
   const systemPrompt = await loadPrompt(promptName);
@@ -223,6 +349,7 @@ export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, pr
         goal: activity.goal,
         instruction: activity.instruction
       },
+      rubricCriteria: activity.rubricCriteria || null,
       pageUrl,
       priorDrafts: compressedDrafts,
       learnerProfile: profileSummary || 'No profile yet'
@@ -282,6 +409,7 @@ export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, 
         goal: activity.goal,
         instruction: activity.instruction
       },
+      rubricCriteria: activity.rubricCriteria || null,
       pageUrl,
       priorDrafts: compressedDrafts,
       learnerProfile: profileSummary || 'No profile yet'
@@ -321,79 +449,7 @@ export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, 
   return callWithValidation(callAgent, validateAssessment, 'assessment-reassess');
 }
 
-/**
- * Assess a diagnostic skills check from a short text response (no screenshot).
- */
-export async function assessTextResponse(unit, activity, learnerResponse, profileSummary, promptName = 'diagnostic-assessment') {
-  const systemPrompt = await loadPrompt(promptName);
-
-  const contentParts = [{
-    type: 'text',
-    text: JSON.stringify({
-      course: { name: unit.name, learningObjectives: unit.learningObjectives },
-      activity: {
-        id: activity.id,
-        type: activity.type,
-        goal: activity.goal,
-        instruction: activity.instruction
-      },
-      learnerResponse,
-      learnerProfile: profileSummary || 'No profile yet'
-    })
-  }];
-
-  const callAgent = async () => {
-    const { content } = await callApi({
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages: [{ role: 'user', content: contentParts }],
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  return callWithValidation(callAgent, validateAssessment, 'diagnostic-assessment');
-}
-
-/**
- * Reassess a diagnostic text response with learner feedback on the assessment.
- */
-export async function reassessTextResponse(unit, activity, learnerResponse, profileSummary, previousAssessment, learnerFeedback, promptName = 'diagnostic-assessment') {
-  const systemPrompt = await loadPrompt(promptName);
-
-  const contentParts = [{
-    type: 'text',
-    text: JSON.stringify({
-      course: { name: unit.name, learningObjectives: unit.learningObjectives },
-      activity: {
-        id: activity.id,
-        type: activity.type,
-        goal: activity.goal,
-        instruction: activity.instruction
-      },
-      learnerResponse,
-      learnerProfile: profileSummary || 'No profile yet'
-    })
-  }];
-
-  const messages = [
-    { role: 'user', content: contentParts },
-    { role: 'assistant', content: JSON.stringify(previousAssessment) },
-    { role: 'user', content: `The learner disputes this assessment: "${learnerFeedback}"\n\nRe-evaluate the same response, taking their feedback into account. You may adjust your score, recommendation, and feedback if their point is valid. Respond with the same JSON format.` }
-  ];
-
-  const callAgent = async () => {
-    const { content } = await callApi({
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages,
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  return callWithValidation(callAgent, validateAssessment, 'assessment-reassess');
-}
+// -- Profile updates ----------------------------------------------------------
 
 /**
  * Update the learner profile after learner feedback on an activity.
@@ -412,7 +468,6 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
     }
   });
 
-
   const { content } = await callApi({
     model: MODEL_LIGHT,
     systemPrompt,
@@ -425,7 +480,7 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
 }
 
 /**
- * Update the learner profile after an assessment.
+ * Update the learner profile after a formative assessment.
  */
 export async function updateLearnerProfile(fullProfile, assessmentResult, activityContext) {
   const systemPrompt = await loadPrompt('learner-profile-update');
@@ -459,35 +514,61 @@ export async function updateLearnerProfile(fullProfile, assessmentResult, activi
 }
 
 /**
- * Update the learner profile after completing an entire unit.
- * Sends the full unit context so the profile reflects all skills learned.
+ * Update the learner profile after a summative attempt.
  */
-export async function updateProfileOnUnitCompletion(fullProfile, unit, progress) {
+export async function updateProfileOnSummativeAttempt(fullProfile, course, attemptResult) {
   const systemPrompt = await loadPrompt('learner-profile-update');
-
-  // Summarize performance across all activities
-  const activitySummaries = (progress.learningPlan?.activities || []).map((slot) => {
-    const drafts = (progress.drafts || []).filter(d => d.activityId === slot.id);
-    const bestScore = drafts.length ? Math.max(...drafts.map(d => d.score ?? 0)) : null;
-    return { type: slot.type, goal: slot.goal, bestScore, draftCount: drafts.length };
-  });
 
   const userContent = JSON.stringify({
     currentProfile: fullProfile,
-    courseCompletion: {
-      unitId: unit.unitId,
-      courseName: unit.name,
-      learningObjectives: unit.learningObjectives,
-      activitySummaries,
-      workProduct: progress.learningPlan?.finalWorkProductDescription || null,
+    summativeAttempt: {
+      courseId: course.courseId,
+      courseName: course.name,
+      isBaseline: attemptResult.isBaseline,
+      mastery: attemptResult.mastery,
+      criteriaScores: attemptResult.criteriaScores,
+      overallScore: attemptResult.overallScore,
+      feedback: attemptResult.feedback,
     },
     context: {
-      event: 'unit_completed',
-      courseName: unit.name,
+      event: attemptResult.mastery ? 'summative_mastery' : (attemptResult.isBaseline ? 'summative_baseline' : 'summative_retake'),
+      courseName: course.name,
       timestamp: Date.now()
     }
   });
 
+  const { content } = await callApi({
+    model: MODEL_LIGHT,
+    systemPrompt,
+    messages: [{ role: 'user', content: userContent }],
+    maxTokens: 1024
+  });
+
+  const parsed = parseJSON(content);
+  return parsed;
+}
+
+/**
+ * Update the learner profile after achieving mastery on a course.
+ */
+export async function updateProfileOnMastery(fullProfile, course, finalResult, formativeSummaries) {
+  const systemPrompt = await loadPrompt('learner-profile-update');
+
+  const userContent = JSON.stringify({
+    currentProfile: fullProfile,
+    courseCompletion: {
+      courseId: course.courseId,
+      courseName: course.name,
+      rubricCriteriaScores: finalResult.criteriaScores,
+      overallScore: finalResult.overallScore,
+      formativeSummaries,
+    },
+    context: {
+      event: 'course_mastery',
+      courseName: course.name,
+      timestamp: Date.now()
+    }
+  });
 
   const { content } = await callApi({
     model: MODEL_LIGHT,

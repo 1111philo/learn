@@ -60,12 +60,46 @@ CREATE TABLE IF NOT EXISTS units (
   final_work_product_url TEXT
 );
 
-CREATE TABLE IF NOT EXISTS learning_plans (
-  unit_id TEXT PRIMARY KEY REFERENCES units(unit_id),
-  final_work_product_description TEXT,
-  work_product_tool TEXT,
-  data TEXT,
+CREATE TABLE IF NOT EXISTS summatives (
+  course_id TEXT PRIMARY KEY,
+  task TEXT NOT NULL,
+  rubric TEXT NOT NULL,
+  exemplar TEXT NOT NULL,
+  tool TEXT,
+  estimated_time INTEGER,
+  personalized INTEGER DEFAULT 0,
+  conversation_id TEXT,
   created_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS summative_attempts (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL,
+  attempt_number INTEGER NOT NULL,
+  screenshots TEXT,
+  criteria_scores TEXT,
+  overall_score REAL,
+  mastery INTEGER DEFAULT 0,
+  feedback TEXT,
+  next_steps TEXT,
+  is_baseline INTEGER DEFAULT 0,
+  timestamp INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS gap_analysis (
+  course_id TEXT PRIMARY KEY,
+  gaps TEXT NOT NULL,
+  suggested_focus TEXT,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS journeys (
+  course_id TEXT PRIMARY KEY,
+  plan TEXT NOT NULL,
+  phase TEXT DEFAULT 'summative_setup',
+  created_at INTEGER,
+  updated_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -97,18 +131,8 @@ CREATE TABLE IF NOT EXISTS activities (
   conversation_id TEXT REFERENCES conversations(id)
 );
 
-CREATE TABLE IF NOT EXISTS diagnostics (
-  unit_id TEXT PRIMARY KEY REFERENCES units(unit_id),
-  conversation_id TEXT REFERENCES conversations(id),
-  instruction TEXT,
-  score REAL,
-  feedback TEXT,
-  strengths TEXT,
-  improvements TEXT,
-  recommendation TEXT,
-  passed INTEGER,
-  skip_for TEXT
-);
+CREATE INDEX IF NOT EXISTS idx_summative_attempts_course
+  ON summative_attempts(course_id, attempt_number);
 
 CREATE TABLE IF NOT EXISTS drafts (
   id TEXT PRIMARY KEY,
@@ -149,6 +173,15 @@ CREATE TABLE IF NOT EXISTS pending_state (
 
 `;
 
+// Migrations for adding columns to existing tables.
+// ALTER TABLE ADD COLUMN throws if column exists; caught in init().
+const MIGRATIONS = [
+  'ALTER TABLE units ADD COLUMN journey_order INTEGER',
+  'ALTER TABLE units ADD COLUMN rubric_criteria TEXT',
+  'ALTER TABLE activities ADD COLUMN rubric_criteria TEXT',
+  'ALTER TABLE drafts ADD COLUMN rubric_criteria_scores TEXT',
+];
+
 // -- Initialization -----------------------------------------------------------
 
 export async function init() {
@@ -163,6 +196,10 @@ export async function init() {
     _db = new SQL.Database(new Uint8Array(stored[DB_STORAGE_KEY]));
     // Ensure any new tables exist (for future schema additions)
     _db.run(SCHEMA_SQL);
+    // Migrate: add new columns to existing tables (safe to re-run)
+    for (const stmt of MIGRATIONS) {
+      try { _db.run(stmt); } catch (_) { /* column already exists */ }
+    }
     // Clean up any activity rows with bare (non-scoped) IDs from before the fix
     _db.run("DELETE FROM drafts WHERE activity_id NOT LIKE '%::%'");
     _db.run("DELETE FROM messages WHERE conversation_id IN (SELECT conversation_id FROM activities WHERE id NOT LIKE '%::%')");

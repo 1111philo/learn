@@ -21,21 +21,23 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 
 ## Architecture
 
-The app uses nine AI agents orchestrated through `js/orchestrator.js`:
+The app uses an assessment-backward design with AI agents orchestrated through `js/orchestrator.js`:
 
-1. **Onboarding Conversation Agent** -- multi-turn chat that gets to know the learner and builds their initial profile
+1. **Onboarding Conversation Agent** -- multi-turn chat that gets to know the learner
 2. **Onboarding Profile Agent** -- creates an initial learner profile (fallback when conversation is skipped)
-3. **Diagnostic Agent** -- generates a skills check question before every new course
-4. **Diagnostic Conversation Agent** -- multi-turn chat that assesses prior knowledge through follow-up questions
-5. **Course Creation Agent** -- generates a learning plan skeleton, informed by the diagnostic result
-6. **Activity Creation Agent** -- generates detailed instructions per activity
-7. **Activity Assessment Agent** -- evaluates screenshots with vision
-8. **Activity Q&A Agent** -- answers learner questions about activities and assessments inline
-9. **Learner Profile Agent** -- tracks learner progress, patterns, and preferences; updated after assessments, diagnostics, feedback, and course completion
+3. **Summative Generation Agent** -- generates a summative assessment (multi-step capture task + rubric + exemplar) from all course learning objectives
+4. **Summative Rubric Review Agent** -- multi-turn conversation about the rubric/exemplar; can trigger regeneration
+5. **Summative Assessment Agent** -- scores multi-capture screenshots against rubric criteria with ratchet rule (scores only go up)
+6. **Gap Analysis Agent** -- identifies per-criterion gaps from baseline attempt
+7. **Journey Generation Agent** -- selects, orders, and sizes units with formative activities mapped to rubric criteria
+8. **Activity Creation Agent** -- generates formative activity instructions targeting specific rubric criteria
+9. **Activity Assessment Agent** -- evaluates screenshots with optional rubric-criteria scoring
+10. **Activity Q&A Agent** -- answers learner questions inline
+11. **Learner Profile Agent** -- tracks progress after summative attempts, assessments, feedback, and mastery
 
-The entire course experience (diagnostic, setup, activities, assessments) happens in a single conversational chat interface. Multi-turn conversations use `orchestrator.converse()` with prompts in `prompts/`. One-off Q&A uses `orchestrator.chatWithContext()` with inline system prompts.
+The course experience has two layers: the course hub (UnitsList) manages summative phases, and unit chats handle formative activities. Multi-turn conversations use `orchestrator.converse()` with prompts in `prompts/`. One-off Q&A uses `orchestrator.chatWithContext()` with inline system prompts.
 
-All activity, assessment, and course plan outputs pass through deterministic validators before reaching the user. Validators check for format compliance, safety, and constraints (browser-only, single page, viewport-sized output, ends with "Capture"). Course plans are validated for activity count matching learning objective count exactly, no consecutive duplicate activity types, and required fields.
+All agent outputs pass through deterministic validators. Summatives are validated for task/rubric/exemplar structure. Summative assessments enforce the ratchet rule. Journeys are validated for unit/activity/criteria structure. Activities are validated for browser constraints.
 
 See `js/api.js` for the API client and model constants.
 
@@ -48,7 +50,7 @@ Activities must:
 - Not reference desktop apps, terminals, or file system operations
 - Not use platform-specific keyboard shortcuts
 - Take 5 minutes or less
-- Map 1:1 to learning objectives (one activity per objective, enforced by `validatePlan()`)
+- Target specific rubric criteria (formative activities are generated from gap analysis)
 - Use a different activity type from the previous activity (no two consecutive explore, apply, etc.)
 
 ## Guidelines

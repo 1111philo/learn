@@ -1,50 +1,158 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
 import { TYPE_LABELS, TYPE_LETTERS } from '../lib/constants.js';
-import { getScreenshot } from '../../js/storage.js';
+import { getScreenshot, getSummative, getSummativeAttempts, getJourney } from '../../js/storage.js';
 
 export default function PortfolioDetail() {
-  const { unitId } = useParams();
+  const { courseId } = useParams();
   const navigate = useNavigate();
   const { state } = useApp();
-  const unit = state.units.find(u => u.unitId === unitId);
-  const progress = state.allProgress[unitId];
+  const courseGroup = state.courseGroups.find(cg => cg.courseId === courseId);
 
-  if (!unit || !progress) return <p>Not found.</p>;
+  const [summative, setSummative] = useState(null);
+  const [attempts, setAttempts] = useState([]);
+  const [journey, setJourney] = useState(null);
 
-  const plan = progress.learningPlan;
+  useEffect(() => {
+    if (!courseId) return;
+    (async () => {
+      const s = await getSummative(courseId);
+      setSummative(s);
+      const a = await getSummativeAttempts(courseId);
+      setAttempts(a);
+      const j = await getJourney(courseId);
+      setJourney(j);
+    })();
+  }, [courseId]);
+
+  if (!courseGroup) return <p>Not found.</p>;
+
+  const journeyUnits = journey?.plan?.units || [];
 
   return (
     <>
       <div className="course-header" style={{ marginBottom: 'var(--space)' }}>
         <button className="back-btn" aria-label="Back to work" onClick={() => navigate('/work')}>&larr;</button>
         <div className="course-header-info">
-          <h2>{plan?.finalWorkProductDescription || unit.name}</h2>
+          <h2>{courseGroup.name}</h2>
         </div>
       </div>
-      <div className="build-timeline">
-        {(plan?.activities || []).map((slot, i) => {
-          const activity = progress.activities?.[i];
-          const drafts = progress.drafts?.filter(d => d.activityId === (activity?.id || slot.id)) || [];
-          const isCurrent = i === progress.currentActivityIndex && progress.status !== 'completed';
-          const isFuture = !activity;
 
-          return (
-            <div key={i} className={`timeline-step${isCurrent ? ' timeline-current' : ''}${isFuture ? ' timeline-future' : ''}`}>
-              <div className="timeline-step-header">
-                <span className="timeline-type-letter">{TYPE_LETTERS[slot.type] || '?'}</span>
-                <strong>{TYPE_LABELS[slot.type] || slot.type}</strong>
+      {/* Summative section */}
+      {summative && (
+        <div style={{ marginBottom: 'var(--space)' }}>
+          <h3 style={{ fontSize: '0.9rem', margin: '0 0 8px', padding: '0 var(--space, 12px)' }}>
+            Summative Assessment
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', margin: '0 0 8px', padding: '0 var(--space, 12px)' }}>
+            {summative.task?.description || 'Assessment task'}
+          </p>
+          <div className="build-timeline">
+            {attempts.map((attempt, ai) => (
+              <div key={attempt.id} className="timeline-step">
+                <div className="timeline-step-header">
+                  <span className="timeline-type-letter">{attempt.isBaseline ? 'B' : `R${attempt.attemptNumber - 1}`}</span>
+                  <strong>{attempt.isBaseline ? 'Baseline' : `Retake ${attempt.attemptNumber - 1}`}</strong>
+                  {attempt.mastery && <span style={{ color: '#2d7d46', marginLeft: '8px', fontWeight: 600 }}>Mastery</span>}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  {Math.round((attempt.overallScore || 0) * 100)}% overall
+                </div>
+                {/* Per-criterion scores */}
+                {attempt.criteriaScores?.map((cs, ci) => (
+                  <div key={ci} style={{ fontSize: '0.75rem', display: 'flex', gap: '6px', marginBottom: '2px' }}>
+                    <span style={{ fontWeight: 500, minWidth: '40%' }}>{cs.criterion}</span>
+                    <span style={{ textTransform: 'capitalize' }}>{cs.level}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{Math.round(cs.score * 100)}%</span>
+                  </div>
+                ))}
+                {/* Screenshot thumbnails */}
+                {attempt.screenshots?.map((ss, si) => (
+                  <SummativeScreenshot key={si} screenshotKey={ss.screenshot_key} stepIndex={ss.step_index} />
+                ))}
               </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>{slot.goal}</p>
-              {drafts.map((d, di) => (
-                <TimelineDraft key={d.id} draft={d} unitId={unitId} />
-              ))}
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Formative section */}
+      {journeyUnits.length > 0 && (
+        <div>
+          <h3 style={{ fontSize: '0.9rem', margin: '0 0 8px', padding: '0 var(--space, 12px)' }}>
+            Learning Journey
+          </h3>
+          <div className="build-timeline">
+            {journeyUnits.map((ju, ui) => {
+              const unitDef = courseGroup.units?.find(u => u.unitId === ju.unitId);
+              const progress = state.allProgress[ju.unitId];
+              if (!progress?.activities?.length) return null;
+
+              return (
+                <div key={ju.unitId}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, margin: '8px 0 4px', padding: '0 var(--space, 12px)' }}>
+                    {unitDef?.name || ju.unitId}
+                  </div>
+                  {progress.activities.map((activity, ai) => {
+                    const drafts = (progress.drafts || []).filter(d => d.activityId === activity.id);
+                    return (
+                      <div key={ai} className="timeline-step">
+                        <div className="timeline-step-header">
+                          <span className="timeline-type-letter">{TYPE_LETTERS[activity.type] || '?'}</span>
+                          <strong>{TYPE_LABELS[activity.type] || activity.type}</strong>
+                        </div>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                          {activity.goal}
+                        </p>
+                        {activity.rubricCriteria?.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginBottom: '4px' }}>
+                            {activity.rubricCriteria.map((c, ci) => (
+                              <span key={ci} style={{
+                                fontSize: '0.65rem', padding: '1px 5px', borderRadius: '6px',
+                                background: 'var(--color-primary-light, #e8f0fe)', color: 'var(--color-primary, #1a73e8)',
+                              }}>{c}</span>
+                            ))}
+                          </div>
+                        )}
+                        {drafts.map(d => (
+                          <TimelineDraft key={d.id} draft={d} unitId={ju.unitId} />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+function SummativeScreenshot({ screenshotKey, stepIndex }) {
+  const [screenshot, setScreenshot] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadScreenshot = async () => {
+    if (screenshot) { setScreenshot(null); return; }
+    if (!screenshotKey) return;
+    setLoading(true);
+    const data = await getScreenshot(screenshotKey);
+    setScreenshot(data);
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ marginTop: '4px' }}>
+      <button className="timeline-screenshot-btn" onClick={loadScreenshot}>
+        {loading ? '...' : screenshot ? 'Hide' : `Step ${stepIndex + 1} screenshot`}
+      </button>
+      {screenshot && (
+        <img src={screenshot} alt={`Step ${stepIndex + 1} screenshot`} style={{ width: '100%', borderRadius: 'var(--radius)', marginTop: '4px' }} />
+      )}
+    </div>
   );
 }
 

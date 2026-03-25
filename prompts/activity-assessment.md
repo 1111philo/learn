@@ -14,6 +14,10 @@ If a learner profile is provided, use it to personalize your assessment:
 - Frame improvements in terms of their goals and interests, not generic advice.
 - Note new evidence of strengths or gaps that the profile should capture — the profile agent will read your assessment to update the learner's record.
 
+## Rubric criteria (assessment-backward design)
+
+If `rubricCriteria` is provided, this activity targets specific criteria from the course's summative rubric. In addition to the standard assessment, evaluate how well the work demonstrates progress on these specific criteria. Include a `rubricCriteriaScores` array with a level and score for each targeted criterion.
+
 ## Rules
 
 - Address the learner directly as "you" — never refer to them as "the learner" or in third person.
@@ -37,5 +41,14 @@ Respond with ONLY valid JSON, no markdown fencing:
   "improvements": ["...", "..."],
   "score": 0.85,
   "recommendation": "advance",
-  "passed": true
+  "passed": true,
+  "rubricCriteriaScores": [
+    {
+      "criterion": "Criterion name from rubric",
+      "level": "developing",
+      "score": 0.45
+    }
+  ]
 }
+
+If no rubricCriteria were provided, omit the rubricCriteriaScores field entirely.

@@ -21,3 +21,21 @@ export const VIEW_DEPTH = {
   '/work-detail': 2,
   '/settings': 1,
 };
+
+export const COURSE_PHASES = {
+  SUMMATIVE_SETUP: 'summative_setup',
+  RUBRIC_REVIEW: 'rubric_review',
+  BASELINE_ATTEMPT: 'baseline_attempt',
+  GAP_ANALYSIS: 'gap_analysis',
+  JOURNEY_GENERATION: 'journey_generation',
+  FORMATIVE_LEARNING: 'formative_learning',
+  SUMMATIVE_RETAKE: 'summative_retake',
+  COMPLETED: 'completed',
+};
+
+export const MASTERY_LEVELS = {
+  BEGINNING: 'beginning',
+  DEVELOPING: 'developing',
+  PROFICIENT: 'proficient',
+  MASTERY: 'mastery',
+};
