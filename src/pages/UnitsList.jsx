@@ -202,9 +202,11 @@ export default function UnitsList() {
           ))}
           {loading === 'review' && <ThinkingSpinner />}
           {!loading && (
-            <button className="skip-step-btn" onClick={handleSkipReview} style={{ marginTop: '8px' }}>
-              Start assessment
-            </button>
+            <div style={{ textAlign: 'center', margin: '8px 0' }}>
+              <button className="primary-btn" onClick={handleSkipReview}>
+                Start Assessment
+              </button>
+            </div>
           )}
         </ChatArea>
       )}
