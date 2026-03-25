@@ -208,7 +208,14 @@ export default function UnitsList() {
       {/* Setup phase */}
       {(phase === COURSE_PHASES.SUMMATIVE_SETUP || loading === 'summative') && (
         <ChatArea>
-          <ThinkingSpinner text="Designing your assessment..." />
+          <ThinkingSpinner text={[
+            'Sharpening pencils...',
+            'Calibrating the rubric machine...',
+            'Consulting the learning gods...',
+            'Brewing assessment tea...',
+            'Warming up the neurons...',
+            'Folding paper airplanes... wait, wrong task...',
+          ][Math.floor(Math.random() * 6)]} />
         </ChatArea>
       )}
 
