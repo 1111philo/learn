@@ -24,9 +24,7 @@ export default function SummativeCard({ summative, onStart }) {
 
       {/* Message 2: What you'll do */}
       <div className="msg msg-response">
-        <p style={{ margin: 0 }}>
-          {task?.description || `This assessment has ${stepCount} step${stepCount !== 1 ? 's' : ''}. Each step builds on the last.`}
-        </p>
+        <div dangerouslySetInnerHTML={{ __html: renderMd(task?.description || `This assessment has ${stepCount} step${stepCount !== 1 ? 's' : ''}. Each step builds on the last.`) }} />
       </div>
 
       {/* Details toggle */}
