@@ -208,7 +208,7 @@ export default function UnitsList() {
       {/* Setup phase */}
       {(phase === COURSE_PHASES.SUMMATIVE_SETUP || loading === 'summative') && (
         <ChatArea>
-          <RotatingSpinner />
+          <ThinkingSpinner />
         </ChatArea>
       )}
 
@@ -375,20 +375,3 @@ export default function UnitsList() {
   );
 }
 
-const LOADING_MESSAGES = [
-  'Sharpening pencils...',
-  'Consulting the learning gods...',
-  'Brewing assessment tea...',
-  'Warming up the neurons...',
-  'Folding paper airplanes...',
-  'Rearranging sticky notes...',
-];
-
-function RotatingSpinner() {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setIndex(i => (i + 1) % LOADING_MESSAGES.length), 3000);
-    return () => clearInterval(timer);
-  }, []);
-  return <ThinkingSpinner text={LOADING_MESSAGES[index]} />;
-}
