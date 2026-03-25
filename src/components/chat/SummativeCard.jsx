@@ -1,21 +1,22 @@
 import { useState, useEffect } from 'react';
 import { renderMd } from '../../lib/helpers.js';
+import ThinkingSpinner from './ThinkingSpinner.jsx';
 
 /**
  * Renders the summative assessment as staggered chat messages.
- * Each message appears after a delay so the learner can read one at a time.
+ * Shows a spinner between reveals so the learner sees progress.
  */
 export default function SummativeCard({ summative }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
   const [expandedCriterion, setExpandedCriterion] = useState(null);
 
-  // Stagger messages: show one every 800ms
+  const total = 3; // exemplar, task description, details button
+
   useEffect(() => {
     if (!summative) return;
-    const total = 3; // exemplar, task description, details button
     if (visibleCount >= total) return;
-    const timer = setTimeout(() => setVisibleCount(v => v + 1), visibleCount === 0 ? 300 : 800);
+    const timer = setTimeout(() => setVisibleCount(v => v + 1), visibleCount === 0 ? 400 : 1000);
     return () => clearTimeout(timer);
   }, [visibleCount, summative]);
 
@@ -23,9 +24,10 @@ export default function SummativeCard({ summative }) {
 
   const { task, rubric, exemplar } = summative;
   const stepCount = task?.steps?.length || 0;
+  const stillRevealing = visibleCount < total;
 
   return (
-    <>
+    <div role="log" aria-label="Assessment overview" aria-live="polite">
       {/* Message 1: The hook */}
       {visibleCount >= 1 && (
         <div className="msg msg-response">
@@ -50,6 +52,9 @@ export default function SummativeCard({ summative }) {
           View rubric and steps
         </button>
       )}
+
+      {/* Spinner while revealing */}
+      {stillRevealing && <ThinkingSpinner />}
 
       {/* Expanded details */}
       {showDetails && (
@@ -91,6 +96,6 @@ export default function SummativeCard({ summative }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
