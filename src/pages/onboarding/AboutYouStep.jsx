@@ -222,14 +222,13 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
       <div className="chat-compose">
         <div className="compose-input-row">
           <button
-            className="record-btn"
+            className="send-btn"
             onClick={captureScreenshot}
             disabled={thinking || capturing || skipping}
             aria-label="Capture screenshot"
             title="Capture current page"
-            style={{ flexShrink: 0, padding: '6px 10px' }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
             </svg>
           </button>
