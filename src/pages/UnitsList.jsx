@@ -215,6 +215,9 @@ export default function UnitsList() {
       {/* Rubric review phase */}
       {phase === COURSE_PHASES.RUBRIC_REVIEW && summative && (
         <ChatArea>
+          <div className="msg msg-response" style={{ fontSize: '0.85rem' }}>
+            You'll take this assessment twice — once now as a baseline, and again after learning to show mastery. Your first attempt reveals where you are so we can build a personalized path forward.
+          </div>
           <div className="chat-section-heading" role="separator">Assessment Overview</div>
           <SummativeCard summative={summative} />
           {reviewMessages.map((m, i) => (
@@ -281,6 +284,9 @@ export default function UnitsList() {
       {/* Formative learning — show unit cards */}
       {phase === COURSE_PHASES.FORMATIVE_LEARNING && (
         <>
+          <div className="msg msg-response" style={{ fontSize: '0.85rem', margin: 'var(--space)' }}>
+            Based on your baseline, here's a personalized learning journey. Complete these activities, then retake the assessment to demonstrate mastery.
+          </div>
           {latestAttempt && (
             <div style={{ padding: '0 var(--space)' }}>
               <div className="chat-section-heading" role="separator">Assessment Results</div>
