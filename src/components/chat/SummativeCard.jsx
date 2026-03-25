@@ -1,45 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { renderMd } from '../../lib/helpers.js';
 
-/**
- * Renders the summative assessment as staggered chat messages.
- * Shows a spinner between reveals so the learner sees progress.
- */
+// Track which summatives have been seen this session — skip stagger on revisit
+const _seen = new Set();
+
 export default function SummativeCard({ summative }) {
-  const [visibleCount, setVisibleCount] = useState(0);
+  const courseId = summative?.courseId || 'default';
+  const alreadySeen = useRef(_seen.has(courseId));
+  const [visibleCount, setVisibleCount] = useState(alreadySeen.current ? 3 : 0);
   const [showDetails, setShowDetails] = useState(false);
   const [expandedCriterion, setExpandedCriterion] = useState(null);
 
-  const total = 3; // exemplar, task description, details button
+  const total = 3;
 
   useEffect(() => {
-    if (!summative) return;
-    if (visibleCount >= total) return;
+    if (!summative || alreadySeen.current) return;
+    if (visibleCount >= total) {
+      _seen.add(courseId);
+      return;
+    }
     const timer = setTimeout(() => setVisibleCount(v => v + 1), visibleCount === 0 ? 400 : 1000);
     return () => clearTimeout(timer);
-  }, [visibleCount, summative]);
+  }, [visibleCount, summative, courseId]);
 
   if (!summative) return null;
 
   const { task, rubric, exemplar } = summative;
   const stepCount = task?.steps?.length || 0;
+
   return (
     <div role="log" aria-label="Assessment overview" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {/* Message 1: The hook */}
       {visibleCount >= 1 && (
         <div className="msg msg-response">
           <p dangerouslySetInnerHTML={{ __html: renderMd(exemplar) }} style={{ margin: 0 }} />
         </div>
       )}
 
-      {/* Message 2: What you'll do */}
       {visibleCount >= 2 && (
         <div className="msg msg-response">
           <div dangerouslySetInnerHTML={{ __html: renderMd(task?.description || `${stepCount} steps. Each builds on the last.`) }} />
         </div>
       )}
 
-      {/* Message 3: Details toggle */}
       {visibleCount >= 3 && !showDetails && (
         <button
           className="skip-step-btn"
@@ -50,7 +52,6 @@ export default function SummativeCard({ summative }) {
         </button>
       )}
 
-      {/* Expanded details */}
       {showDetails && (
         <div className="msg msg-response" style={{ fontSize: '0.85rem' }}>
           <strong>Steps</strong>
@@ -77,7 +78,7 @@ export default function SummativeCard({ summative }) {
                 </button>
                 {expandedCriterion === i && (
                   <div style={{ paddingLeft: '16px', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                    {['mastery', 'proficient', 'developing', 'beginning'].map(level => (
+                    {['exceeds', 'meets', 'approaching', 'incomplete'].map(level => (
                       <div key={level} style={{ marginBottom: '2px' }}>
                         <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{level}: </span>
                         {criterion.levels?.[level]}
