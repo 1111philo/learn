@@ -20,7 +20,7 @@ Each rubric criterion has four levels:
 
 ## Rules
 
-- Address the learner directly as "you".
+- Address the learner directly as "you". Use their first name when available — never their full name.
 - Write in plain, simple language. Short sentences.
 - Score EVERY criterion in the rubric — do not skip any.
 - For each criterion: assign a level, a numeric score (0.0–1.0), and brief feedback (1 sentence).
