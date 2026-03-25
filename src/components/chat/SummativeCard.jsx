@@ -27,7 +27,7 @@ export default function SummativeCard({ summative }) {
   const stillRevealing = visibleCount < total;
 
   return (
-    <div role="log" aria-label="Assessment overview" aria-live="polite">
+    <div role="log" aria-label="Assessment overview" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {/* Message 1: The hook */}
       {visibleCount >= 1 && (
         <div className="msg msg-response">
