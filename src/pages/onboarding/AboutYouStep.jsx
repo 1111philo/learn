@@ -186,11 +186,11 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
   };
 
   return (
-    <div className="onboarding" style={{ paddingBottom: 0 }}>
+    <div className="onboarding" style={{ paddingBottom: 0, flex: 'none' }}>
       {!loggedIn && <span className="onboarding-step-label">Step 3 of 3 — Show Your Work</span>}
       {loggedIn && <span className="onboarding-step-label">Show us your work</span>}
 
-      <div className="chat" role="log" aria-label="Getting to know you" ref={chatRef}>
+      <div className="chat" role="log" aria-label="Getting to know you" ref={chatRef} style={{ flex: 'none', overflow: 'visible' }}>
         <div className="msg msg-response"><p dangerouslySetInnerHTML={{ __html: renderMd(initialGreeting) }} /></div>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role === 'user' ? 'msg-user' : 'msg-response'}`}>
