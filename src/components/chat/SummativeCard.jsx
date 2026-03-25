@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { renderMd } from '../../lib/helpers.js';
-import ThinkingSpinner from './ThinkingSpinner.jsx';
 
 /**
  * Renders the summative assessment as staggered chat messages.
@@ -24,8 +23,6 @@ export default function SummativeCard({ summative }) {
 
   const { task, rubric, exemplar } = summative;
   const stepCount = task?.steps?.length || 0;
-  const stillRevealing = visibleCount < total;
-
   return (
     <div role="log" aria-label="Assessment overview" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {/* Message 1: The hook */}
@@ -52,9 +49,6 @@ export default function SummativeCard({ summative }) {
           View rubric and steps
         </button>
       )}
-
-      {/* Spinner while revealing */}
-      {stillRevealing && <ThinkingSpinner />}
 
       {/* Expanded details */}
       {showDetails && (
