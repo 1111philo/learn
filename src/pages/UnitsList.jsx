@@ -14,6 +14,7 @@ import {
 } from '../lib/unitEngine.js';
 import { updateProfileOnMasteryInBackground } from '../lib/profileQueue.js';
 
+import { useModal } from '../contexts/ModalContext.jsx';
 import ChatArea from '../components/chat/ChatArea.jsx';
 import ThinkingSpinner from '../components/chat/ThinkingSpinner.jsx';
 import SummativeCard from '../components/chat/SummativeCard.jsx';
@@ -23,6 +24,7 @@ import DraftMessage from '../components/chat/DraftMessage.jsx';
 import ComposeBar from '../components/chat/ComposeBar.jsx';
 import UserMessage from '../components/chat/UserMessage.jsx';
 import AssistantMessage from '../components/chat/AssistantMessage.jsx';
+import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 
 export default function UnitsList() {
   const { courseGroupId } = useParams();
@@ -30,7 +32,32 @@ export default function UnitsList() {
   const { state } = useApp();
   const { courseGroups, allProgress } = state;
 
+  const { show: showModal } = useModal();
   const group = courseGroups.find(cg => cg.courseId === courseGroupId);
+
+  const handleResetCourse = () => {
+    showModal(
+      <ConfirmModal
+        title="Reset Course?"
+        message="This will delete all progress for this course — assessment, journey, and activities. You'll start from scratch."
+        confirmLabel="Reset Course"
+        onConfirm={async () => {
+          const { deleteCourseProgress } = await import('../../js/storage.js');
+          await deleteCourseProgress(courseGroupId);
+          // Reset local state
+          setPhase(null);
+          setSummative(null);
+          setJourney(null);
+          setAttempts([]);
+          setReviewMessages([]);
+          setCaptures([]);
+          setCurrentStep(0);
+          // Reload — will trigger summative generation
+          window.location.reload();
+        }}
+      />
+    );
+  };
 
   const [phase, setPhase] = useState(null);
   const [summative, setSummative] = useState(null);
@@ -181,6 +208,7 @@ export default function UnitsList() {
         <div className="course-header-info">
           <h2>{group.name}</h2>
         </div>
+        {phase && <button className="reset-btn" onClick={handleResetCourse} aria-label="Reset course" title="Reset course">&#8635;</button>}
       </div>
 
       {/* Setup phase */}
