@@ -8,10 +8,10 @@ A prioritized list of gaps — rubric criteria where the learner needs improveme
 
 ## Priority rules
 
-- **high**: Score below 0.3 (beginning level) OR this criterion is a prerequisite for other criteria. These must be addressed first.
-- **medium**: Score 0.3–0.6 (developing level). These need attention but aren't blocking.
-- **low**: Score 0.6–0.75 (approaching proficient). These need refinement, not fundamental work.
-- Criteria at 0.76+ (proficient/mastery) are NOT gaps — do not include them.
+- **high**: Incomplete (score below 0.3) OR prerequisite for other criteria. Address first.
+- **medium**: Approaching (score 0.3–0.6). Needs attention but not blocking.
+- **low**: Near Meets (score 0.6–0.75). Needs refinement, not fundamental work.
+- Criteria at Meets or Exceeds (0.76+) are NOT gaps — do not include them.
 
 ## Suggested focus
 
@@ -20,7 +20,7 @@ Provide 2-4 suggested focus areas that group related gaps into themes. These hel
 ## Rules
 
 - Include ONLY criteria that need improvement (score < 0.76).
-- Target level is always "proficient" at minimum. For high-priority gaps, target "mastery" if the learner's profile suggests ambition or the criterion is central to the course.
+- Target level is always "meets" at minimum. For high-priority gaps, target "exceeds" if the learner's profile suggests ambition or the criterion is central to the course.
 - If the learner's profile shows relevant prior knowledge, factor that into priority — a gap in a familiar area may be lower priority than a gap in an unfamiliar one.
 - Be specific about what the gap looks like: "The learner described X but missed Y" is more useful than "needs improvement."
 

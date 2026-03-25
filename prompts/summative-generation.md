@@ -21,7 +21,7 @@ Design a summative assessment for a course. The learner takes it first as a diag
 
 ## Rubric
 
-- Each criterion has exactly four levels: beginning, developing, proficient, mastery.
+- Each criterion has exactly four levels: **incomplete**, **approaching**, **meets**, **exceeds**.
 - Level descriptions are short phrases, not sentences. Example: "No structure" / "Basic headings" / "Clear sections with hierarchy" / "Professional layout with consistent system"
 
 ## Personalization
@@ -46,10 +46,10 @@ Respond with ONLY valid JSON, no markdown fencing:
       "name": "Short name",
       "objectiveIndices": [0, 1],
       "levels": {
-        "beginning": "short phrase",
-        "developing": "short phrase",
-        "proficient": "short phrase",
-        "mastery": "short phrase"
+        "incomplete": "short phrase",
+        "approaching": "short phrase",
+        "meets": "short phrase",
+        "exceeds": "short phrase"
       }
     }
   ],

@@ -43,19 +43,19 @@ function validSummative(overrides = {}) {
       {
         name: 'Professional communication',
         levels: {
-          beginning: 'No clear structure',
-          developing: 'Basic structure present',
-          proficient: 'Clear, professional structure',
-          mastery: 'Exceptional communication with consistent voice',
+          incomplete: 'No clear structure',
+          approaching: 'Basic structure present',
+          meets: 'Clear, professional structure',
+          exceeds: 'Exceptional communication with consistent voice',
         },
       },
       {
         name: 'Technical proficiency',
         levels: {
-          beginning: 'Unable to use the tool',
-          developing: 'Basic tool usage',
-          proficient: 'Effective tool usage',
-          mastery: 'Advanced tool usage with creative solutions',
+          incomplete: 'Unable to use the tool',
+          approaching: 'Basic tool usage',
+          meets: 'Effective tool usage',
+          exceeds: 'Advanced tool usage with creative solutions',
         },
       },
     ],
@@ -67,8 +67,8 @@ function validSummative(overrides = {}) {
 function validSummativeAssessment(overrides = {}) {
   return {
     criteriaScores: [
-      { criterion: 'Professional communication', level: 'proficient', score: 0.75, feedback: 'Good structure.' },
-      { criterion: 'Technical proficiency', level: 'developing', score: 0.5, feedback: 'Needs more practice.' },
+      { criterion: 'Professional communication', level: 'meets', score: 0.75, feedback: 'Good structure.' },
+      { criterion: 'Technical proficiency', level: 'approaching', score: 0.5, feedback: 'Needs more practice.' },
     ],
     overallScore: 0.625,
     mastery: false,
@@ -81,8 +81,8 @@ function validSummativeAssessment(overrides = {}) {
 function validGapAnalysis(overrides = {}) {
   return {
     gaps: [
-      { criterion: 'Technical proficiency', currentLevel: 'developing', targetLevel: 'proficient', priority: 'high' },
-      { criterion: 'Professional communication', currentLevel: 'proficient', targetLevel: 'mastery', priority: 'medium' },
+      { criterion: 'Technical proficiency', currentLevel: 'approaching', targetLevel: 'meets', priority: 'high' },
+      { criterion: 'Professional communication', currentLevel: 'meets', targetLevel: 'exceeds', priority: 'medium' },
     ],
     ...overrides,
   };
@@ -266,7 +266,7 @@ describe('validateSummative', () => {
 
   it('rejects rubric criterion missing a level', () => {
     const s = validSummative();
-    delete s.rubric[0].levels.mastery;
+    delete s.rubric[0].levels.exceeds;
     assert.ok(validateSummative(s));
   });
 

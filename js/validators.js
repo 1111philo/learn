@@ -10,7 +10,7 @@ export const NON_BROWSER_APP = /\b(open\s+(your\s+)?(text\s+editor|terminal|comm
 export const DEVTOOLS_PATTERN = /\b(DevTools|dev\s+tools|Inspect\s+Element|Lighthouse|open\s+(the\s+)?console|right[- ]click.{0,20}inspect|Elements?\s+(panel|tab)|Network\s+(panel|tab)|Sources?\s+(panel|tab)|F12)\b/i;
 export const PRODUCES_WORK = /\b(write|type|create|build|draft|compose|summarize|list|outline|note|annotate|describe|explain|fill\s+(in|out)|enter|paste|edit|modify|change|add|code|implement|design)\b/i;
 
-const VALID_MASTERY_LEVELS = ['beginning', 'developing', 'proficient', 'mastery'];
+const VALID_MASTERY_LEVELS = ['incomplete', 'approaching', 'meets', 'exceeds'];
 
 export function validateSafety(text) {
   if (UNSAFE_PATTERNS.test(text)) return 'Response contains unsafe content.';

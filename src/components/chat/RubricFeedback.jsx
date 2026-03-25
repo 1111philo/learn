@@ -1,22 +1,23 @@
 import { renderMd } from '../../lib/helpers.js';
+import { scoreToLabel, levelToLabel } from '../../lib/constants.js';
 
 const LEVEL_COLORS = {
-  mastery: '#2d7d46',
-  proficient: '#3b82f6',
-  developing: '#d97706',
-  beginning: '#dc2626',
+  Exceeds: '#2d7d46',
+  Meets: '#3b82f6',
+  Approaching: '#d97706',
+  Incomplete: '#dc2626',
 };
 
 export default function RubricFeedback({ attempt, onRetake }) {
   if (!attempt) return null;
 
   const { criteriaScores, overallScore, mastery, feedback, nextSteps, isBaseline } = attempt;
-  const overallPercent = Math.round((overallScore || 0) * 100);
+  const overallLabel = scoreToLabel(overallScore || 0);
 
   return (
     <div className="msg msg-response rubric-feedback">
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-        <span className="score-badge">{overallPercent}%</span>
+        <span className="score-badge">{overallLabel}</span>
         {mastery
           ? <span className="rec-label rec-advance">Mastery Achieved</span>
           : <span className="rec-label rec-revise">{isBaseline ? 'Baseline' : 'Not Yet'}</span>
@@ -27,21 +28,20 @@ export default function RubricFeedback({ attempt, onRetake }) {
 
       {/* Per-criterion scores */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
-        {(criteriaScores || []).map((cs, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
-            <span style={{
-              display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
-              background: LEVEL_COLORS[cs.level] || '#888', flexShrink: 0,
-            }} aria-hidden="true" />
-            <span style={{ fontWeight: 500, minWidth: '40%' }}>{cs.criterion}</span>
-            <span style={{ textTransform: 'capitalize', color: LEVEL_COLORS[cs.level] || '#888' }}>
-              {cs.level}
-            </span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>
-              {Math.round(cs.score * 100)}%
-            </span>
-          </div>
-        ))}
+        {(criteriaScores || []).map((cs, i) => {
+          const label = levelToLabel(cs.level);
+          const color = LEVEL_COLORS[label] || '#888';
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+              <span style={{
+                display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                background: color, flexShrink: 0,
+              }} aria-hidden="true" />
+              <span style={{ fontWeight: 500, minWidth: '40%' }}>{cs.criterion}</span>
+              <span style={{ color }}>{label}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Next steps */}

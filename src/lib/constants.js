@@ -39,3 +39,21 @@ export const MASTERY_LEVELS = {
   PROFICIENT: 'proficient',
   MASTERY: 'mastery',
 };
+
+export const MASTERY_LABELS = {
+  beginning: 'Incomplete',
+  developing: 'Approaching',
+  proficient: 'Meets',
+  mastery: 'Exceeds',
+};
+
+export function scoreToLabel(score) {
+  if (score >= 0.76) return 'Exceeds';
+  if (score >= 0.51) return 'Meets';
+  if (score >= 0.26) return 'Approaching';
+  return 'Incomplete';
+}
+
+export function levelToLabel(level) {
+  return MASTERY_LABELS[level] || level;
+}

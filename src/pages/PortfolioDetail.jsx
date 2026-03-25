@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
-import { TYPE_LABELS, TYPE_LETTERS } from '../lib/constants.js';
+import { TYPE_LABELS, TYPE_LETTERS, scoreToLabel, levelToLabel } from '../lib/constants.js';
 import { getScreenshot, getSummative, getSummativeAttempts, getJourney } from '../../js/storage.js';
 
 export default function PortfolioDetail() {
@@ -57,14 +57,13 @@ export default function PortfolioDetail() {
                   {attempt.mastery && <span style={{ color: '#2d7d46', marginLeft: '8px', fontWeight: 600 }}>Mastery</span>}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  {Math.round((attempt.overallScore || 0) * 100)}% overall
+                  {scoreToLabel(attempt.overallScore || 0)}
                 </div>
                 {/* Per-criterion scores */}
                 {attempt.criteriaScores?.map((cs, ci) => (
                   <div key={ci} style={{ fontSize: '0.75rem', display: 'flex', gap: '6px', marginBottom: '2px' }}>
                     <span style={{ fontWeight: 500, minWidth: '40%' }}>{cs.criterion}</span>
-                    <span style={{ textTransform: 'capitalize' }}>{cs.level}</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{Math.round(cs.score * 100)}%</span>
+                    <span>{levelToLabel(cs.level)}</span>
                   </div>
                 ))}
                 {/* Screenshot thumbnails */}
@@ -160,7 +159,7 @@ function TimelineDraft({ draft, unitId }) {
   const navigate = useNavigate();
   const [screenshot, setScreenshot] = useState(null);
   const [loading, setLoading] = useState(false);
-  const scorePercent = draft.score != null ? Math.round(draft.score * 100) + '%' : '';
+  const scoreLabel = draft.score != null ? scoreToLabel(draft.score) : '';
   const time = draft.timestamp ? new Date(draft.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
   const loadScreenshot = async () => {
@@ -178,7 +177,7 @@ function TimelineDraft({ draft, unitId }) {
 
   return (
     <div className="timeline-draft">
-      <span className="timeline-draft-score">{scorePercent}</span>
+      <span className="timeline-draft-score">{scoreLabel}</span>
       <span className="timeline-draft-time">{time}</span>
       <button className="timeline-draft-link" onClick={goToChat} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}>
         View in chat
