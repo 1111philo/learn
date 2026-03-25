@@ -63,26 +63,37 @@ async function callWithValidation(agentFn, validator, agentName) {
 
 /**
  * Route an API call to the right backend based on auth state and configuration.
- * Priority: logged in (learn-service Bedrock) > direct Anthropic API key.
+ * Retries once on transient errors (503, 529, 500) after a short delay.
  */
 async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
-  // 1. Logged in → learn-service Bedrock proxy (JWT auth)
-  if (await isLoggedIn()) {
-    const resp = await authenticatedFetch('/v1/ai/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages }),
-    });
-    return parseResponse(resp);
-  }
+  const attempt = async () => {
+    if (await isLoggedIn()) {
+      const resp = await authenticatedFetch('/v1/ai/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages }),
+      });
+      return parseResponse(resp);
+    }
 
-  // 2. Direct Anthropic API with user's key
-  const apiKey = await getApiKey();
-  if (apiKey) {
-    return callClaude({ apiKey, model, systemPrompt, messages, maxTokens });
-  }
+    const apiKey = await getApiKey();
+    if (apiKey) {
+      return callClaude({ apiKey, model, systemPrompt, messages, maxTokens });
+    }
 
-  throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
+    throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
+  };
+
+  try {
+    return await attempt();
+  } catch (e) {
+    if (e.type === 'overloaded' || (e.type === 'api' && e.status === 500)) {
+      console.error(`[1111] API ${e.status} — retrying in 3s...`);
+      await new Promise(r => setTimeout(r, 3000));
+      return attempt();
+    }
+    throw e;
+  }
 }
 
 /**

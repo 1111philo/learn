@@ -30,8 +30,10 @@ export async function parseResponse(resp) {
     try { body = await resp.json(); } catch { body = {}; }
     const msg = body?.error?.message || body?.error || `API returned ${status}`;
 
-    if (status === 401) throw new ApiError('invalid_key', 'Invalid API key. Check your key in Settings.');
-    if (status === 429) throw new ApiError('rate_limit', 'Rate limited. Try again in a moment.');
+    if (status === 401) throw new ApiError('invalid_key', 'Invalid API key. Check your key in Settings.', status);
+    if (status === 429) throw new ApiError('rate_limit', 'Rate limited. Try again in a moment.', status);
+    if (status === 503 || status === 529) throw new ApiError('overloaded', 'API is temporarily overloaded. Retrying...', status);
+    if (status === 500) throw new ApiError('api', 'Internal server error. This may be a temporary issue.', status);
     throw new ApiError('api', msg, status);
   }
 
