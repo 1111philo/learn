@@ -39,7 +39,7 @@ async function bootstrap() {
     if (ENV.email || ENV.password) {
       globalThis.__envCredentials = { email: ENV.email || '', password: ENV.password || '' };
     }
-  } catch (e) { console.warn('.env.js load failed:', e.message || e); }
+  } catch (e) { console.error('[1111] .env.js load failed:', e.message || e); }
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
@@ -58,6 +58,6 @@ async function bootstrap() {
 
 // Initialize database, then mount React
 initDatabase().then(bootstrap).catch((err) => {
-  console.error('Failed to initialize database:', err);
+  console.error('[1111] Failed to initialize database:', err);
   document.getElementById('root').textContent = 'Failed to load. Please reload the extension.';
 });

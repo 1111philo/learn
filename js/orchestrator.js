@@ -49,13 +49,13 @@ async function callWithValidation(agentFn, validator, agentName) {
 
     return parsed;
   }
-  console.warn(`Validation failed (retrying): ${error}`);
+  console.error(`[1111] Validation failed (retrying): ${error}`);
 
   // Retry once
   const retry = await agentFn();
   const retryError = validator(retry);
   if (retryError) {
-    console.warn(`Validation failed after retry: ${retryError}`);
+    console.error(`[1111] Validation failed after retry: ${retryError}`);
     if (retryError.includes('unsafe')) throw new ApiError('safety', retryError);
   }
   return retry;

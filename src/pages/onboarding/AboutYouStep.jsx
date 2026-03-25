@@ -60,8 +60,9 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
         setProfileDone(true);
       }
     } catch (e) {
-      console.warn('Onboarding conversation failed:', e);
-      setMessages(prev => [...prev, { role: 'assistant', content: JSON.stringify({ message: "Sorry, something went wrong. You can try again or skip to courses." }) }]);
+      console.error('[1111] Onboarding conversation failed:', e?.message || e, e?.stack || '');
+      const detail = e?.message || 'Unknown error';
+      setMessages(prev => [...prev, { role: 'assistant', content: JSON.stringify({ message: `Something went wrong: ${detail}` }) }]);
     }
     setThinking(false);
   };
@@ -123,7 +124,7 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
       setCapturing(false);
       await callAgent(newMessages);
     } catch (e) {
-      console.warn('Screenshot capture failed:', e);
+      console.error('[1111] Screenshot capture failed:', e?.message || e, e?.stack || '');
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: JSON.stringify({ message: `Capture failed: ${e.message || 'Unknown error'}. Make sure you have a webpage open in the main browser window.` })
@@ -148,7 +149,7 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
           await saveLearnerProfileSummary(result.summary);
           syncInBackground('profile', 'profileSummary');
         } catch (e) {
-          console.warn('Profile creation on skip failed:', e);
+          console.error('[1111] Profile creation on skip failed:', e?.message || e);
         }
         setSkipping(false);
       }

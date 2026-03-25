@@ -137,7 +137,7 @@ function ProfileFeedbackModal({ onDone }) {
       hide();
       if (onDone) onDone();
     } catch (e) {
-      console.warn('Profile feedback failed:', e);
+      console.error('[1111] Profile feedback failed:', e?.message || e);
       setSubmitting(false);
     }
   };
