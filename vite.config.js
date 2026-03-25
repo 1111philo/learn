@@ -15,6 +15,7 @@ export default defineConfig({
         { src: 'prompts', dest: '' },
         { src: 'assets', dest: '' },
         { src: 'js', dest: '' },
+        { src: '.env.js', dest: '', rename: '.env.js' },
       ],
     }),
   ],

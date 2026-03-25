@@ -14,12 +14,16 @@ async function bootstrap() {
   if (initialized) return;
   initialized = true;
 
-  // Seed from .env.js if present (dev convenience — file is gitignored)
+  // Seed from .env.js if present (dev convenience — file is gitignored).
+  // Fetched at runtime (not bundled) since .env.js is copied to dist/ by viteStaticCopy.
   try {
-    const envModules = import.meta.glob('../.env.js', { eager: true });
-    const envMod = envModules['../.env.js'];
-    if (!envMod) throw new Error('no .env.js');
-    const { ENV } = envMod;
+    const envResp = await fetch('.env.js');
+    if (!envResp.ok) throw new Error('no .env.js');
+    const envText = await envResp.text();
+    const envBlob = new Blob([envText], { type: 'application/javascript' });
+    const envUrl = URL.createObjectURL(envBlob);
+    const { ENV } = await import(/* @vite-ignore */ envUrl);
+    URL.revokeObjectURL(envUrl);
     const { getApiKey, saveApiKey, getPreferences, savePreferences } = await import('../js/storage.js');
     if (ENV.apiKey && !(await getApiKey())) await saveApiKey(ENV.apiKey);
     if (ENV.name) {

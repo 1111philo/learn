@@ -201,7 +201,7 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
         {(thinking || capturing) && (
           <div className="msg msg-response" role="status" aria-live="polite">
             <span className="loading-spinner-inline" aria-hidden="true" />
-            <span>{capturing ? 'Capturing...' : messages.length <= 1 ? 'Looking at your work...' : 'Thinking...'}</span>
+            <span>{capturing ? 'Capturing...' : 'Thinking...'}</span>
           </div>
         )}
         {!profileDone && !thinking && !capturing && (
