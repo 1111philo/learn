@@ -155,14 +155,18 @@ jobs:
           echo "Updated manifest.json:"
           cat manifest.json
 
-      - name: Build extension zip
+      - name: Rebuild with RC version and package zip
         if: steps.rc.outputs.skip != 'true'
         run: |
           RC_VERSION="${{ steps.rc.outputs.rc_version }}"
           ZIP_NAME="1111-learn-v${RC_VERSION}.zip"
 
+          # Rebuild so dist/ has the updated RC manifest
+          npm run build
+
           cd dist
-          zip -r "../$ZIP_NAME" .
+          # Exclude .env.js (dev credentials, should never be in releases)
+          zip -r "../$ZIP_NAME" . -x '.env.js'
           cd ..
 
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_ENV"
