@@ -44,16 +44,7 @@ export default function UnitsList() {
         onConfirm={async () => {
           const { deleteCourseProgress } = await import('../../js/storage.js');
           await deleteCourseProgress(courseGroupId);
-          // Reset local state
-          setPhase(null);
-          setSummative(null);
-          setJourney(null);
-          setAttempts([]);
-          setReviewMessages([]);
-          setCaptures([]);
-          setCurrentStep(0);
-          // Reload — will trigger summative generation
-          window.location.reload();
+          navigate('/courses');
         }}
       />
     );
