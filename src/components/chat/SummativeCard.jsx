@@ -1,15 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { renderMd } from '../../lib/helpers.js';
 
 /**
- * Renders the summative assessment as bite-sized chat messages:
- * 1. Exemplar (the hook — what mastery looks like)
- * 2. Task overview (one sentence)
- * 3. Expandable rubric + steps (on demand)
+ * Renders the summative assessment as staggered chat messages.
+ * Each message appears after a delay so the learner can read one at a time.
  */
-export default function SummativeCard({ summative, onStart }) {
+export default function SummativeCard({ summative }) {
+  const [visibleCount, setVisibleCount] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
   const [expandedCriterion, setExpandedCriterion] = useState(null);
+
+  // Stagger messages: show one every 800ms
+  useEffect(() => {
+    if (!summative) return;
+    const total = 3; // exemplar, task description, details button
+    if (visibleCount >= total) return;
+    const timer = setTimeout(() => setVisibleCount(v => v + 1), visibleCount === 0 ? 300 : 800);
+    return () => clearTimeout(timer);
+  }, [visibleCount, summative]);
+
   if (!summative) return null;
 
   const { task, rubric, exemplar } = summative;
@@ -18,17 +27,21 @@ export default function SummativeCard({ summative, onStart }) {
   return (
     <>
       {/* Message 1: The hook */}
-      <div className="msg msg-response">
-        <p dangerouslySetInnerHTML={{ __html: renderMd(exemplar) }} style={{ margin: 0 }} />
-      </div>
+      {visibleCount >= 1 && (
+        <div className="msg msg-response">
+          <p dangerouslySetInnerHTML={{ __html: renderMd(exemplar) }} style={{ margin: 0 }} />
+        </div>
+      )}
 
       {/* Message 2: What you'll do */}
-      <div className="msg msg-response">
-        <div dangerouslySetInnerHTML={{ __html: renderMd(task?.description || `This assessment has ${stepCount} step${stepCount !== 1 ? 's' : ''}. Each step builds on the last.`) }} />
-      </div>
+      {visibleCount >= 2 && (
+        <div className="msg msg-response">
+          <div dangerouslySetInnerHTML={{ __html: renderMd(task?.description || `${stepCount} steps. Each builds on the last.`) }} />
+        </div>
+      )}
 
-      {/* Details toggle */}
-      {!showDetails && (
+      {/* Message 3: Details toggle */}
+      {visibleCount >= 3 && !showDetails && (
         <button
           className="skip-step-btn"
           onClick={() => setShowDetails(true)}
@@ -41,7 +54,6 @@ export default function SummativeCard({ summative, onStart }) {
       {/* Expanded details */}
       {showDetails && (
         <div className="msg msg-response" style={{ fontSize: '0.85rem' }}>
-          {/* Steps */}
           <strong>Steps</strong>
           <ol className="instruction-steps" style={{ margin: '4px 0 10px' }}>
             {(task?.steps || []).map((step, i) => (
@@ -49,7 +61,6 @@ export default function SummativeCard({ summative, onStart }) {
             ))}
           </ol>
 
-          {/* Rubric */}
           <strong>Rubric</strong>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
             {(rubric || []).map((criterion, i) => (
