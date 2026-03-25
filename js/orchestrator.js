@@ -169,7 +169,7 @@ export async function generateSummative(course, allObjectives, profileSummary, p
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
-      maxTokens: 4096
+      maxTokens: 1024
     });
     return parseJSON(content);
   };
@@ -230,7 +230,7 @@ export async function assessSummativeAttempt(course, summative, screenshots, pri
       model: MODEL_HEAVY,
       systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
-      maxTokens: 2048
+      maxTokens: 1024
     });
     return parseJSON(content);
   };
@@ -261,7 +261,7 @@ export async function analyzeGaps(course, rubric, baselineResult, profileSummary
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
-      maxTokens: 2048
+      maxTokens: 1024
     });
     return parseJSON(content);
   };
@@ -294,7 +294,7 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
-      maxTokens: 4096
+      maxTokens: 1024
     });
     return parseJSON(content);
   };
