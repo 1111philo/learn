@@ -39,11 +39,24 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
   const callAgent = async (newMessages) => {
     setThinking(true);
     try {
-      const msgs = newMessages.map((m, i) =>
-        i === 0 && m.role === 'user' && typeof m.content === 'string'
-          ? { role: 'user', content: `My name is ${data.name}. ${m.content}` }
-          : m
-      );
+      // Clean messages for API: strip extra props, extract text from assistant JSON
+      const msgs = newMessages.map((m, i) => {
+        if (m.role === 'assistant') {
+          // Assistant messages are stored as JSON strings — extract just the message text
+          try {
+            const parsed = JSON.parse(m.content);
+            return { role: 'assistant', content: parsed.message || m.content };
+          } catch {
+            return { role: 'assistant', content: m.content };
+          }
+        }
+        // User messages: strip internal props, keep content (string or content array)
+        const clean = { role: 'user', content: m.content };
+        if (i === 0 && typeof m.content === 'string') {
+          clean.content = `My name is ${data.name}. ${m.content}`;
+        }
+        return clean;
+      });
       // Use vision model since messages may contain screenshots
       const result = await orchestrator.converse('onboarding-conversation', msgs, 1024, { model: MODEL_HEAVY });
 
@@ -90,10 +103,11 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
         if (!granted) throw new Error('Permission needed to capture screenshots.');
       }
 
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      // Query the last focused window (not the side panel window)
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       const pageUrl = tab?.url || '';
-      if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('about:')) {
-        throw new Error('Navigate to a webpage before capturing.');
+      if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('chrome-extension://') || pageUrl.startsWith('about:') || pageUrl.startsWith('edge://')) {
+        throw new Error('Open a webpage in your browser first, then hit Capture.');
       }
 
       const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
