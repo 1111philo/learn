@@ -98,11 +98,11 @@ export async function isReady() {
  * Multi-turn conversation agent. Send a system prompt + message history,
  * get back a parsed JSON response (typically { message, done, ...extras }).
  */
-export async function converse(promptName, messages, maxTokens = 512) {
+export async function converse(promptName, messages, maxTokens = 512, { model } = {}) {
   const systemPrompt = await loadPrompt(promptName);
 
   const { content } = await callApi({
-    model: MODEL_LIGHT,
+    model: model || MODEL_LIGHT,
     systemPrompt,
     messages,
     maxTokens
