@@ -14,23 +14,32 @@ async function bootstrap() {
   if (initialized) return;
   initialized = true;
 
-  // Seed from .env.js if present (dev convenience — file is gitignored)
+  // Seed from .env.js if present (dev convenience — file is gitignored).
+  // Loaded at runtime via chrome.runtime.getURL since Vite can't bundle dotfiles.
   try {
-    const envModules = import.meta.glob('../.env.js', { eager: true });
-    const envMod = envModules['../.env.js'];
-    if (!envMod) throw new Error('no .env.js');
-    const { ENV } = envMod;
+    const envUrl = chrome.runtime.getURL('.env.js');
+    const envResp = await fetch(envUrl);
+    if (!envResp.ok) throw new Error('no .env.js');
+    const envText = await envResp.text();
+    // Parse the exported ENV object from the JS module text
+    const match = envText.match(/export\s+const\s+ENV\s*=\s*(\{[\s\S]*?\});/);
+    if (!match) throw new Error('no ENV export');
+    const ENV = JSON.parse(match[1]
+      .replace(/'/g, '"')
+      .replace(/,\s*([\]}])/g, '$1')
+      .replace(/(\w+)\s*:/g, '"$1":')
+    );
     const { getApiKey, saveApiKey, getPreferences, savePreferences } = await import('../js/storage.js');
-    if (ENV.apiKey && !(await getApiKey())) await saveApiKey(ENV.apiKey);
+    if (ENV.apiKey) await saveApiKey(ENV.apiKey);
     if (ENV.name) {
       const prefs = await getPreferences();
-      if (!prefs.name) await savePreferences({ ...prefs, name: ENV.name });
+      await savePreferences({ ...prefs, name: ENV.name });
     }
     // Store credentials for form pre-fill (not auto-login)
     if (ENV.email || ENV.password) {
       globalThis.__envCredentials = { email: ENV.email || '', password: ENV.password || '' };
     }
-  } catch { /* .env.js not present — that's fine */ }
+  } catch (e) { console.error('[1111] .env.js load failed:', e.message || e); }
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
@@ -49,6 +58,6 @@ async function bootstrap() {
 
 // Initialize database, then mount React
 initDatabase().then(bootstrap).catch((err) => {
-  console.error('Failed to initialize database:', err);
+  console.error('[1111] Failed to initialize database:', err);
   document.getElementById('root').textContent = 'Failed to load. Please reload the extension.';
 });

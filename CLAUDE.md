@@ -1,39 +1,49 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners build their professional portfolio through AI-guided courses. Nine AI agents powered by the Claude API drive the experience. Courses contain units; each unit has a diagnostic (skills check) and a sequence of activities. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (screenshots) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners build their professional portfolio through AI-guided courses. Nine AI agents powered by the Claude API drive an assessment-backward learning experience. A summative assessment is generated first from course learning objectives (with rubric, exemplar, and multi-step capture task). The learner takes it as a diagnostic baseline, a gap analysis drives personalized formative activities, and the learner retakes the summative to demonstrate mastery. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (screenshots) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
 Nine agents drive the learning experience:
 - **Onboarding Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that gets to know the learner and builds their initial profile
 - **Onboarding Profile Agent** (`MODEL_LIGHT`) -- creates an initial learner profile (fallback when conversation is skipped)
-- **Diagnostic Conversation Agent** (`MODEL_LIGHT`) -- opens and drives the skills check conversation; receives the learner profile, unit objectives, and course scope to calibrate depth; for optional units where the profile shows familiarity, can complete the assessment immediately without asking questions
-- **Diagnostic Assessment Agent** (`MODEL_LIGHT`) -- evaluates learner text responses during the diagnostic and re-evaluates on dispute
-- **Course Creation Agent** (`MODEL_LIGHT`) -- generates a personalized learning plan skeleton, informed by the diagnostic result
-- **Activity Creation Agent** (`MODEL_LIGHT`) -- fills in one activity at a time as the learner reaches it
-- **Activity Assessment Agent** (`MODEL_HEAVY` + vision) -- evaluates screenshots of learner work
+- **Summative Generation Agent** (`MODEL_LIGHT`) -- generates the summative assessment (multi-step capture task + rubric + exemplar) from all course learning objectives
+- **Summative Rubric Review Agent** (`MODEL_LIGHT`) -- multi-turn conversation about the rubric/exemplar; can trigger summative regeneration based on learner feedback
+- **Summative Assessment Agent** (`MODEL_HEAVY` + vision) -- scores multiple screenshots against rubric criteria; enforces ratchet rule (scores only go up)
+- **Gap Analysis Agent** (`MODEL_LIGHT`) -- analyzes baseline summative attempt to identify per-criterion gaps and priorities
+- **Journey Generation Agent** (`MODEL_LIGHT`) -- selects, orders, and sizes predefined units with formative activities mapped to rubric criteria
+- **Activity Creation Agent** (`MODEL_LIGHT`) -- generates one formative activity at a time, targeting specific rubric criteria
+- **Activity Assessment Agent** (`MODEL_HEAVY` + vision) -- evaluates screenshots of learner work with optional rubric-criteria scoring
 - **Activity Q&A Agent** (`MODEL_LIGHT`) -- answers learner questions about activities and assessments inline
-- **Learner Profile Agent** (`MODEL_LIGHT`) -- incrementally updates the learner profile after assessments, diagnostic results, and learner feedback
+- **Learner Profile Agent** (`MODEL_LIGHT`) -- incrementally updates the learner profile after summative attempts, formative assessments, and learner feedback
 
 Agent prompts live in `prompts/*.md` and can be edited independently of code. The `orchestrator.converse()` function supports multi-turn conversations; `orchestrator.chatWithContext()` supports one-off Q&A with inline system prompts.
 
 ### Output validation
-All activity, assessment, and course plan outputs pass through deterministic validators in `js/validators.js` (imported by `js/orchestrator.js`) before reaching the user. Activities are checked for: ending with "Capture", max 4 steps, no platform-specific shortcuts, no multi-site instructions, no non-browser apps, viewport-sized output, and content safety. Course plans are validated for: activity count matching learning objective count exactly, no consecutive duplicate activity types, last activity being type "final", and required fields. Assessments are checked for valid score/recommendation/fields and safety. On failure, the agent call is retried once automatically.
+All agent outputs pass through deterministic validators in `js/validators.js` (imported by `js/orchestrator.js`) before reaching the user. Activities are checked for: ending with "Capture", max 4 steps, no platform-specific shortcuts, no multi-site instructions, no non-browser apps, viewport-sized output, and content safety. Summatives are validated for: task with steps array, rubric with criteria (each having 4 mastery levels), and exemplar. Summative assessments enforce the ratchet rule (no criterion score lower than prior attempt). Gap analyses are validated for criterion/level/priority structure. Journeys are validated for: valid unit IDs, activities with types/goals/rubricCriteria. Formative assessments are checked for valid score/recommendation/fields and safety. On failure, the agent call is retried once automatically.
 
 ### Onboarding
 On first run, a full-screen onboarding wizard (with animated geometric background) presents: login or continue → name → API key → "about you" conversation. The header and nav are hidden during onboarding to prevent users from navigating away. The "about you" step is a multi-turn chat: the Onboarding Conversation Agent asks follow-up questions until it has a good picture of the learner, then creates their profile. The user can skip at any time. Conversation state is persisted to the SQLite `pending_state` table so it survives panel reload. Completion is tracked via an `onboardingComplete` flag in the `settings` table. If the user is already logged in on startup, onboarding is skipped entirely and the flag is stamped automatically. In development, `.env.js` seeds the key into storage but onboarding still runs.
 
-### Diagnostic skills check
-Before every new unit, the Diagnostic Conversation Agent opens a skills check inside the unit chat. It receives the unit objectives, the learner profile, and the course scope (required/optional, sibling units). For optional units where the profile already covers the material, the agent can complete the assessment immediately (setting `done: true` in its first message) and suggest a more valuable unit. For required units, it asks 2-3 follow-up questions to gauge depth. The result is passed to the Course Creation Agent to adjust activity depth (not count -- activity count is always locked to one per learning objective). The user can skip the diagnostic at any time. During the diagnostic, conversation state is persisted to the SQLite `pending_state` table. Once the course plan is created, the diagnostic conversation (instruction, messages, and result) is saved into the `progress.diagnostic` field of the unit progress object so it remains visible in the chat history.
+### Assessment-backward design
+The entire learning journey is designed backward from a summative assessment. The flow per course is:
+1. **Summative setup**: The Summative Generation Agent creates a multi-step capture task, rubric (one criterion per objective group, each with 4 mastery levels), and exemplar from all course learning objectives.
+2. **Rubric review**: The learner reviews the rubric/exemplar in a conversation with the Summative Rubric Review Agent. They can request changes (which triggers regeneration) or skip.
+3. **Baseline attempt**: The learner attempts the summative — each step produces a screenshot capture. The Summative Assessment Agent scores all screenshots against the rubric, producing per-criterion scores.
+4. **Gap analysis + journey**: The Gap Analysis Agent identifies per-criterion gaps. The Journey Generation Agent selects, orders, and sizes predefined units with formative activities mapped to rubric criteria.
+5. **Formative learning**: The learner works through formative activities in each unit (same capture-based flow as before). Each formative targets specific rubric criteria.
+6. **Summative retake**: The learner retakes the summative. Scores can only go up (ratchet rule). If mastery is achieved, the course is complete. If not, remediation formative activities are generated for weak criteria, and the cycle repeats.
+
+The UnitsList page (`src/pages/UnitsList.jsx`) serves as the course hub, managing all summative phases. The UnitChat page handles formative activities within units.
 
 ### Conversational UX
-The entire course experience — diagnostic, course setup, activities, assessments — happens in a single chat interface per course. All loading states appear as in-chat thinking indicators (not full-screen spinners). The course header and compose bar are fixed (top and bottom); the chat scrolls between them. Users can ask questions about any activity or assessment at any time via the compose bar, powered by the Activity Q&A Agent. Q&A messages are persisted in `activity.messages[]` (each with `role`, `content`, `timestamp`) so they survive panel reloads and appear in the correct chronological position in the chat history alongside drafts and feedback. Completed activities remain visible above the current activity in the chat, creating a full scrollable history of the course. The Q&A agent receives the learner's name, profile summary, and full conversation history for context.
+Formative activities happen in a chat interface per unit. All loading states appear as in-chat thinking indicators (not full-screen spinners). The course header and compose bar are fixed (top and bottom); the chat scrolls between them. Users can ask questions about any activity or assessment at any time via the compose bar, powered by the Activity Q&A Agent. Q&A messages are persisted in `activity.messages[]` (each with `role`, `content`, `timestamp`) so they survive panel reloads and appear in the correct chronological position in the chat history alongside drafts and feedback. Completed activities remain visible above the current activity in the chat.
 
 ### Learner profile updates
-The profile updates after assessments, diagnostic results, learner feedback, and course completion. All updates run through a sequential queue in `src/lib/profileQueue.js` to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. On course completion, `updateProfileOnUnitCompletion()` sends the full course context (objectives, per-activity scores) so the profile reflects all skills learned. A code-level `mergeProfile()` in `src/lib/profileQueue.js` unions array fields and merges preferences so agent responses can never accidentally lose accumulated data.
+The profile updates after summative attempts, formative assessments, learner feedback, and course mastery. All updates run through a sequential queue in `src/lib/profileQueue.js` to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. On summative mastery, `updateProfileOnMasteryInBackground()` sends the full course context so the profile reflects all skills demonstrated. A code-level `mergeProfile()` in `src/lib/profileQueue.js` unions array fields (`completedUnits`, `masteredCourses`), merges preferences and `rubricProgress` (per-course per-criterion levels) so agent responses can never accidentally lose accumulated data.
 
 ### Storage (SQLite)
-All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted to `chrome.storage.local` under `_sqliteDb` (debounced, plus on `visibilitychange`). `js/db.js` manages initialization, schema creation, and persistence. `js/storage.js` provides the query API used by the rest of the app — same function signatures as the original chrome.storage.local implementation. Screenshots remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. The schema normalizes data into proper relational tables: `units`, `conversations`, `messages`, `activities`, `drafts`, `diagnostics`, `learning_plans`, `profile`, `preferences`, `work_products`, etc. Activity IDs are scoped to their unit in the DB (`unitId::activityId`) to prevent cross-unit collisions, and stripped back to the original ID when read.
+All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted to `chrome.storage.local` under `_sqliteDb` (debounced, plus on `visibilitychange`). `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Screenshots remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. The schema normalizes data into proper relational tables: `summatives`, `summative_attempts`, `gap_analysis`, `journeys`, `units`, `conversations`, `messages`, `activities`, `drafts`, `profile`, `preferences`, `work_products`, etc. Activity IDs are scoped to their unit in the DB (`unitId::activityId`) to prevent cross-unit collisions, and stripped back to the original ID when read. Units have `journey_order` and `rubric_criteria` columns; activities have `rubric_criteria`; drafts have `rubric_criteria_scores`.
 
 ### Cloud sync
 Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the extension works fully offline/locally. When logged in, the server is the source of truth: data is written to the server after every local save, and pulled from the server on startup/login. Local storage acts as a read cache for fast access.
@@ -46,7 +56,7 @@ Optional login via `learn-service` (separate repo) enables cross-device data per
 - **Settings UI:** When signed out, the Personalization section shows a name field and the AI Provider section shows the API key input. When signed in, Personalization is hidden (name comes from the service) and the API key section shows a note that AI is provided by the 1111 Learn account. Sign Out is in the header user dropdown, not the Settings page.
 
 ## Content hierarchy
-Courses → Units → Diagnostic + Activities. `data/courses.json` defines courses, each containing a `units` array. Each unit has a `unitId`, `learningObjectives` that drive activity generation, and an optional `dependsOn` prerequisite (referencing another unit's `unitId`). Progress is tracked per unit in the SQLite `units` table (with related data in `activities`, `conversations`, `messages`, `drafts`, `diagnostics`, `learning_plans`) and synced as `unit:{unitId}`. `js/courses.js` provides `flattenCourses()` to extract all playable units into a flat list stored in `state.units`.
+Courses → Summative Assessment → Units → Formative Activities. `data/courses.json` defines courses, each containing a `units` array. Each unit has a `unitId`, `learningObjectives`, and an optional `dependsOn` prerequisite. The summative assessment is generated per course from all learning objectives. The journey generation agent selects, orders, and sizes units (hybrid: predefined in `courses.json` but journey can skip/reorder/adjust activity count). Course-level data is stored in `summatives`, `summative_attempts`, `gap_analysis`, and `journeys` tables (synced as `summative:{courseId}`, `summative-attempts:{courseId}`, `gap:{courseId}`, `journey:{courseId}`). Unit-level progress is tracked in `units`, `activities`, `drafts` tables (synced as `progress:{unitId}`). `js/courses.js` provides `flattenCourses()` to extract all playable units.
 
 ## Key conventions
 - The UI is a React app (React 18, React Router, Vite). Source lives in `src/` — pages, components, contexts, hooks, lib modules.
@@ -60,7 +70,7 @@ Courses → Units → Diagnostic + Activities. `data/courses.json` defines cours
 - All activities end with "Hit Capture to capture your screen."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
 - URLs in activity instructions are automatically linkified.
-- Views: `onboarding`, `courses`, `units` (units within a course group), `course` (includes diagnostic + activities in one chat), `work` (portfolio cards), `work-detail` (build timeline), `settings`.
+- Views: `onboarding`, `courses`, `units` (course hub: summative phases + unit cards), `unit` (formative activities chat), `work` (course-level portfolio cards), `work-detail` (summative + formative timeline), `settings`.
 - Activity types map to user labels: `explore`→Research, `apply`→Practice, `create`→Draft, `final`→Deliver.
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
 - Completion summary card shows stats (steps, captures, elapsed time) when a course finishes. Time is displayed as minutes, hours, or days depending on duration.
@@ -129,9 +139,9 @@ src/                     React app
   lib/
     syncDebounce.js       Debounced cloud sync
     profileQueue.js       Sequential profile update queue + merge logic
-    unitEngine.js         Async unit lifecycle (diagnostic, plan, activity, recording, dispute, Q&A)
+    unitEngine.js         Course + unit lifecycle (summative, gap, journey, formative activities, capture, dispute, Q&A)
     helpers.js            esc, renderMd, linkify, formatDuration
-    constants.js          TYPE_LABELS, TYPE_LETTERS, VIEW_DEPTH
+    constants.js          TYPE_LABELS, TYPE_LETTERS, VIEW_DEPTH, COURSE_PHASES, MASTERY_LEVELS
     confetti.js           Confetti animation
   components/
     AppShell.jsx          Header + nav + main wrapper + transitions
@@ -148,16 +158,19 @@ src/                     React app
       ThinkingSpinner.jsx Inline loading indicator
       UserMessage.jsx     User chat bubble
       AssistantMessage.jsx AI response with markdown
-      InstructionMessage.jsx Activity steps + linkified URLs
+      InstructionMessage.jsx Activity steps + linkified URLs + rubric criteria badges
       DraftMessage.jsx    Draft captured indicator
-      FeedbackCard.jsx    Score, strengths/improvements, actions
+      FeedbackCard.jsx    Score, strengths/improvements, rubric criteria scores, actions
       CompletionSummary.jsx Stats + confetti trigger
+      SummativeCard.jsx   Summative task, exemplar, rubric display with expandable criteria
+      RubricFeedback.jsx  Per-criterion score display with mastery level indicators
+      CaptureStep.jsx     Multi-step summative capture UI
   pages/
-    CoursesList.jsx       Course group cards
-    UnitsList.jsx         Units within a course
-    UnitChat.jsx          Full chat: diagnostic + activities + drafts + Q&A
-    Portfolio.jsx         Work product cards
-    PortfolioDetail.jsx   Build timeline
+    CoursesList.jsx       Course cards with phase status
+    UnitsList.jsx         Course hub: summative phases + unit cards in journey order
+    UnitChat.jsx          Formative activities chat: instruction + capture + assess + Q&A
+    Portfolio.jsx         Course-level portfolio cards
+    PortfolioDetail.jsx   Course portfolio: summative attempts + formative build timeline
     Settings.jsx          API key, name, profile feedback
     onboarding/
       OnboardingFlow.jsx  4-step wizard with canvas backdrop

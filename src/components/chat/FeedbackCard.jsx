@@ -1,18 +1,31 @@
 import { renderMd } from '../../lib/helpers.js';
+import { scoreToLabel, levelToLabel } from '../../lib/constants.js';
 
 export default function FeedbackCard({ draft, isLatest, isPassed, onDispute, onRerecord }) {
-  const scorePercent = Math.round((draft.score || 0) * 100);
+  const label = scoreToLabel(draft.score || 0);
 
   const recClass = draft.recommendation === 'advance' ? 'rec-advance' : 'rec-revise';
-  const recLabel = draft.recommendation === 'advance' ? 'Advance'
-    : draft.recommendation === 'revise' ? 'Revise' : draft.recommendation;
 
   return (
     <div className="feedback-card msg msg-response">
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-        <span className="score-badge">{scorePercent}%</span>
-        <span className={`rec-label ${recClass}`}>{recLabel}</span>
+        <span className="score-badge">{label}</span>
+        <span className={`rec-label ${recClass}`}>
+          {draft.recommendation === 'advance' ? 'Advance' : draft.recommendation === 'revise' ? 'Revise' : 'Continue'}
+        </span>
       </div>
+      {draft.rubricCriteriaScores?.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+          {draft.rubricCriteriaScores.map((cs, i) => (
+            <span key={i} style={{
+              fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px',
+              background: 'var(--color-surface-alt, #f0f0f0)', color: 'var(--color-text-secondary)',
+            }}>
+              {cs.criterion}: {levelToLabel(cs.level)}
+            </span>
+          ))}
+        </div>
+      )}
       <p dangerouslySetInnerHTML={{ __html: renderMd(draft.feedback || '') }} />
       {(draft.strengths?.length > 0 || draft.improvements?.length > 0) && (
         <details className="feedback-details">

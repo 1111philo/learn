@@ -50,7 +50,7 @@ export default function App() {
         <Route path="/courses/:courseGroupId" element={<UnitsList />} />
         <Route path="/unit/:unitId" element={<UnitChat />} />
         <Route path="/work" element={<Portfolio />} />
-        <Route path="/work/:unitId" element={<PortfolioDetail />} />
+        <Route path="/work/:courseId" element={<PortfolioDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/" element={<Navigate to="/courses" replace />} />
         <Route path="*" element={<Navigate to="/courses" replace />} />

@@ -4,15 +4,11 @@ import { useApp } from '../contexts/AppContext.jsx';
 import { useModal } from '../contexts/ModalContext.jsx';
 import { TYPE_LABELS } from '../lib/constants.js';
 import { renderMd, esc, formatDuration } from '../lib/helpers.js';
-import {
-  getUnitProgress, saveUnitProgress,
-  clearDiagnosticState, saveDiagnosticState,
-} from '../../js/storage.js';
+import { getUnitProgress, saveUnitProgress, getJourney } from '../../js/storage.js';
 import { syncInBackground } from '../lib/syncDebounce.js';
-import { updateProfileFromFeedbackInBackground, updateProfileInBackground } from '../lib/profileQueue.js';
 import {
-  startDiagnostic, sendDiagnosticMessage, generatePlanAndFirstActivity,
-  generateNextActivity, recordDraft, submitDispute, askAboutActivity,
+  generateFirstActivity, generateNextActivity,
+  recordDraft, submitDispute, askAboutActivity,
 } from '../lib/unitEngine.js';
 
 import ChatArea from '../components/chat/ChatArea.jsx';
@@ -23,7 +19,6 @@ import InstructionMessage from '../components/chat/InstructionMessage.jsx';
 import DraftMessage from '../components/chat/DraftMessage.jsx';
 import FeedbackCard from '../components/chat/FeedbackCard.jsx';
 import ComposeBar from '../components/chat/ComposeBar.jsx';
-import CompletionSummary from '../components/chat/CompletionSummary.jsx';
 import DisputeModal from '../components/modals/DisputeModal.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 
@@ -37,15 +32,15 @@ export default function UnitChat() {
   const courseGroup = state.courseGroups.find(cg => cg.units?.some(u => u.unitId === unitId));
 
   const [progress, setProgress] = useState(null);
-  const [diagnostic, setDiagnostic] = useState({ phase: null, activity: null, messages: [], result: null });
+  const [journeyPlan, setJourneyPlan] = useState(null);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
 
-  // Load progress on mount or unit change
+  // Load progress and journey on mount
   useEffect(() => {
     let cancelled = false;
-    setDiagnostic({ phase: null, activity: null, messages: [], result: null });
     setProgress(null);
+    setJourneyPlan(null);
     setLoading('');
     setError('');
 
@@ -55,6 +50,38 @@ export default function UnitChat() {
 
       if (p) {
         setProgress(p);
+
+        // Load journey plan for this course
+        if (courseGroup) {
+          const j = await getJourney(courseGroup.courseId);
+          if (j?.plan) setJourneyPlan(j.plan);
+        }
+
+        // Generate first activity if none exist
+        if (!p.activities?.length && courseGroup) {
+          setLoading('generating');
+          try {
+            const j = await getJourney(courseGroup.courseId);
+            if (j?.plan) {
+              setJourneyPlan(j.plan);
+              const firstActivity = await generateFirstActivity(unit, j.plan, courseGroup);
+              const newProgress = {
+                ...p,
+                status: 'in_progress',
+                activities: [firstActivity],
+                startedAt: p.startedAt || Date.now(),
+              };
+              await saveUnitProgress(unitId, newProgress);
+              dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
+              syncInBackground(`progress:${unitId}`);
+              if (!cancelled) setProgress(newProgress);
+            }
+          } catch (e) {
+            if (!cancelled) setError(e.message || 'Failed to generate activity.');
+          }
+          if (!cancelled) setLoading('');
+        }
+
         // Scroll to specific draft if navigated from portfolio
         const scrollTo = searchParams.get('scrollTo');
         if (scrollTo) {
@@ -63,103 +90,13 @@ export default function UnitChat() {
           }, 100);
         }
       } else {
-        // Start diagnostic
-        setLoading('diagnostic');
-        try {
-          const { result, activity } = await startDiagnostic(unit, state.courseGroups, state.units, state.allProgress);
-          if (cancelled) return;
-
-          setDiagnostic({ phase: 'activity', activity, messages: [], result: null });
-
-          if (result.done) {
-            // Agent assessed from profile alone
-            const diagResult = {
-              score: result.score || 0.7,
-              feedback: result.feedback || result.message,
-              strengths: result.strengths || [],
-              improvements: result.improvements || [],
-              recommendation: 'advance', passed: true,
-            };
-            setDiagnostic(prev => ({ ...prev, result: { unitId, result: diagResult } }));
-            updateProfileInBackground(diagResult, unit, activity);
-          }
-        } catch (e) {
-          if (!cancelled) setError(e.message || 'Failed to start diagnostic.');
-        }
-        if (!cancelled) setLoading('');
+        // No progress — shouldn't happen in normal flow (UnitsList creates the record)
+        setError('No progress found for this unit. Return to the course page to start.');
       }
     })();
 
     return () => { cancelled = true; };
   }, [unitId]);
-
-  // Generate plan after diagnostic completes
-  const handleStartCourse = useCallback(async () => {
-    setLoading('plan');
-    try {
-      const diagResult = diagnostic.result?.result || null;
-      const { plan, firstActivity } = await generatePlanAndFirstActivity(
-        unit, diagResult, state.courseGroups, state.units, state.allProgress, state.preferences
-      );
-      const newProgress = {
-        unitId, status: 'in_progress', currentActivityIndex: 0,
-        diagnostic: diagnostic.activity ? {
-          instruction: diagnostic.activity.instruction,
-          messages: diagnostic.messages,
-          result: diagResult,
-        } : null,
-        learningPlan: { activities: plan.activities, finalWorkProductDescription: plan.finalWorkProductDescription, workProductTool: plan.workProductTool },
-        activities: [firstActivity], drafts: [],
-        startedAt: Date.now(), completedAt: null, finalWorkProductUrl: null,
-      };
-      await saveUnitProgress(unitId, newProgress);
-      dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
-      syncInBackground(`progress:${unitId}`);
-      clearDiagnosticState();
-      setProgress(newProgress);
-      setDiagnostic({ phase: null, activity: null, messages: [], result: null });
-    } catch (e) {
-      setError(e.message || 'Failed to generate course.');
-    }
-    setLoading('');
-  }, [unitId, unit, diagnostic, state, dispatch]);
-
-  // Diagnostic message send
-  const handleDiagnosticSend = useCallback(async (text) => {
-    const newMsgs = [...diagnostic.messages, { role: 'user', content: text }];
-    setDiagnostic(prev => ({ ...prev, messages: newMsgs }));
-    setLoading('diagnostic-reply');
-
-    try {
-      const result = await sendDiagnosticMessage(text, unit, diagnostic.activity, diagnostic.messages, state.courseGroups, state.units, state.allProgress);
-      const updatedMsgs = [...newMsgs, { role: 'assistant', content: JSON.stringify(result) }];
-      setDiagnostic(prev => ({ ...prev, messages: updatedMsgs }));
-
-      if (result.done) {
-        const diagResult = {
-          score: result.score || 0, feedback: result.feedback || result.message,
-          strengths: result.strengths || [], improvements: result.improvements || [],
-          recommendation: 'advance', passed: true,
-        };
-        setDiagnostic(prev => ({ ...prev, result: { unitId, result: diagResult } }));
-        updateProfileInBackground(diagResult, unit, diagnostic.activity);
-        // Don't auto-advance — let the user read the final message and click Continue
-      }
-    } catch (e) {
-      setDiagnostic(prev => ({
-        ...prev,
-        messages: [...newMsgs, { role: 'assistant', content: JSON.stringify({ message: 'Something went wrong. Try again or skip.' }) }],
-      }));
-    }
-    setLoading('');
-  }, [diagnostic, unit, state, unitId, handleStartCourse]);
-
-  // Skip diagnostic
-  const handleSkipDiagnostic = useCallback(() => {
-    const userText = diagnostic.messages.filter(m => m.role === 'user').map(m => m.content).join(' ');
-    if (userText) updateProfileFromFeedbackInBackground(userText, unit, diagnostic.activity || { type: 'diagnostic', goal: 'Skills check' });
-    handleStartCourse();
-  }, [diagnostic, unit, handleStartCourse]);
 
   // Activity Q&A
   const handleActivitySend = useCallback(async (text) => {
@@ -167,7 +104,6 @@ export default function UnitChat() {
     const activity = progress.activities[progress.currentActivityIndex];
     if (!activity) return;
 
-    // Show user message immediately
     const userMsg = { role: 'user', content: text, timestamp: Date.now() };
     const updatedActivities = progress.activities.map(a =>
       a.id === activity.id ? { ...a, messages: [...(a.messages || []), userMsg] } : a
@@ -202,15 +138,14 @@ export default function UnitChat() {
 
   // Advance to next activity
   const handleNextActivity = useCallback(async () => {
-    if (!progress) return;
+    if (!progress || !journeyPlan) return;
     const nextIndex = progress.currentActivityIndex + 1;
     let newProgress = { ...progress, currentActivityIndex: nextIndex };
 
-    // Generate next activity if not yet generated
     if (!newProgress.activities[nextIndex]) {
       setLoading('generating');
       try {
-        const nextActivity = await generateNextActivity(unit, newProgress, state.courseGroups, state.units, state.allProgress);
+        const nextActivity = await generateNextActivity(unit, newProgress, journeyPlan);
         newProgress = { ...newProgress, activities: [...newProgress.activities, nextActivity] };
       } catch (e) {
         setError(e.message || 'Failed to generate next activity.');
@@ -224,7 +159,7 @@ export default function UnitChat() {
     dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
     syncInBackground(`progress:${unitId}`);
     setProgress(newProgress);
-  }, [progress, unit, unitId, state, dispatch]);
+  }, [progress, journeyPlan, unit, unitId, dispatch]);
 
   // Dispute
   const handleDispute = useCallback((draft) => {
@@ -265,22 +200,24 @@ export default function UnitChat() {
 
   // --- Render ---
   const activity = progress?.activities?.[progress.currentActivityIndex];
-  const planActivities = progress?.learningPlan?.activities;
-  const isCompleted = progress?.status === 'completed';
-  const diagMsgCount = diagnostic.messages.filter(m => m.role === 'user').length;
-  const showSkip = diagMsgCount >= 2 && !diagnostic.result;
-  const showContinue = !!diagnostic.result && !progress;
+  const journeyUnit = journeyPlan?.units?.find(u => u.unitId === unitId);
+  const totalActivities = journeyUnit?.activities?.length || progress?.activities?.length || 0;
+  const isUnitDone = progress?.currentActivityIndex >= totalActivities && totalActivities > 0
+    && progress?.drafts?.some(d => {
+      const lastAct = progress.activities[progress.activities.length - 1];
+      return lastAct && d.activityId === lastAct.id && d.recommendation === 'advance';
+    });
   const activityDrafts = activity ? (progress?.drafts?.filter(d => d.activityId === activity.id) || []) : [];
   const latestDraft = activityDrafts[activityDrafts.length - 1];
   const isPassed = latestDraft?.recommendation === 'advance';
-  const remaining = planActivities ? planActivities.length - progress.currentActivityIndex - 1 : 0;
+  const remaining = totalActivities - (progress?.currentActivityIndex || 0) - 1;
 
   return (
     <div className="course-layout">
       <div className="course-header">
         <button
           className="back-btn"
-          aria-label={courseGroup ? 'Back to units' : 'Back to courses'}
+          aria-label={courseGroup ? 'Back to course' : 'Back to courses'}
           onClick={() => navigate(courseGroup ? `/courses/${courseGroup.courseId}` : '/courses')}
         >&larr;</button>
         <div className="course-header-info">
@@ -291,43 +228,7 @@ export default function UnitChat() {
       </div>
 
       <ChatArea>
-        {/* Skills Check */}
-        {(diagnostic.activity || progress?.diagnostic) && (
-          <div className="chat-section-heading" role="separator">Skills Check</div>
-        )}
-        {diagnostic.activity && (
-          <>
-            <AssistantMessage content={diagnostic.activity.instruction} />
-            {diagnostic.messages.map((m, i) => (
-              m.role === 'user'
-                ? <UserMessage key={i} content={m.content} />
-                : <AssistantMessage key={i} content={m.content} />
-            ))}
-          </>
-        )}
-        {!diagnostic.activity && progress?.diagnostic && (
-          <>
-            <AssistantMessage content={progress.diagnostic.instruction || ''} />
-            {progress.diagnostic.messages?.map((m, i) => (
-              m.role === 'user'
-                ? <UserMessage key={i} content={m.content} />
-                : <AssistantMessage key={i} content={m.content} />
-            ))}
-          </>
-        )}
-
-        {loading === 'diagnostic' && <ThinkingSpinner text="Preparing your skills check..." />}
-        {loading === 'diagnostic-reply' && <ThinkingSpinner />}
-        {loading === 'plan' && <ThinkingSpinner text="Building your learning plan..." />}
-
-        {showSkip && (
-          <button className="skip-step-btn" onClick={handleSkipDiagnostic}>Skip to activities</button>
-        )}
-        {showContinue && (
-          <button className="skip-step-btn" onClick={handleStartCourse} style={{ background: 'var(--color-primary)', color: 'var(--color-primary-text)' }}>
-            Continue to activities
-          </button>
-        )}
+        {loading === 'generating' && !progress?.activities?.length && <ThinkingSpinner text="Preparing your first activity..." />}
 
         {/* Completed activities */}
         {progress?.activities?.slice(0, progress.currentActivityIndex).map((a, ai) => {
@@ -337,24 +238,24 @@ export default function UnitChat() {
               <div className="chat-section-heading" role="separator">
                 {TYPE_LABELS[a.type] || a.type}: {a.goal}
               </div>
-              <InstructionMessage text={a.instruction} />
+              <InstructionMessage text={a.instruction} rubricCriteria={a.rubricCriteria} />
               {renderTimeline(a, drafts)}
             </div>
           );
         })}
 
         {/* Current activity */}
-        {activity && !isCompleted && (
+        {activity && !isUnitDone && (
           <>
             <div className="chat-section-heading" role="separator">
               {TYPE_LABELS[activity.type] || activity.type}: {activity.goal}
             </div>
-            <InstructionMessage text={activity.instruction} />
+            <InstructionMessage text={activity.instruction} rubricCriteria={activity.rubricCriteria} />
             {renderTimeline(activity, activityDrafts, true, handleDispute, handleRecord)}
 
             {loading === 'recording' && <ThinkingSpinner text="Evaluating your work..." />}
             {loading === 'qa' && <ThinkingSpinner />}
-            {loading === 'generating' && <ThinkingSpinner text="Preparing next activity..." />}
+            {loading === 'generating' && progress?.activities?.length > 0 && <ThinkingSpinner text="Preparing next activity..." />}
 
             {!activityDrafts.length && !loading && (
               <div style={{ textAlign: 'center', margin: '8px 0' }}>
@@ -369,24 +270,33 @@ export default function UnitChat() {
                 Continue to next activity ({remaining} remaining)
               </button>
             )}
+            {isPassed && remaining <= 0 && (
+              <div className="msg msg-response" style={{ textAlign: 'center' }}>
+                <p>Unit complete! Return to the course page to retake the summative assessment.</p>
+                <button className="primary-btn" onClick={() => navigate(courseGroup ? `/courses/${courseGroup.courseId}` : '/courses')}>
+                  Back to Course
+                </button>
+              </div>
+            )}
           </>
         )}
 
-        {/* Completion */}
-        {isCompleted && <CompletionSummary unit={unit} progress={progress} />}
+        {/* Unit done */}
+        {isUnitDone && (
+          <div className="msg msg-response" style={{ textAlign: 'center' }}>
+            <h3>Unit Complete</h3>
+            <p>Return to the course page to continue your journey or retake the summative.</p>
+            <button className="primary-btn" onClick={() => navigate(courseGroup ? `/courses/${courseGroup.courseId}` : '/courses')}>
+              Back to Course
+            </button>
+          </div>
+        )}
 
         {error && <div className="msg msg-response" role="alert" aria-live="assertive" style={{ color: 'var(--color-warning)' }}>{error}</div>}
       </ChatArea>
 
-      {/* Compose bar */}
-      {diagnostic.phase === 'activity' && !diagnostic.result && !loading && (
-        <ComposeBar
-          placeholder="Describe what you know..."
-          onSend={handleDiagnosticSend}
-          disabled={!!loading}
-        />
-      )}
-      {activity && !isCompleted && !loading && (
+      {/* Compose bar for Q&A */}
+      {activity && !isUnitDone && !loading && (
         <ComposeBar
           placeholder="Ask a question about this activity..."
           onSend={handleActivitySend}
@@ -399,7 +309,6 @@ export default function UnitChat() {
 
 /** Render timeline of drafts + Q&A messages for an activity. */
 function renderTimeline(activity, drafts, isCurrent = false, onDispute, onRerecord) {
-  // Merge drafts + messages, sort by timestamp
   const items = [];
   for (const d of drafts) {
     items.push({ type: 'draft', data: d, ts: d.timestamp });
