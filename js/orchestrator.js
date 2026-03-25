@@ -169,7 +169,7 @@ export async function generateSummative(course, allObjectives, profileSummary, p
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
-      maxTokens: 1024
+      maxTokens: 2048
     });
     return parseJSON(content);
   };
@@ -294,7 +294,7 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
       model: MODEL_LIGHT,
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
-      maxTokens: 1024
+      maxTokens: 2048
     });
     return parseJSON(content);
   };
