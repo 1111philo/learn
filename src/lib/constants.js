@@ -1,8 +1,8 @@
 export const TYPE_LABELS = {
-  explore: 'Research',
-  apply: 'Practice',
-  create: 'Draft',
-  final: 'Deliver',
+  explore: 'Research Activity',
+  apply: 'Practice Activity',
+  create: 'Draft Activity',
+  final: 'Deliver Activity',
 };
 
 export const TYPE_LETTERS = {

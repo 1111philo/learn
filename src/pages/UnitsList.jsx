@@ -18,7 +18,8 @@ import ChatArea from '../components/chat/ChatArea.jsx';
 import ThinkingSpinner from '../components/chat/ThinkingSpinner.jsx';
 import SummativeCard from '../components/chat/SummativeCard.jsx';
 import RubricFeedback from '../components/chat/RubricFeedback.jsx';
-import CaptureStep from '../components/chat/CaptureStep.jsx';
+import InstructionMessage from '../components/chat/InstructionMessage.jsx';
+import DraftMessage from '../components/chat/DraftMessage.jsx';
 import ComposeBar from '../components/chat/ComposeBar.jsx';
 import UserMessage from '../components/chat/UserMessage.jsx';
 import AssistantMessage from '../components/chat/AssistantMessage.jsx';
@@ -37,6 +38,7 @@ export default function UnitsList() {
   const [attempts, setAttempts] = useState([]);
   const [reviewMessages, setReviewMessages] = useState([]);
   const [captures, setCaptures] = useState([]);
+  const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
 
@@ -60,7 +62,6 @@ export default function UnitsList() {
         const rs = await getRubricReviewState(courseGroupId);
         if (rs?.messages) setReviewMessages(rs.messages);
       } else {
-        // First time: generate summative
         setLoading('summative');
         try {
           const s = await initCourse(group);
@@ -90,6 +91,8 @@ export default function UnitsList() {
       if (result.done) {
         await confirmRubric(courseGroupId);
         setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
+        setCurrentStep(0);
+        setCaptures([]);
       }
     } catch (e) {
       setError(e.message || 'Failed to send message.');
@@ -97,39 +100,40 @@ export default function UnitsList() {
     setLoading('');
   }, [courseGroupId, summative, reviewMessages, group]);
 
-  // Skip rubric review
   const handleSkipReview = useCallback(async () => {
     await confirmRubric(courseGroupId);
+    setCurrentStep(0);
+    setCaptures([]);
     setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
   }, [courseGroupId]);
 
-  // Capture a summative step
-  const handleSummativeCapture = useCallback(async (stepIndex) => {
+  // Capture current summative step, then advance to next
+  const handleStepCapture = useCallback(async () => {
     setLoading('capturing');
     try {
-      const capture = await recordSummativeCapture(courseGroupId, stepIndex);
+      const capture = await recordSummativeCapture(courseGroupId, currentStep);
       const newCaptures = [...captures, capture];
       setCaptures(newCaptures);
 
-      // Auto-submit when all steps captured
-      if (newCaptures.length === (summative?.task?.steps?.length || 0)) {
+      const totalSteps = summative?.task?.steps?.length || 0;
+
+      if (newCaptures.length === totalSteps) {
+        // All steps captured — submit for assessment
         setLoading('assessing');
         const { attempt, mastery } = await submitSummativeAttempt(courseGroupId, group, newCaptures);
         setAttempts(prev => [...prev, attempt]);
         setCaptures([]);
+        setCurrentStep(0);
 
         if (mastery) {
           setPhase(COURSE_PHASES.COMPLETED);
-          // Update profile for mastery
           updateProfileOnMasteryInBackground(group, attempt, []);
         } else if (attempt.isBaseline) {
-          // Baseline done → generate gap + journey
           setLoading('journey');
           const { journey: j } = await generateGapAndJourney(courseGroupId, group);
           setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
           setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
         } else {
-          // Retake didn't achieve mastery → generate remediation activities
           setLoading('journey');
           const weakCriteria = (attempt.criteriaScores || [])
             .filter(cs => cs.score < 0.51)
@@ -138,32 +142,22 @@ export default function UnitsList() {
           setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
           setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
         }
+      } else {
+        // Advance to next step
+        setCurrentStep(newCaptures.length);
       }
     } catch (e) {
       setError(e.message || 'Capture failed.');
     }
     setLoading('');
-  }, [courseGroupId, captures, summative, group]);
+  }, [courseGroupId, currentStep, captures, summative, group]);
 
-  // Request summative retake
   const handleRetake = useCallback(async () => {
     await requestSummativeRetake(courseGroupId);
     setCaptures([]);
+    setCurrentStep(0);
     setPhase(COURSE_PHASES.SUMMATIVE_RETAKE);
   }, [courseGroupId]);
-
-  // After baseline, start journey
-  const handleStartJourney = useCallback(async () => {
-    setLoading('journey');
-    try {
-      const { journey: j } = await generateGapAndJourney(courseGroupId, group);
-      setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
-      setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
-    } catch (e) {
-      setError(e.message || 'Failed to generate journey.');
-    }
-    setLoading('');
-  }, [courseGroupId, group]);
 
   if (!group) return <p>Course not found.</p>;
 
@@ -175,6 +169,10 @@ export default function UnitsList() {
 
   const latestAttempt = attempts[attempts.length - 1];
   const journeyUnits = journey?.plan?.units || [];
+  const steps = summative?.task?.steps || [];
+  const isBaseline = phase === COURSE_PHASES.BASELINE_ATTEMPT;
+  const isRetake = phase === COURSE_PHASES.SUMMATIVE_RETAKE;
+  const isSummativeActive = isBaseline || isRetake;
 
   return (
     <div className="course-layout">
@@ -185,15 +183,17 @@ export default function UnitsList() {
         </div>
       </div>
 
-      {/* Summative phases */}
+      {/* Setup phase */}
       {(phase === COURSE_PHASES.SUMMATIVE_SETUP || loading === 'summative') && (
         <ChatArea>
           <ThinkingSpinner text="Designing your assessment..." />
         </ChatArea>
       )}
 
+      {/* Rubric review phase */}
       {phase === COURSE_PHASES.RUBRIC_REVIEW && summative && (
         <ChatArea>
+          <div className="chat-section-heading" role="separator">Assessment Overview</div>
           <SummativeCard summative={summative} />
           {reviewMessages.map((m, i) => (
             m.role === 'user'
@@ -203,60 +203,71 @@ export default function UnitsList() {
           {loading === 'review' && <ThinkingSpinner />}
           {!loading && (
             <button className="skip-step-btn" onClick={handleSkipReview} style={{ marginTop: '8px' }}>
-              Skip to assessment
+              Start assessment
             </button>
           )}
         </ChatArea>
       )}
 
-      {(phase === COURSE_PHASES.BASELINE_ATTEMPT || phase === COURSE_PHASES.SUMMATIVE_RETAKE) && summative && (
+      {/* Summative attempt — step by step */}
+      {isSummativeActive && summative && (
         <ChatArea>
-          {phase === COURSE_PHASES.SUMMATIVE_RETAKE && (
-            <div className="chat-section-heading" role="separator">Summative Retake</div>
+          <div className="chat-section-heading" role="separator">
+            {isBaseline ? 'Diagnostic Assessment' : 'Summative Assessment'}
+          </div>
+
+          {/* Completed steps */}
+          {captures.map((cap, i) => {
+            const step = steps[cap.stepIndex];
+            return (
+              <div key={i}>
+                <InstructionMessage text={step?.instruction} />
+                <DraftMessage draft={{ screenshotKey: cap.screenshotKey, url: cap.url, timestamp: Date.now() }} />
+              </div>
+            );
+          })}
+
+          {/* Current step */}
+          {currentStep < steps.length && !loading && (
+            <>
+              <InstructionMessage text={`Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep].instruction}`} />
+              <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                <button className="record-btn" onClick={handleStepCapture} aria-label="Capture screenshot">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '6px' }}>
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  Capture
+                </button>
+              </div>
+            </>
           )}
-          <SummativeCard summative={summative} />
-          <CaptureStep
-            steps={summative.task?.steps || []}
-            captures={captures}
-            onCapture={handleSummativeCapture}
-            loading={!!loading}
-          />
+
           {loading === 'capturing' && <ThinkingSpinner text="Capturing..." />}
           {loading === 'assessing' && <ThinkingSpinner text="Evaluating your work..." />}
           {loading === 'journey' && <ThinkingSpinner text="Building your learning journey..." />}
         </ChatArea>
       )}
 
-      {phase === COURSE_PHASES.GAP_ANALYSIS && (
-        <ChatArea>
-          <ThinkingSpinner text="Analyzing your results..." />
-        </ChatArea>
-      )}
-
-      {phase === COURSE_PHASES.JOURNEY_GENERATION && (
+      {(phase === COURSE_PHASES.GAP_ANALYSIS || phase === COURSE_PHASES.JOURNEY_GENERATION) && (
         <ChatArea>
           <ThinkingSpinner text="Building your learning journey..." />
         </ChatArea>
       )}
 
-      {/* Formative learning phase — show unit cards */}
+      {/* Formative learning — show unit cards */}
       {phase === COURSE_PHASES.FORMATIVE_LEARNING && (
         <>
-          {/* Baseline/latest attempt feedback */}
           {latestAttempt && (
             <div style={{ padding: '0 var(--space)' }}>
+              <div className="chat-section-heading" role="separator">Assessment Results</div>
               <RubricFeedback attempt={latestAttempt} />
             </div>
           )}
 
-          {/* Retake button */}
-          <div style={{ padding: '0 var(--space)', marginBottom: 'var(--space)' }}>
-            <button className="primary-btn" onClick={handleRetake} style={{ width: '100%' }}>
-              Retake Summative Assessment
-            </button>
+          <div style={{ padding: '0 var(--space)', margin: 'var(--space) 0' }}>
+            <div className="chat-section-heading" role="separator">Learning Journey</div>
           </div>
 
-          {/* Journey units */}
           <div className="course-list" role="list">
             {journeyUnits.map((ju, i) => {
               const unitDef = group.units?.find(u => u.unitId === ju.unitId);
@@ -293,12 +304,19 @@ export default function UnitsList() {
               );
             })}
           </div>
+
+          <div style={{ padding: '0 var(--space)', marginTop: 'var(--space)' }}>
+            <button className="primary-btn" onClick={handleRetake} style={{ width: '100%' }}>
+              Retake Summative Assessment
+            </button>
+          </div>
         </>
       )}
 
       {/* Completed */}
       {phase === COURSE_PHASES.COMPLETED && (
         <ChatArea>
+          <div className="chat-section-heading" role="separator">Summative Assessment</div>
           {latestAttempt && <RubricFeedback attempt={latestAttempt} />}
           <div className="completion-summary msg msg-response">
             <h3>Mastery Achieved!</h3>
