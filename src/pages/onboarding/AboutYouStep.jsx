@@ -20,7 +20,7 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
   const inputRef = useRef(null);
   const handleResize = useAutoResize();
 
-  const initialGreeting = `Hi, ${data.name}! I'd love to get to know you through your work. Navigate to a page that represents you professionally — your LinkedIn, personal site, portfolio, a project, or even a social profile — and hit **Capture**. Or just tell me what you're working toward.`;
+  const initialGreeting = `Hi, ${data.name}! I'd love to get to know you through your work. Navigate to something that represents you professionally — LinkedIn, a portfolio, a project — and hit **Capture**.`;
   const userMsgCount = messages.filter(m => m.role === 'user').length;
   const hasExchanged = userMsgCount >= 2;
 

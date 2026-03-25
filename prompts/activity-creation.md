@@ -98,9 +98,8 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 
 ## Format
 
-- One short sentence explaining the goal.
-- Numbered steps (1, 2, 3). Each step is one short sentence. Aim for 3 steps plus the Capture step (4 total). Never exceed 4 steps and never use fewer than 3 steps before the Capture step.
-- Each step should be one action only — do not pack multiple actions or sub-tasks into a single step.
+- One short sentence explaining the goal. No preamble.
+- Numbered steps (1, 2, 3). Each step is one concise sentence — one action, no sub-tasks. Aim for 3 steps plus the Capture step (4 total). Never exceed 4 steps and never use fewer than 3 steps before the Capture step.
 - The final step is ALWAYS: "Hit Capture to capture your screen."
 - Plain, simple language. No jargon. 5 minutes or less.
 - Include 2-3 tips (one short sentence each).

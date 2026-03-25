@@ -26,7 +26,7 @@ Everything is designed backward from the summative assessment. Each formative ac
 - High-priority gaps should have more activities targeting them.
 - No two consecutive activities in a unit should have the same type.
 - Each unit must have at least one activity.
-- Activity goals describe WHAT to learn — not WHAT to write. Keep to one short sentence.
+- Activity goals are one concise sentence — WHAT to learn, not WHAT to write. No preamble or explanation.
 - The last activity in each unit does NOT need to be "final" — final type is optional within units (the summative retake is the real final assessment).
 - Total activity count across all units should be proportional to the total gap size. A learner close to mastery might get 3-5 total activities; one starting from scratch might get 15-20.
 - If the learner has completed formative activities from a prior journey (after a failed retake), don't repeat them — build on what was learned.

@@ -15,6 +15,7 @@ The summative defines what mastery looks like. Everything else in the course —
 ## Task rules
 
 - 2-5 steps. Each step produces something visible and capturable.
+- Step instructions must be one concise sentence. No preamble, no explanation of why.
 - The entire task must happen in the browser. Each step ends with a capture.
 - Steps should build progressively: early steps scaffold, later steps demonstrate mastery.
 - The task should produce a meaningful artifact (not busywork).
