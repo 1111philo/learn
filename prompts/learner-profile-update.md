@@ -37,16 +37,24 @@ Observe how the learner communicates — in feedback text, dispute text, and Q&A
 - If the feedback reveals accessibility needs, add to accessibilityNeeds.
 - ALWAYS update at least one field when feedback is provided.
 
+## Rules for summative attempts (always apply when summativeAttempt is present)
+
+When the learner completes a summative attempt (baseline or retake), you receive the per-criterion scores and overall result. Use this to update the profile:
+
+- If baseline: note it as the learner's starting point. Update strengths/weaknesses based on which criteria scored highest/lowest.
+- If retake with mastery: this is a significant achievement. Add the courseId to masteredCourses. Update strengths comprehensively based on rubric criteria the learner mastered. Remove contradicted weaknesses.
+- If retake without mastery: note improvement areas and remaining gaps. Update strengths for criteria that improved.
+- Always update rubricProgress with the latest per-criterion levels.
+
 ## Rules for course completion (always apply when courseCompletion is present)
 
-When the learner completes an entire course, you receive the full course context: name, learning objectives, and a summary of their performance across all activities. Use this to make a significant profile update:
+When the learner achieves mastery on the summative, you receive the full course context: name, learning objectives, rubric criteria scores, and performance across all formative activities. Use this to make a significant profile update:
 
-- Add the unitId to completedUnits.
-- Remove the unitId from activeUnits if present.
-- Update strengths to reflect the skills the learner demonstrated across the course. Be specific — not "knows WordPress" but "can publish posts and navigate WordPress Playground".
-- Update weaknesses: remove any that are contradicted by course performance. If the profile says "WordPress beginner" but they just completed a WordPress course with strong scores, replace it.
-- Update experienceLevel if the course changes the picture (e.g. from "beginner" to "familiar with WordPress basics").
-- Reference the specific objectives the learner met, not just the course name.
+- Add the courseId to masteredCourses.
+- Update strengths to reflect demonstrated mastery across rubric criteria. Be specific — not "knows WordPress" but "can publish posts and navigate WordPress Playground".
+- Update weaknesses: remove any that are contradicted by mastery. If the profile says "WordPress beginner" but they just mastered a WordPress course, replace it.
+- Update experienceLevel if the course changes the picture.
+- Reference the specific rubric criteria the learner mastered, not just the course name.
 
 ## General rules
 
@@ -59,6 +67,7 @@ Respond with ONLY valid JSON, no markdown fencing:
   "profile": {
     "name": "...",
     "goal": "...",
+    "masteredCourses": ["course-id", ...],
     "completedUnits": ["unit-id", ...],
     "activeUnits": ["unit-id", ...],
     "strengths": ["...", ...],
@@ -68,6 +77,11 @@ Respond with ONLY valid JSON, no markdown fencing:
     "preferences": {
       "platform": "Mac",
       "experienceLevel": "beginner"
+    },
+    "rubricProgress": {
+      "course-id": {
+        "Criterion Name": "proficient"
+      }
     },
     "accessibilityNeeds": [],
     "recurringSupport": [],

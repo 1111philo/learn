@@ -27,43 +27,6 @@ export async function getUnitProgress(unitId) {
   const unitRow = query('SELECT * FROM units WHERE unit_id = ?', [unitId]);
   if (!unitRow) return null;
 
-  // Learning plan
-  const planRow = query('SELECT * FROM learning_plans WHERE unit_id = ?', [unitId]);
-  let learningPlan = null;
-  if (planRow) {
-    // Reconstruct plan activities from the plan's stored data
-    const planData = planRow.data ? JSON.parse(planRow.data) : null;
-    learningPlan = {
-      activities: planData?.activities || [],
-      finalWorkProductDescription: planRow.final_work_product_description,
-      workProductTool: planRow.work_product_tool,
-    };
-  }
-
-  // Diagnostic
-  const diagRow = query('SELECT * FROM diagnostics WHERE unit_id = ?', [unitId]);
-  let diagnostic = null;
-  if (diagRow) {
-    const diagMessages = diagRow.conversation_id
-      ? queryAll(
-          'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY timestamp',
-          [diagRow.conversation_id]
-        )
-      : [];
-    diagnostic = {
-      instruction: diagRow.instruction,
-      messages: diagMessages.map(m => ({ role: m.role, content: m.content })),
-      result: diagRow.score != null ? {
-        score: diagRow.score,
-        feedback: diagRow.feedback,
-        strengths: diagRow.strengths ? JSON.parse(diagRow.strengths) : [],
-        improvements: diagRow.improvements ? JSON.parse(diagRow.improvements) : [],
-        recommendation: diagRow.recommendation,
-        passed: !!diagRow.passed,
-      } : null,
-    };
-  }
-
   // Activities
   const activityRows = queryAll(
     'SELECT * FROM activities WHERE unit_id = ? ORDER BY sequence',
@@ -76,7 +39,6 @@ export async function getUnitProgress(unitId) {
           [a.conversation_id]
         )
       : [];
-    // Strip unit prefix from DB id to return the original activity id
     const originalId = a.id.includes('::') ? a.id.split('::')[1] : a.id;
     return {
       id: originalId,
@@ -84,6 +46,7 @@ export async function getUnitProgress(unitId) {
       goal: a.goal,
       instruction: a.instruction,
       tips: a.tips,
+      rubricCriteria: a.rubric_criteria ? JSON.parse(a.rubric_criteria) : null,
       messages: msgs.map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp })),
     };
   });
@@ -103,15 +66,17 @@ export async function getUnitProgress(unitId) {
     improvements: d.improvements ? JSON.parse(d.improvements) : [],
     score: d.score,
     recommendation: d.recommendation,
+    rubricCriteriaScores: d.rubric_criteria_scores ? JSON.parse(d.rubric_criteria_scores) : null,
     timestamp: d.timestamp,
   }));
 
   return {
     unitId: unitRow.unit_id,
+    courseId: unitRow.course_id,
     status: unitRow.status,
     currentActivityIndex: unitRow.current_activity_index,
-    diagnostic,
-    learningPlan,
+    journeyOrder: unitRow.journey_order,
+    rubricCriteria: unitRow.rubric_criteria ? JSON.parse(unitRow.rubric_criteria) : null,
     activities,
     drafts,
     startedAt: unitRow.started_at,
@@ -131,77 +96,19 @@ export async function saveUnitProgress(unitId, progress) {
     run(
       `INSERT OR REPLACE INTO units
        (unit_id, course_id, name, description, depends_on, sequence, status,
-        current_activity_index, started_at, completed_at, final_work_product_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        current_activity_index, started_at, completed_at, final_work_product_url,
+        journey_order, rubric_criteria)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         unitId, courseId, '', '', null, 0, progress.status || 'not_started',
         progress.currentActivityIndex || 0,
         progress.startedAt || null,
         progress.completedAt || null,
         progress.finalWorkProductUrl || null,
+        progress.journeyOrder ?? null,
+        progress.rubricCriteria ? JSON.stringify(progress.rubricCriteria) : null,
       ]
     );
-
-    // Upsert learning plan
-    if (progress.learningPlan) {
-      run(
-        `INSERT OR REPLACE INTO learning_plans
-         (unit_id, final_work_product_description, work_product_tool, data, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          unitId,
-          progress.learningPlan.finalWorkProductDescription || null,
-          progress.learningPlan.workProductTool || null,
-          JSON.stringify(progress.learningPlan),
-          Date.now(),
-        ]
-      );
-    }
-
-    // Upsert diagnostic
-    if (progress.diagnostic) {
-      const diagConvId = `diag-${unitId}`;
-      // Ensure conversation exists
-      run(
-        'INSERT OR IGNORE INTO conversations (id, unit_id, type, created_at) VALUES (?, ?, ?, ?)',
-        [diagConvId, unitId, 'diagnostic', Date.now()]
-      );
-      // Replace messages
-      run('DELETE FROM messages WHERE conversation_id = ?', [diagConvId]);
-      const diagMsgs = progress.diagnostic.messages || [];
-      for (let i = 0; i < diagMsgs.length; i++) {
-        const m = diagMsgs[i];
-        run(
-          'INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?)',
-          [diagConvId, m.role, m.content, m.timestamp || Date.now()]
-        );
-      }
-      const result = progress.diagnostic.result;
-      run(
-        `INSERT OR REPLACE INTO diagnostics
-         (unit_id, conversation_id, instruction, score, feedback, strengths, improvements, recommendation, passed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          unitId, diagConvId,
-          progress.diagnostic.instruction || null,
-          result?.score ?? null,
-          result?.feedback || null,
-          result?.strengths ? JSON.stringify(result.strengths) : null,
-          result?.improvements ? JSON.stringify(result.improvements) : null,
-          result?.recommendation || null,
-          result?.passed ? 1 : 0,
-        ]
-      );
-    } else {
-      // Remove diagnostic if cleared
-      const existingDiag = query('SELECT conversation_id FROM diagnostics WHERE unit_id = ?', [unitId]);
-      if (existingDiag) {
-        if (existingDiag.conversation_id) {
-          run('DELETE FROM messages WHERE conversation_id = ?', [existingDiag.conversation_id]);
-        }
-        run('DELETE FROM diagnostics WHERE unit_id = ?', [unitId]);
-      }
-    }
 
     // Upsert activities
     // First, collect existing activity conversation IDs to clean up orphans
@@ -236,9 +143,10 @@ export async function saveUnitProgress(unitId, progress) {
 
       run(
         `INSERT OR REPLACE INTO activities
-         (id, unit_id, type, goal, instruction, tips, sequence, conversation_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [dbActId, unitId, a.type, a.goal, a.instruction || null, a.tips || null, i, convId]
+         (id, unit_id, type, goal, instruction, tips, sequence, conversation_id, rubric_criteria)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [dbActId, unitId, a.type, a.goal, a.instruction || null, a.tips || null, i, convId,
+         a.rubricCriteria ? JSON.stringify(a.rubricCriteria) : null]
       );
     }
 
@@ -265,8 +173,8 @@ export async function saveUnitProgress(unitId, progress) {
       run(
         `INSERT OR REPLACE INTO drafts
          (id, activity_id, unit_id, screenshot_key, url, score, feedback,
-          strengths, improvements, recommendation, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          strengths, improvements, recommendation, timestamp, rubric_criteria_scores)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           draftId, `${unitId}::${d.activityId}`, unitId,
           d.screenshotKey || null,
@@ -277,6 +185,7 @@ export async function saveUnitProgress(unitId, progress) {
           d.improvements ? JSON.stringify(d.improvements) : null,
           d.recommendation || null,
           d.timestamp || Date.now(),
+          d.rubricCriteriaScores ? JSON.stringify(d.rubricCriteriaScores) : null,
         ]
       );
     }
@@ -431,22 +340,181 @@ export async function saveOnboardingComplete() {
 }
 
 
-// -- Conversation state (diagnostic + onboarding) -----------------------------
+// -- Summative ----------------------------------------------------------------
 
-export async function getDiagnosticState() {
-  const row = query("SELECT state_json FROM pending_state WHERE key = 'diagnostic'");
-  return row ? JSON.parse(row.state_json) : null;
+export async function getSummative(courseId) {
+  const row = query('SELECT * FROM summatives WHERE course_id = ?', [courseId]);
+  if (!row) return null;
+  return {
+    courseId: row.course_id,
+    task: JSON.parse(row.task),
+    rubric: JSON.parse(row.rubric),
+    exemplar: row.exemplar,
+    tool: row.tool,
+    estimatedTime: row.estimated_time,
+    personalized: !!row.personalized,
+    conversationId: row.conversation_id,
+    createdAt: row.created_at,
+  };
 }
 
-export async function saveDiagnosticState(diagState) {
+export async function saveSummative(courseId, data) {
   run(
-    "INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES ('diagnostic', ?, ?)",
-    [JSON.stringify(diagState), Date.now()]
+    `INSERT OR REPLACE INTO summatives
+     (course_id, task, rubric, exemplar, tool, estimated_time, personalized, conversation_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      courseId,
+      JSON.stringify(data.task),
+      JSON.stringify(data.rubric),
+      data.exemplar,
+      data.tool || null,
+      data.estimatedTime || null,
+      data.personalized ? 1 : 0,
+      data.conversationId || null,
+      data.createdAt || Date.now(),
+    ]
   );
 }
 
-export async function clearDiagnosticState() {
-  run("DELETE FROM pending_state WHERE key = 'diagnostic'");
+// -- Summative Attempts -------------------------------------------------------
+
+export async function getSummativeAttempts(courseId) {
+  const rows = queryAll(
+    'SELECT * FROM summative_attempts WHERE course_id = ? ORDER BY attempt_number',
+    [courseId]
+  );
+  return rows.map(r => ({
+    id: r.id,
+    courseId: r.course_id,
+    attemptNumber: r.attempt_number,
+    screenshots: r.screenshots ? JSON.parse(r.screenshots) : [],
+    criteriaScores: r.criteria_scores ? JSON.parse(r.criteria_scores) : [],
+    overallScore: r.overall_score,
+    mastery: !!r.mastery,
+    feedback: r.feedback,
+    nextSteps: r.next_steps ? JSON.parse(r.next_steps) : [],
+    isBaseline: !!r.is_baseline,
+    timestamp: r.timestamp,
+  }));
+}
+
+export async function saveSummativeAttempt(courseId, attempt) {
+  run(
+    `INSERT OR REPLACE INTO summative_attempts
+     (id, course_id, attempt_number, screenshots, criteria_scores, overall_score,
+      mastery, feedback, next_steps, is_baseline, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      attempt.id,
+      courseId,
+      attempt.attemptNumber,
+      JSON.stringify(attempt.screenshots || []),
+      JSON.stringify(attempt.criteriaScores || []),
+      attempt.overallScore ?? null,
+      attempt.mastery ? 1 : 0,
+      attempt.feedback || null,
+      attempt.nextSteps ? JSON.stringify(attempt.nextSteps) : null,
+      attempt.isBaseline ? 1 : 0,
+      attempt.timestamp || Date.now(),
+    ]
+  );
+}
+
+// -- Gap Analysis -------------------------------------------------------------
+
+export async function getGapAnalysis(courseId) {
+  const row = query('SELECT * FROM gap_analysis WHERE course_id = ?', [courseId]);
+  if (!row) return null;
+  return {
+    courseId: row.course_id,
+    gaps: JSON.parse(row.gaps),
+    suggestedFocus: row.suggested_focus ? JSON.parse(row.suggested_focus) : [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function saveGapAnalysis(courseId, data) {
+  run(
+    `INSERT OR REPLACE INTO gap_analysis
+     (course_id, gaps, suggested_focus, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      courseId,
+      JSON.stringify(data.gaps),
+      data.suggestedFocus ? JSON.stringify(data.suggestedFocus) : null,
+      data.createdAt || Date.now(),
+      Date.now(),
+    ]
+  );
+}
+
+// -- Journey ------------------------------------------------------------------
+
+export async function getJourney(courseId) {
+  const row = query('SELECT * FROM journeys WHERE course_id = ?', [courseId]);
+  if (!row) return null;
+  return {
+    courseId: row.course_id,
+    plan: JSON.parse(row.plan),
+    phase: row.phase,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function saveJourney(courseId, data) {
+  run(
+    `INSERT OR REPLACE INTO journeys
+     (course_id, plan, phase, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      courseId,
+      JSON.stringify(data.plan),
+      data.phase || 'summative_setup',
+      data.createdAt || Date.now(),
+      Date.now(),
+    ]
+  );
+}
+
+export async function updateJourneyPhase(courseId, phase) {
+  run(
+    'UPDATE journeys SET phase = ?, updated_at = ? WHERE course_id = ?',
+    [phase, Date.now(), courseId]
+  );
+}
+
+// -- Course Phase (derived) ---------------------------------------------------
+
+export async function getCoursePhase(courseId) {
+  const journey = query('SELECT phase FROM journeys WHERE course_id = ?', [courseId]);
+  if (journey) return journey.phase;
+  // No journey record yet — check if summative exists
+  const summative = query('SELECT course_id FROM summatives WHERE course_id = ?', [courseId]);
+  if (summative) return 'summative_setup';
+  return null;
+}
+
+// -- Conversation state (rubric review + onboarding) --------------------------
+
+export async function getRubricReviewState(courseId) {
+  const key = `rubric-review:${courseId}`;
+  const row = query('SELECT state_json FROM pending_state WHERE key = ?', [key]);
+  return row ? JSON.parse(row.state_json) : null;
+}
+
+export async function saveRubricReviewState(courseId, state) {
+  const key = `rubric-review:${courseId}`;
+  run(
+    'INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
+    [key, JSON.stringify(state), Date.now()]
+  );
+}
+
+export async function clearRubricReviewState(courseId) {
+  run('DELETE FROM pending_state WHERE key = ?', [`rubric-review:${courseId}`]);
 }
 
 export async function getOnboardingState() {
@@ -495,15 +563,20 @@ export async function deleteUnitProgress(unitId) {
     }
   }
   run('DELETE FROM activities WHERE unit_id = ?', [unitId]);
-
-  const diag = query('SELECT conversation_id FROM diagnostics WHERE unit_id = ?', [unitId]);
-  if (diag?.conversation_id) {
-    run('DELETE FROM messages WHERE conversation_id = ?', [diag.conversation_id]);
-    run('DELETE FROM conversations WHERE id = ?', [diag.conversation_id]);
-  }
-  run('DELETE FROM diagnostics WHERE unit_id = ?', [unitId]);
-  run('DELETE FROM learning_plans WHERE unit_id = ?', [unitId]);
   run('DELETE FROM units WHERE unit_id = ?', [unitId]);
+}
+
+export async function deleteCourseProgress(courseId) {
+  // Delete summative data
+  run('DELETE FROM summative_attempts WHERE course_id = ?', [courseId]);
+  run('DELETE FROM summatives WHERE course_id = ?', [courseId]);
+  run('DELETE FROM gap_analysis WHERE course_id = ?', [courseId]);
+  run('DELETE FROM journeys WHERE course_id = ?', [courseId]);
+  // Delete all units for this course
+  const units = queryAll('SELECT unit_id FROM units WHERE course_id = ?', [courseId]);
+  for (const u of units) {
+    await deleteUnitProgress(u.unit_id);
+  }
 }
 
 // -- IndexedDB for binary assets (screenshots) --------------------------------

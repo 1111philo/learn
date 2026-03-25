@@ -32,15 +32,7 @@ function queryAll(sql, params = []) {
   return rows;
 }
 
-// Mock db.js exports so storage.js picks them up
-const dbExports = { run, query, queryAll, persist: async () => {} };
-
-// Dynamic import with module mock — we inject our db functions
-// Since storage.js imports from './db.js', we use a loader trick:
-// We'll just re-implement the storage functions inline using our query API.
-// This tests the SQL logic directly.
-
-// -- Schema (copied from db.js) -----------------------------------------------
+// -- Schema (matches db.js) ---------------------------------------------------
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -48,26 +40,22 @@ CREATE TABLE IF NOT EXISTS preferences (id INTEGER PRIMARY KEY CHECK (id = 1), d
 CREATE TABLE IF NOT EXISTS profile (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS profile_summary (id INTEGER PRIMARY KEY CHECK (id = 1), summary TEXT NOT NULL DEFAULT '', updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS courses (course_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, depends_on TEXT, is_user_created INTEGER DEFAULT 0, created_at INTEGER);
-CREATE TABLE IF NOT EXISTS units (unit_id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(course_id), name TEXT NOT NULL, description TEXT, depends_on TEXT, sequence INTEGER, status TEXT DEFAULT 'not_started', current_activity_index INTEGER DEFAULT 0, started_at INTEGER, completed_at INTEGER, final_work_product_url TEXT);
-CREATE TABLE IF NOT EXISTS learning_plans (unit_id TEXT PRIMARY KEY REFERENCES units(unit_id), final_work_product_description TEXT, work_product_tool TEXT, data TEXT, created_at INTEGER);
+CREATE TABLE IF NOT EXISTS units (unit_id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(course_id), name TEXT NOT NULL, description TEXT, depends_on TEXT, sequence INTEGER, status TEXT DEFAULT 'not_started', current_activity_index INTEGER DEFAULT 0, started_at INTEGER, completed_at INTEGER, final_work_product_url TEXT, journey_order INTEGER, rubric_criteria TEXT);
+CREATE TABLE IF NOT EXISTS summatives (course_id TEXT PRIMARY KEY, task TEXT NOT NULL, rubric TEXT NOT NULL, exemplar TEXT NOT NULL, tool TEXT, estimated_time INTEGER, personalized INTEGER DEFAULT 0, conversation_id TEXT, created_at INTEGER);
+CREATE TABLE IF NOT EXISTS summative_attempts (id TEXT PRIMARY KEY, course_id TEXT NOT NULL, attempt_number INTEGER NOT NULL, screenshots TEXT, criteria_scores TEXT, overall_score REAL, mastery INTEGER DEFAULT 0, feedback TEXT, next_steps TEXT, is_baseline INTEGER DEFAULT 0, timestamp INTEGER);
+CREATE INDEX IF NOT EXISTS idx_summative_attempts_course ON summative_attempts(course_id, attempt_number);
+CREATE TABLE IF NOT EXISTS gap_analysis (course_id TEXT PRIMARY KEY, gaps TEXT NOT NULL, suggested_focus TEXT, created_at INTEGER, updated_at INTEGER);
+CREATE TABLE IF NOT EXISTS journeys (course_id TEXT PRIMARY KEY, plan TEXT NOT NULL, phase TEXT DEFAULT 'summative_setup', created_at INTEGER, updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, unit_id TEXT REFERENCES units(unit_id), type TEXT NOT NULL, activity_id TEXT, created_at INTEGER);
 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL REFERENCES conversations(id), role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, timestamp);
-CREATE TABLE IF NOT EXISTS activities (id TEXT PRIMARY KEY, unit_id TEXT NOT NULL REFERENCES units(unit_id), type TEXT NOT NULL, goal TEXT NOT NULL, instruction TEXT, tips TEXT, sequence INTEGER, conversation_id TEXT REFERENCES conversations(id));
-CREATE TABLE IF NOT EXISTS diagnostics (unit_id TEXT PRIMARY KEY REFERENCES units(unit_id), conversation_id TEXT REFERENCES conversations(id), instruction TEXT, score REAL, feedback TEXT, strengths TEXT, improvements TEXT, recommendation TEXT, passed INTEGER, skip_for TEXT);
-CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL REFERENCES activities(id), unit_id TEXT NOT NULL, screenshot_key TEXT, url TEXT, score REAL, feedback TEXT, strengths TEXT, improvements TEXT, recommendation TEXT, timestamp INTEGER);
+CREATE TABLE IF NOT EXISTS activities (id TEXT PRIMARY KEY, unit_id TEXT NOT NULL REFERENCES units(unit_id), type TEXT NOT NULL, goal TEXT NOT NULL, instruction TEXT, tips TEXT, sequence INTEGER, conversation_id TEXT REFERENCES conversations(id), rubric_criteria TEXT);
+CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL REFERENCES activities(id), unit_id TEXT NOT NULL, screenshot_key TEXT, url TEXT, score REAL, feedback TEXT, strengths TEXT, improvements TEXT, recommendation TEXT, timestamp INTEGER, rubric_criteria_scores TEXT);
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
 CREATE TABLE IF NOT EXISTS work_products (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id TEXT NOT NULL, course_name TEXT, url TEXT, completed_at INTEGER);
 CREATE TABLE IF NOT EXISTS auth (id INTEGER PRIMARY KEY CHECK (id = 1), access_token TEXT, refresh_token TEXT, user_json TEXT);
 CREATE TABLE IF NOT EXISTS pending_state (key TEXT PRIMARY KEY, state_json TEXT, updated_at INTEGER);
-CREATE TABLE IF NOT EXISTS dev_log (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, data TEXT, timestamp INTEGER);
 `;
-
-// -- Inline storage functions (same SQL logic as storage.js) ------------------
-
-// We import storage.js but override the db dependency. Since that's hard with
-// static ESM, we instead test by calling the SQL directly — this validates
-// the schema and the query patterns that storage.js uses.
 
 beforeEach(async () => {
   if (!SQL) SQL = await initSqlJs();
@@ -85,6 +73,10 @@ describe('SQLite schema', () => {
     const names = tables.map(t => t.name);
     assert.ok(names.includes('settings'));
     assert.ok(names.includes('units'));
+    assert.ok(names.includes('summatives'));
+    assert.ok(names.includes('summative_attempts'));
+    assert.ok(names.includes('gap_analysis'));
+    assert.ok(names.includes('journeys'));
     assert.ok(names.includes('conversations'));
     assert.ok(names.includes('messages'));
     assert.ok(names.includes('activities'));
@@ -130,49 +122,20 @@ describe('profile', () => {
 describe('unit progress round-trip', () => {
   const unitId = 'foundations-0-basic-wordpress';
 
-  function saveUnitProgress(unitId, progress) {
+  function saveProgress(unitId, progress) {
     run('BEGIN TRANSACTION');
-    const courseId = 'foundations';
 
     run(
       `INSERT OR REPLACE INTO units
        (unit_id, course_id, name, description, sequence, status,
-        current_activity_index, started_at, completed_at, final_work_product_url)
-       VALUES (?, ?, '', '', 0, ?, ?, ?, ?, ?)`,
-      [unitId, courseId, progress.status, progress.currentActivityIndex || 0,
-       progress.startedAt || null, progress.completedAt || null, progress.finalWorkProductUrl || null]
+        current_activity_index, started_at, completed_at, final_work_product_url,
+        journey_order, rubric_criteria)
+       VALUES (?, ?, '', '', 0, ?, ?, ?, ?, ?, ?, ?)`,
+      [unitId, 'foundations', progress.status, progress.currentActivityIndex || 0,
+       progress.startedAt || null, progress.completedAt || null, progress.finalWorkProductUrl || null,
+       progress.journeyOrder ?? null,
+       progress.rubricCriteria ? JSON.stringify(progress.rubricCriteria) : null]
     );
-
-    if (progress.learningPlan) {
-      run(
-        `INSERT OR REPLACE INTO learning_plans (unit_id, final_work_product_description, work_product_tool, data, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [unitId, progress.learningPlan.finalWorkProductDescription, progress.learningPlan.workProductTool,
-         JSON.stringify(progress.learningPlan), Date.now()]
-      );
-    }
-
-    if (progress.diagnostic) {
-      const diagConvId = `diag-${unitId}`;
-      run('INSERT OR IGNORE INTO conversations (id, unit_id, type, created_at) VALUES (?, ?, ?, ?)',
-        [diagConvId, unitId, 'diagnostic', Date.now()]);
-      run('DELETE FROM messages WHERE conversation_id = ?', [diagConvId]);
-      for (const m of progress.diagnostic.messages || []) {
-        run('INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?)',
-          [diagConvId, m.role, m.content, m.timestamp || Date.now()]);
-      }
-      const result = progress.diagnostic.result;
-      run(
-        `INSERT OR REPLACE INTO diagnostics
-         (unit_id, conversation_id, instruction, score, feedback, strengths, improvements, recommendation, passed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [unitId, diagConvId, progress.diagnostic.instruction,
-         result?.score ?? null, result?.feedback || null,
-         result?.strengths ? JSON.stringify(result.strengths) : null,
-         result?.improvements ? JSON.stringify(result.improvements) : null,
-         result?.recommendation || null, result?.passed ? 1 : 0]
-      );
-    }
 
     const acts = progress.activities || [];
     for (let i = 0; i < acts.length; i++) {
@@ -187,63 +150,34 @@ describe('unit progress round-trip', () => {
           [convId, m.role, m.content, m.timestamp || Date.now()]);
       }
       run(
-        `INSERT OR REPLACE INTO activities (id, unit_id, type, goal, instruction, tips, sequence, conversation_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [actId, unitId, a.type, a.goal, a.instruction || null, a.tips || null, i, convId]
+        `INSERT OR REPLACE INTO activities (id, unit_id, type, goal, instruction, tips, sequence, conversation_id, rubric_criteria)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [actId, unitId, a.type, a.goal, a.instruction || null, a.tips || null, i, convId,
+         a.rubricCriteria ? JSON.stringify(a.rubricCriteria) : null]
       );
     }
 
     for (const d of progress.drafts || []) {
       run(
         `INSERT OR REPLACE INTO drafts
-         (id, activity_id, unit_id, screenshot_key, url, score, feedback, strengths, improvements, recommendation, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, activity_id, unit_id, screenshot_key, url, score, feedback,
+          strengths, improvements, recommendation, timestamp, rubric_criteria_scores)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [d.id, d.activityId, unitId, d.screenshotKey || null, d.url || null,
          d.score ?? null, d.feedback || null,
          d.strengths ? JSON.stringify(d.strengths) : null,
          d.improvements ? JSON.stringify(d.improvements) : null,
-         d.recommendation || null, d.timestamp || Date.now()]
+         d.recommendation || null, d.timestamp || Date.now(),
+         d.rubricCriteriaScores ? JSON.stringify(d.rubricCriteriaScores) : null]
       );
     }
 
     run('COMMIT');
   }
 
-  function getUnitProgress(unitId) {
+  function getProgress(unitId) {
     const unitRow = query('SELECT * FROM units WHERE unit_id = ?', [unitId]);
     if (!unitRow) return null;
-
-    const planRow = query('SELECT * FROM learning_plans WHERE unit_id = ?', [unitId]);
-    let learningPlan = null;
-    if (planRow) {
-      const planData = planRow.data ? JSON.parse(planRow.data) : null;
-      learningPlan = {
-        activities: planData?.activities || [],
-        finalWorkProductDescription: planRow.final_work_product_description,
-        workProductTool: planRow.work_product_tool,
-      };
-    }
-
-    const diagRow = query('SELECT * FROM diagnostics WHERE unit_id = ?', [unitId]);
-    let diagnostic = null;
-    if (diagRow) {
-      const diagMessages = diagRow.conversation_id
-        ? queryAll('SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY timestamp',
-            [diagRow.conversation_id])
-        : [];
-      diagnostic = {
-        instruction: diagRow.instruction,
-        messages: diagMessages.map(m => ({ role: m.role, content: m.content })),
-        result: diagRow.score != null ? {
-          score: diagRow.score,
-          feedback: diagRow.feedback,
-          strengths: diagRow.strengths ? JSON.parse(diagRow.strengths) : [],
-          improvements: diagRow.improvements ? JSON.parse(diagRow.improvements) : [],
-          recommendation: diagRow.recommendation,
-          passed: !!diagRow.passed,
-        } : null,
-      };
-    }
 
     const activityRows = queryAll('SELECT * FROM activities WHERE unit_id = ? ORDER BY sequence', [unitId]);
     const activities = activityRows.map(a => {
@@ -253,6 +187,7 @@ describe('unit progress round-trip', () => {
         : [];
       return {
         id: a.id, type: a.type, goal: a.goal, instruction: a.instruction, tips: a.tips,
+        rubricCriteria: a.rubric_criteria ? JSON.parse(a.rubric_criteria) : null,
         messages: msgs.map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp })),
       };
     });
@@ -264,55 +199,37 @@ describe('unit progress round-trip', () => {
       strengths: d.strengths ? JSON.parse(d.strengths) : [],
       improvements: d.improvements ? JSON.parse(d.improvements) : [],
       score: d.score, recommendation: d.recommendation, timestamp: d.timestamp,
+      rubricCriteriaScores: d.rubric_criteria_scores ? JSON.parse(d.rubric_criteria_scores) : null,
     }));
 
     return {
-      unitId: unitRow.unit_id, status: unitRow.status,
-      currentActivityIndex: unitRow.current_activity_index,
-      diagnostic, learningPlan, activities, drafts,
+      unitId: unitRow.unit_id, courseId: unitRow.course_id,
+      status: unitRow.status, currentActivityIndex: unitRow.current_activity_index,
+      journeyOrder: unitRow.journey_order,
+      rubricCriteria: unitRow.rubric_criteria ? JSON.parse(unitRow.rubric_criteria) : null,
+      activities, drafts,
       startedAt: unitRow.started_at, completedAt: unitRow.completed_at,
       finalWorkProductUrl: unitRow.final_work_product_url,
     };
   }
 
   it('returns null for non-existent unit', () => {
-    assert.equal(getUnitProgress('no-such-unit'), null);
+    assert.equal(getProgress('no-such-unit'), null);
   });
 
   it('round-trips a full unit progress blob', () => {
     const now = Date.now();
     const progress = {
-      unitId,
       status: 'in_progress',
       currentActivityIndex: 1,
-      diagnostic: {
-        instruction: 'Tell me about your WordPress experience.',
-        messages: [
-          { role: 'assistant', content: 'What do you know about WordPress?', timestamp: now - 5000 },
-          { role: 'user', content: 'I have used it a bit.', timestamp: now - 4000 },
-        ],
-        result: {
-          score: 0.6,
-          feedback: 'Moderate familiarity',
-          strengths: ['basic navigation'],
-          improvements: ['theme customization'],
-          recommendation: 'continue',
-          passed: false,
-        },
-      },
-      learningPlan: {
-        activities: [
-          { id: 'a1', type: 'explore', goal: 'Explore the WP dashboard' },
-          { id: 'a2', type: 'apply', goal: 'Customize a theme' },
-        ],
-        finalWorkProductDescription: 'A customized WordPress page',
-        workProductTool: 'WordPress',
-      },
+      journeyOrder: 0,
+      rubricCriteria: ['Professional communication', 'Technical proficiency'],
       activities: [
         {
           id: 'a1', type: 'explore', goal: 'Explore the WP dashboard',
           instruction: 'Navigate to wp-admin and explore.',
           tips: 'Look at the sidebar menu.',
+          rubricCriteria: ['Technical proficiency'],
           messages: [
             { role: 'user', content: 'Where is the theme editor?', timestamp: now - 1000 },
             { role: 'assistant', content: 'Go to Appearance > Editor.', timestamp: now - 500 },
@@ -322,21 +239,18 @@ describe('unit progress round-trip', () => {
           id: 'a2', type: 'apply', goal: 'Customize a theme',
           instruction: 'Change the site title and colors.',
           tips: 'Use the Customizer.',
+          rubricCriteria: ['Professional communication', 'Technical proficiency'],
           messages: [],
         },
       ],
       drafts: [
         {
-          id: 'draft-1000',
-          activityId: 'a1',
+          id: 'draft-1000', activityId: 'a1',
           screenshotKey: 'activity-a1-draft-1000',
           url: 'https://example.com/wp-admin',
-          feedback: 'Good start',
-          strengths: ['found the menu'],
-          improvements: ['explore more'],
-          score: 0.7,
-          recommendation: 'advance',
-          timestamp: now,
+          feedback: 'Good start', strengths: ['found the menu'], improvements: ['explore more'],
+          score: 0.7, recommendation: 'advance', timestamp: now,
+          rubricCriteriaScores: [{ criterion: 'Technical proficiency', level: 'developing', score: 0.5 }],
         },
       ],
       startedAt: now - 10000,
@@ -344,31 +258,22 @@ describe('unit progress round-trip', () => {
       finalWorkProductUrl: null,
     };
 
-    saveUnitProgress(unitId, progress);
-    const loaded = getUnitProgress(unitId);
+    saveProgress(unitId, progress);
+    const loaded = getProgress(unitId);
 
     // Core fields
     assert.equal(loaded.unitId, unitId);
+    assert.equal(loaded.courseId, 'foundations');
     assert.equal(loaded.status, 'in_progress');
     assert.equal(loaded.currentActivityIndex, 1);
-    assert.equal(loaded.startedAt, now - 10000);
-    assert.equal(loaded.completedAt, null);
-
-    // Diagnostic
-    assert.equal(loaded.diagnostic.instruction, progress.diagnostic.instruction);
-    assert.equal(loaded.diagnostic.messages.length, 2);
-    assert.equal(loaded.diagnostic.messages[0].role, 'assistant');
-    assert.equal(loaded.diagnostic.result.score, 0.6);
-    assert.deepEqual(loaded.diagnostic.result.strengths, ['basic navigation']);
-
-    // Learning plan
-    assert.equal(loaded.learningPlan.activities.length, 2);
-    assert.equal(loaded.learningPlan.finalWorkProductDescription, 'A customized WordPress page');
+    assert.equal(loaded.journeyOrder, 0);
+    assert.deepEqual(loaded.rubricCriteria, ['Professional communication', 'Technical proficiency']);
 
     // Activities
     assert.equal(loaded.activities.length, 2);
     assert.equal(loaded.activities[0].id, 'a1');
     assert.equal(loaded.activities[0].instruction, 'Navigate to wp-admin and explore.');
+    assert.deepEqual(loaded.activities[0].rubricCriteria, ['Technical proficiency']);
     assert.equal(loaded.activities[0].messages.length, 2);
     assert.equal(loaded.activities[0].messages[1].content, 'Go to Appearance > Editor.');
     assert.equal(loaded.activities[1].messages.length, 0);
@@ -378,37 +283,120 @@ describe('unit progress round-trip', () => {
     assert.equal(loaded.drafts[0].activityId, 'a1');
     assert.equal(loaded.drafts[0].score, 0.7);
     assert.deepEqual(loaded.drafts[0].strengths, ['found the menu']);
-    assert.equal(loaded.drafts[0].screenshotKey, 'activity-a1-draft-1000');
+    assert.deepEqual(loaded.drafts[0].rubricCriteriaScores, [{ criterion: 'Technical proficiency', level: 'developing', score: 0.5 }]);
   });
 
   it('overwrites existing progress on re-save', () => {
-    saveUnitProgress(unitId, {
+    saveProgress(unitId, {
       status: 'in_progress', currentActivityIndex: 0,
-      learningPlan: null, diagnostic: null, activities: [], drafts: [],
+      activities: [], drafts: [],
       startedAt: 1000, completedAt: null, finalWorkProductUrl: null,
     });
 
-    saveUnitProgress(unitId, {
+    saveProgress(unitId, {
       status: 'completed', currentActivityIndex: 2,
-      learningPlan: null, diagnostic: null, activities: [], drafts: [],
+      activities: [], drafts: [],
       startedAt: 1000, completedAt: 2000, finalWorkProductUrl: 'https://example.com',
     });
 
-    const loaded = getUnitProgress(unitId);
+    const loaded = getProgress(unitId);
     assert.equal(loaded.status, 'completed');
     assert.equal(loaded.completedAt, 2000);
     assert.equal(loaded.finalWorkProductUrl, 'https://example.com');
   });
+});
 
-  it('handles progress with no diagnostic', () => {
-    saveUnitProgress(unitId, {
-      status: 'in_progress', currentActivityIndex: 0,
-      learningPlan: null, diagnostic: null, activities: [], drafts: [],
-      startedAt: 1000, completedAt: null, finalWorkProductUrl: null,
-    });
+describe('summatives', () => {
+  it('round-trips a summative', () => {
+    const courseId = 'foundations';
+    const summative = {
+      task: { steps: [{ instruction: 'Create a portfolio page' }] },
+      rubric: [{ name: 'Communication', levels: { beginning: 'x', developing: 'y', proficient: 'z', mastery: 'w' } }],
+      exemplar: 'A well-crafted portfolio page',
+      tool: 'Google Docs',
+      estimatedTime: 30,
+      personalized: false,
+    };
 
-    const loaded = getUnitProgress(unitId);
-    assert.equal(loaded.diagnostic, null);
+    run(
+      `INSERT INTO summatives (course_id, task, rubric, exemplar, tool, estimated_time, personalized, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [courseId, JSON.stringify(summative.task), JSON.stringify(summative.rubric),
+       summative.exemplar, summative.tool, summative.estimatedTime, 0, Date.now()]
+    );
+
+    const row = query('SELECT * FROM summatives WHERE course_id = ?', [courseId]);
+    assert.equal(row.course_id, courseId);
+    assert.deepEqual(JSON.parse(row.task), summative.task);
+    assert.deepEqual(JSON.parse(row.rubric), summative.rubric);
+    assert.equal(row.exemplar, summative.exemplar);
+    assert.equal(row.tool, 'Google Docs');
+  });
+});
+
+describe('summative attempts', () => {
+  it('stores and retrieves ordered attempts', () => {
+    const courseId = 'foundations';
+
+    run(
+      `INSERT INTO summative_attempts (id, course_id, attempt_number, screenshots, criteria_scores, overall_score, mastery, feedback, is_baseline, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['att-1', courseId, 1, JSON.stringify([{ screenshot_key: 's1', step_index: 0 }]),
+       JSON.stringify([{ criterion: 'Comm', level: 'developing', score: 0.5 }]),
+       0.5, 0, 'Good baseline', 1, 1000]
+    );
+
+    run(
+      `INSERT INTO summative_attempts (id, course_id, attempt_number, screenshots, criteria_scores, overall_score, mastery, feedback, is_baseline, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['att-2', courseId, 2, JSON.stringify([{ screenshot_key: 's2', step_index: 0 }]),
+       JSON.stringify([{ criterion: 'Comm', level: 'proficient', score: 0.8 }]),
+       0.8, 1, 'Mastery achieved', 0, 2000]
+    );
+
+    const rows = queryAll('SELECT * FROM summative_attempts WHERE course_id = ? ORDER BY attempt_number', [courseId]);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].is_baseline, 1);
+    assert.equal(rows[1].mastery, 1);
+    assert.equal(rows[1].overall_score, 0.8);
+  });
+});
+
+describe('gap analysis', () => {
+  it('round-trips gap analysis', () => {
+    const courseId = 'foundations';
+    const gaps = [
+      { criterion: 'Technical proficiency', currentLevel: 'beginning', targetLevel: 'proficient', priority: 'high' },
+    ];
+
+    run(
+      'INSERT INTO gap_analysis (course_id, gaps, suggested_focus, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      [courseId, JSON.stringify(gaps), JSON.stringify(['tech skills']), Date.now(), Date.now()]
+    );
+
+    const row = query('SELECT * FROM gap_analysis WHERE course_id = ?', [courseId]);
+    assert.deepEqual(JSON.parse(row.gaps), gaps);
+    assert.deepEqual(JSON.parse(row.suggested_focus), ['tech skills']);
+  });
+});
+
+describe('journeys', () => {
+  it('round-trips a journey', () => {
+    const courseId = 'foundations';
+    const plan = {
+      units: [
+        { unitId: 'foundations-0-basic-wordpress', activities: [{ type: 'explore', goal: 'test' }] },
+      ],
+    };
+
+    run(
+      'INSERT INTO journeys (course_id, plan, phase, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      [courseId, JSON.stringify(plan), 'formative_learning', Date.now(), Date.now()]
+    );
+
+    const row = query('SELECT * FROM journeys WHERE course_id = ?', [courseId]);
+    assert.deepEqual(JSON.parse(row.plan), plan);
+    assert.equal(row.phase, 'formative_learning');
   });
 });
 
@@ -459,12 +447,12 @@ describe('auth (singleton)', () => {
 });
 
 describe('pending state', () => {
-  it('stores and retrieves diagnostic state', () => {
-    const state = { phase: 'activity', messages: [{ role: 'user', content: 'hi' }] };
-    run("INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES ('diagnostic', ?, ?)",
-      [JSON.stringify(state), Date.now()]);
+  it('stores and retrieves rubric review state', () => {
+    const state = { messages: [{ role: 'user', content: 'Can the rubric include X?' }] };
+    run('INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
+      ['rubric-review:foundations', JSON.stringify(state), Date.now()]);
 
-    const row = query("SELECT state_json FROM pending_state WHERE key = 'diagnostic'");
+    const row = query("SELECT state_json FROM pending_state WHERE key = 'rubric-review:foundations'");
     assert.deepEqual(JSON.parse(row.state_json), state);
   });
 
