@@ -195,16 +195,24 @@ PRIVACY.md               Privacy policy
     staging.yml          Release candidate (npm ci + build + zip dist/)
 ```
 
+## Documentation
+Detailed docs live in `docs/` and are linked from `README.md`:
+- `docs/architecture.md` -- agents overview, storage, content hierarchy, data flow, file structure
+- `docs/agent-lifecycle.md` -- full Phase 0-7 walkthrough of every agent call with inputs, outputs, and validation
+- `docs/cloud-sync.md` -- auth, remote storage, AI provider routing
+- `docs/releases.md` -- CI/CD, versioning, branch protection, permissions, secrets, course JSON structure
+- `CONTRIBUTING.md` -- dev setup, workflow, guidelines, submitting changes
+
 ## Rules for every change
-1. Update README.md if you add, remove, or rename any user-facing feature, file, permission, or install step.
-2. Update CONTRIBUTING.md if you change the development workflow.
-3. Keep this CLAUDE.md in sync with the actual file structure and architecture.
-4. If you add a new course field, update the "Course JSON structure" section in README.md.
+1. Update `README.md` if you add, remove, or rename any user-facing feature.
+2. Update the relevant doc in `docs/` if you change architecture, agents, storage, sync, or CI/CD.
+3. Update `CONTRIBUTING.md` if you change the development workflow.
+4. Keep this `CLAUDE.md` in sync with the actual architecture. It is the authoritative reference for AI assistants.
 5. Accessibility is non-negotiable: every interactive element must be keyboard-operable and have an accessible name.
 6. When editing agent prompts, test with a real API key to verify JSON output format.
 7. Never commit API keys or secrets.
 8. Activities must be completable entirely in the browser -- never reference desktop apps, terminals, or file system operations.
 9. Do not manually bump the version in `manifest.json` -- the CI/CD workflows handle versioning automatically. During RC builds, `manifest.json` gains a 4-segment `version` and a `version_name` field; these are stripped on production release.
 10. Run `npm test` before submitting PRs. Tests must pass in CI on both `staging` and `main`.
-11. **Data schema changes:** If you add, remove, rename, or restructure any SQLite table or column, update the schema DDL in `js/db.js` (uses `CREATE TABLE IF NOT EXISTS` so new tables are added on next launch). Update any affected getter/setter functions in `js/storage.js` to handle the new shape. Update `mergeProfile()` in `src/lib/profileQueue.js` if the learner profile shape changed.
+11. **Data schema changes:** If you add, remove, rename, or restructure any SQLite table or column, update the `CREATE TABLE` DDL and `MIGRATIONS` array in `js/db.js`. Update any affected getter/setter functions in `js/storage.js` to handle the new shape. Update `mergeProfile()` in `src/lib/profileQueue.js` if the learner profile shape changed.
 12. **Privacy:** Never commit API keys or secrets. No telemetry is collected. Screenshots and user data stay on-device (or on the user's learn-service account if logged in).
