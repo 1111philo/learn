@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS units (
   current_activity_index INTEGER DEFAULT 0,
   started_at INTEGER,
   completed_at INTEGER,
-  final_work_product_url TEXT
+  final_work_product_url TEXT,
+  journey_order INTEGER,
+  rubric_criteria TEXT
 );
 
 CREATE TABLE IF NOT EXISTS summatives (
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS summatives (
   estimated_time INTEGER,
   personalized INTEGER DEFAULT 0,
   conversation_id TEXT,
+  course_intro TEXT,
+  summary_for_learner TEXT,
   created_at INTEGER
 );
 
@@ -83,6 +87,7 @@ CREATE TABLE IF NOT EXISTS summative_attempts (
   feedback TEXT,
   next_steps TEXT,
   is_baseline INTEGER DEFAULT 0,
+  summary_for_learner TEXT,
   timestamp INTEGER
 );
 
@@ -128,7 +133,8 @@ CREATE TABLE IF NOT EXISTS activities (
   instruction TEXT,
   tips TEXT,
   sequence INTEGER,
-  conversation_id TEXT REFERENCES conversations(id)
+  conversation_id TEXT REFERENCES conversations(id),
+  rubric_criteria TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_summative_attempts_course
@@ -145,7 +151,8 @@ CREATE TABLE IF NOT EXISTS drafts (
   strengths TEXT,
   improvements TEXT,
   recommendation TEXT,
-  timestamp INTEGER
+  timestamp INTEGER,
+  rubric_criteria_scores TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
