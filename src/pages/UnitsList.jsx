@@ -4,7 +4,8 @@ import { useApp } from '../contexts/AppContext.jsx';
 import { COURSE_PHASES } from '../lib/constants.js';
 import {
   getSummative, getCoursePhase, getJourney, getSummativeAttempts,
-  getRubricReviewState,
+  getRubricReviewState, getSummativeCaptureState, saveSummativeCaptureState,
+  clearSummativeCaptureState, getScreenshot,
 } from '../../js/storage.js';
 import {
   initCourse, sendRubricReviewMessage, confirmRubric,
@@ -44,6 +45,7 @@ export default function UnitsList() {
         onConfirm={async () => {
           const { deleteCourseProgress } = await import('../../js/storage.js');
           await deleteCourseProgress(courseGroupId);
+          await clearSummativeCaptureState(courseGroupId);
           // Clear unit progress from app state
           const unitIds = (group.units || []).map(u => u.unitId);
           for (const uid of unitIds) dispatch({ type: 'RESET_UNIT', unitId: uid });
@@ -82,6 +84,20 @@ export default function UnitsList() {
         setAttempts(a);
         const rs = await getRubricReviewState(courseGroupId);
         if (rs?.messages) setReviewMessages(rs.messages);
+        // Restore in-progress summative captures (survives panel reload)
+        const cs = await getSummativeCaptureState(courseGroupId);
+        if (cs?.captures?.length) {
+          // Reload screenshot dataUrls from IndexedDB
+          const restored = [];
+          for (const cap of cs.captures) {
+            const dataUrl = await getScreenshot(cap.screenshotKey);
+            if (dataUrl) restored.push({ ...cap, dataUrl });
+          }
+          if (restored.length && !cancelled) {
+            setCaptures(restored);
+            setCurrentStep(restored.length);
+          }
+        }
       } else {
         setLoading('summative');
         try {
@@ -123,6 +139,7 @@ export default function UnitsList() {
 
   const handleSkipReview = useCallback(async () => {
     await confirmRubric(courseGroupId);
+    await clearSummativeCaptureState(courseGroupId);
     setCurrentStep(0);
     setCaptures([]);
     setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
@@ -136,10 +153,16 @@ export default function UnitsList() {
       const newCaptures = [...captures, capture];
       setCaptures(newCaptures);
 
+      // Persist captures so they survive panel reload
+      await saveSummativeCaptureState(courseGroupId, {
+        captures: newCaptures.map(c => ({ screenshotKey: c.screenshotKey, stepIndex: c.stepIndex, url: c.url })),
+      });
+
       const totalSteps = summative?.task?.steps?.length || 0;
 
       if (newCaptures.length === totalSteps) {
         // All steps captured — submit for assessment
+        await clearSummativeCaptureState(courseGroupId);
         setLoading('assessing');
         const { attempt, mastery } = await submitSummativeAttempt(courseGroupId, group, newCaptures);
         setAttempts(prev => [...prev, attempt]);
@@ -175,6 +198,7 @@ export default function UnitsList() {
 
   const handleRetake = useCallback(async () => {
     await requestSummativeRetake(courseGroupId);
+    await clearSummativeCaptureState(courseGroupId);
     setCaptures([]);
     setCurrentStep(0);
     setPhase(COURSE_PHASES.SUMMATIVE_RETAKE);

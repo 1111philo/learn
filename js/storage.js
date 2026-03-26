@@ -523,6 +523,26 @@ export async function clearRubricReviewState(courseId) {
   run('DELETE FROM pending_state WHERE key = ?', [`rubric-review:${courseId}`]);
 }
 
+// -- Summative capture state (survives panel reload) --------------------------
+
+export async function getSummativeCaptureState(courseId) {
+  const key = `summative-capture:${courseId}`;
+  const row = query('SELECT state_json FROM pending_state WHERE key = ?', [key]);
+  return row ? JSON.parse(row.state_json) : null;
+}
+
+export async function saveSummativeCaptureState(courseId, state) {
+  const key = `summative-capture:${courseId}`;
+  run(
+    'INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
+    [key, JSON.stringify(state), Date.now()]
+  );
+}
+
+export async function clearSummativeCaptureState(courseId) {
+  run('DELETE FROM pending_state WHERE key = ?', [`summative-capture:${courseId}`]);
+}
+
 export async function getOnboardingState() {
   const row = query("SELECT state_json FROM pending_state WHERE key = 'onboarding'");
   return row ? JSON.parse(row.state_json) : null;
