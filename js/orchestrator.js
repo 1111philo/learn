@@ -182,7 +182,7 @@ export async function generateSummative(course, allObjectives, profileSummary, p
  * screenshots is an array of { dataUrl, stepIndex }.
  */
 export async function assessSummativeAttempt(course, summative, screenshots, priorAttempts, profileSummary) {
-  const systemPrompt = await loadPrompt('diagnostic-assessment');
+  const systemPrompt = await loadPrompt('summative-assessment');
 
   const contentParts = [];
 
@@ -307,7 +307,7 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
 /**
  * Generate the next formative activity's instruction.
  */
-export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope) {
+export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope, summativeContext) {
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
@@ -319,7 +319,10 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
     workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
     learnerProfile: profileSummary || 'No profile yet',
-    courseScope: courseScope || null
+    courseScope: courseScope || null,
+    exemplar: summativeContext?.exemplar || null,
+    summativeTask: summativeContext?.task?.description || null,
+    fullRubric: summativeContext?.rubric || null,
   });
 
   const callAgent = async () => {

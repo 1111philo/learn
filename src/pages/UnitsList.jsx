@@ -216,7 +216,7 @@ export default function UnitsList() {
       {phase === COURSE_PHASES.RUBRIC_REVIEW && summative && (
         <ChatArea>
           <div className="msg msg-response" style={{ fontSize: '0.85rem' }}>
-            Take this assessment. We'll use it to build your learning path.
+            {summative.courseIntro || 'Take this assessment. We\'ll use it to build your learning path.'}
           </div>
           <div className="chat-section-heading" role="separator">Assessment Overview</div>
           <SummativeCard summative={summative} />

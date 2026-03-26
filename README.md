@@ -6,15 +6,15 @@ An agentic learning app that runs entirely in the Chrome side panel. Built by [1
 
 ## What it does
 
-1111 Learn guides learners through predefined courses using nine AI agents powered by the Claude API. Each course produces one final work product. All data stays on the user's device.
+1111 Learn guides learners through predefined courses using eleven AI agents powered by the Claude API. Each course produces one final work product. All data stays on the user's device.
 
 ### Key features
 
 - **Conversational onboarding** -- four-step first-run flow (name → API key → multi-turn "about you" chat → data consent) that builds a learner profile through conversation
-- **Skills check** -- a multi-turn diagnostic conversation before every new course; the AI asks follow-up questions to gauge depth, then personalizes the learning plan
-- **AI-powered learning** -- nine Claude agents handle onboarding, diagnostics, course creation, activity generation, assessment, Q&A, and learner profile updates
+- **Assessment-backward design** -- a summative assessment is generated first, the learner takes it as a baseline, a gap analysis drives personalized formative activities, and the learner retakes the summative to demonstrate mastery
+- **AI-powered learning** -- eleven Claude agents handle onboarding, summative generation/review/assessment, gap analysis, journey creation, activity generation/assessment, Q&A, and learner profile updates
 - **Course catalog** with prerequisite checking
-- **Personalized activity generation** adapted to the learner's profile, prior work, and diagnostic result
+- **Personalized activity generation** adapted to the learner's profile, prior work, gap analysis, and summative exemplar
 - **AI assessment with vision** -- the Assessment Agent analyzes screenshots of your work and provides structured feedback with strengths, improvements, score, and a recommendation
 - **Output validation** -- deterministic validators check every agent response for safety, format compliance, and activity constraints (browser-only, single page, viewport-sized output, activity-to-objective count match) before showing it to the learner
 - **Learner profile** -- tracks your strengths, weaknesses, preferences, and learning patterns across courses; updated after assessments, diagnostic results, feedback, and course completion
@@ -115,15 +115,120 @@ Maintainers must add these secrets to the repository settings:
 |-------|-------|---------|
 | Onboarding Conversation | `claude-haiku-4-5` | Multi-turn chat to get to know the learner and build their profile |
 | Onboarding Profile | `claude-haiku-4-5` | Creates an initial learner profile (fallback when conversation is skipped) |
-| Diagnostic (Skills Check) | `claude-haiku-4-5` | Generates the initial skills check question |
-| Diagnostic Conversation | `claude-haiku-4-5` | Multi-turn chat to assess prior knowledge through follow-ups |
-| Course Creation | `claude-haiku-4-5` | Generates a personalized learning plan informed by the diagnostic result |
-| Activity Creation | `claude-haiku-4-5` | Fills in detailed instructions for one activity at a time |
-| Activity Assessment | `claude-sonnet-4-6` | Evaluates screenshots with vision + provides structured feedback |
-| Activity Q&A | `claude-haiku-4-5` | Answers learner questions about activities and assessments |
-| Learner Profile | `claude-haiku-4-5` | Incrementally updates learner profile after assessments, diagnostics, and feedback |
+| Summative Generation | `claude-haiku-4-5` | Generates the summative assessment (task + rubric + exemplar + learner-facing intro/summary) |
+| Summative Rubric Review | `claude-haiku-4-5` | Multi-turn conversation about the rubric/exemplar; can trigger regeneration |
+| Summative Assessment | `claude-sonnet-4-6` | Evaluates summative screenshots with vision; produces per-criterion scores + learner summary |
+| Gap Analysis | `claude-haiku-4-5` | Analyzes baseline summative to identify per-criterion gaps and priorities |
+| Journey Generation | `claude-haiku-4-5` | Selects, orders, and sizes units with formative activities mapped to rubric criteria |
+| Activity Creation | `claude-haiku-4-5` | Generates one formative activity at a time, building toward the summative exemplar |
+| Activity Assessment | `claude-sonnet-4-6` | Evaluates formative screenshots with vision + provides structured feedback |
+| Activity Q&A | `claude-haiku-4-5` | Answers learner questions about activities and assessments with enriched context |
+| Learner Profile | `claude-haiku-4-5` | Incrementally updates learner profile after summative attempts, formative assessments, and feedback |
 
 Agent prompts are stored as markdown files in `prompts/` and can be edited without changing code. All activity and assessment outputs are validated before reaching the user.
+
+### Agent lifecycle: course start to completion
+
+This is the order agents are invoked as a learner moves through a course, what data each receives, and what it produces.
+
+#### Phase 0: Onboarding (one-time, before any course)
+
+**1. Onboarding Conversation Agent** (`onboarding-conversation.md`, `MODEL_LIGHT`)
+- *Trigger:* "About You" step in onboarding wizard
+- *Input:* Multi-turn message history with learner screenshots (vision)
+- *Output:* `{ message, done, profile?, summary? }` — when done, includes full learner profile inferred from screenshots
+- *Fallback:* If skipped, **Onboarding Profile Agent** (`onboarding-profile.md`) creates a profile from `{ name, statement }`
+
+#### Phase 1: Summative Generation
+
+**2. Summative Generation Agent** (`summative-generation.md`, `MODEL_LIGHT`)
+- *Trigger:* Learner starts a course (`unitEngine.initCourse`)
+- *Input:* `courseName`, `courseDescription`, `learningObjectives` (flattened from all units), `learnerProfile`, `personalizationNotes` (if regenerated)
+- *Output:* `{ courseIntro, summaryForLearner, task, rubric, exemplar }`
+- *Validation:* `validateSummative()` — task/steps, rubric with 4 mastery levels per criterion, exemplar, courseIntro, summaryForLearner
+
+The learner sees `courseIntro` (explains the process) and `summaryForLearner` (introduces the exemplar in plain language). The rubric and detailed data surface through conversation.
+
+#### Phase 2: Rubric Review
+
+**3. Summative Rubric Review Agent** (`summative-conversation.md`, `MODEL_LIGHT`)
+- *Trigger:* Learner reviews rubric/exemplar (`unitEngine.sendRubricReviewMessage`)
+- *Input:* Full summative (task, rubric, exemplar), courseName, learningObjectives, learnerProfile, conversation history
+- *Output:* `{ message, done, regenerate?, regenerationNotes? }`
+- *Side effect:* If `regenerate: true`, re-runs Agent #2 with `personalizationNotes`
+
+#### Phase 3: Summative Attempt (baseline or retake)
+
+**4. Summative Assessment Agent** (`summative-assessment.md`, `MODEL_HEAVY` + vision)
+- *Trigger:* Learner submits all step screenshots (`unitEngine.submitSummativeAttempt`)
+- *Input:* `courseName`, `task`, `rubric`, `attemptNumber`, `isBaseline`, `priorAttemptScores`, `learnerProfile`, base64 screenshot images (one per step)
+- *Output:* `{ criteriaScores[], overallScore, mastery, feedback, nextSteps[], summaryForLearner }`
+- *Validation:* `validateSummativeAssessment()` — all criteria scored, ratchet rule (scores only go up), summaryForLearner required
+
+The learner sees `summaryForLearner` as the primary feedback. Detailed per-criterion breakdown is available on request.
+
+**5. Learner Profile Agent** (`learner-profile-update.md`, `MODEL_LIGHT`, background)
+- *Trigger:* Fires automatically after every summative attempt
+- *Input:* `currentProfile`, `summativeAttempt` (courseId, scores, mastery), `context.event` (`summative_baseline` | `summative_retake` | `summative_mastery`)
+- *Output:* Updated `{ profile, summary }`
+
+#### Phase 4: Gap Analysis + Journey
+
+**6. Gap Analysis Agent** (`gap-analysis.md`, `MODEL_LIGHT`)
+- *Trigger:* Runs after baseline attempt (`unitEngine.generateGapAndJourney`)
+- *Input:* `courseName`, `rubric`, `baselineScores`, `overallScore`, `learnerProfile`
+- *Output:* `{ gaps[], suggestedFocus[] }` — prioritized per-criterion gaps
+- *Validation:* `validateGapAnalysis()`
+
+**7. Journey Generation Agent** (`course-creation.md`, `MODEL_LIGHT`)
+- *Trigger:* Runs immediately after gap analysis
+- *Input:* `courseName`, `units[]` (from courses.json), `gapAnalysis`, `rubric`, `learnerProfile`, `completedFormatives` (populated on remediation after failed retake)
+- *Output:* `{ units[{ unitId, activities[{ id, type, goal, rubricCriteria[] }] }], workProductTool, workProductDescription, rationale }`
+- *Validation:* `validateJourney()`
+
+#### Phase 5: Formative Learning (per unit, per activity)
+
+**8. Activity Creation Agent** (`activity-creation.md`, `MODEL_LIGHT`, repeated per activity)
+- *Trigger:* Learner enters a unit or advances (`unitEngine.generateFirstActivity` / `generateNextActivity`)
+- *Input:* Unit info, activity `type`/`goal` from journey plan, `rubricCriteria`, `gapObservation`, `workProduct`/`workProductTool`, `priorActivities` summary, `learnerProfile`, **summative context** (`exemplar`, `task.description`, full `rubric`)
+- *Output:* `{ instruction, tips[] }`
+- *Validation:* `validateActivity()` — ends with "Capture", max 4 steps, browser-only, single page, produces visible work
+
+**9. Activity Assessment Agent** (`activity-assessment.md`, `MODEL_HEAVY` + vision, repeated per capture)
+- *Trigger:* Learner hits "Capture" (`unitEngine.recordDraft`)
+- *Input:* Unit/activity info, `rubricCriteria`, `pageUrl`, `priorDrafts`, `learnerProfile`, base64 screenshot
+- *Output:* `{ feedback, strengths[], improvements[], score, recommendation, passed, rubricCriteriaScores? }`
+- *Validation:* `validateAssessment()`
+
+**10. Learner Profile Agent** (`learner-profile-update.md`, `MODEL_LIGHT`, background)
+- *Trigger:* After every formative assessment and after disputes
+- *Input:* `currentProfile`, assessment result or learner feedback, activity context
+
+**11. Activity Q&A** (inline system prompt via `chatWithContext`, `MODEL_LIGHT`)
+- *Trigger:* Learner asks a question via compose bar (`unitEngine.askAboutActivity`)
+- *Input:* Activity instruction, rubric criteria, summative exemplar, latest draft feedback + rubric criteria scores, learner profile, Q&A history
+- *Output:* Plain text response
+
+**12. Reassessment** (same `activity-assessment.md`, `MODEL_HEAVY` + vision)
+- *Trigger:* Learner disputes a score (`unitEngine.submitDispute`)
+- *Input:* 3-message conversation: original context + screenshot, assistant's prior assessment, learner's dispute text
+
+#### Phase 6: Summative Retake
+
+Repeats **Agent #4** (Summative Assessment) and **Agent #5** (Profile Update). Ratchet rule enforced.
+- If mastery achieved → course complete → **Agent #13** below
+- If not mastery → re-runs **Agent #6** (Gap Analysis) + **Agent #7** (Journey) with `completedFormatives` to avoid repeating activities → back to Phase 5
+
+#### Phase 7: Course Mastery
+
+**13. Learner Profile Agent — Mastery Update** (`learner-profile-update.md`, `MODEL_LIGHT`)
+- *Trigger:* Summative returns `mastery: true`
+- *Input:* `currentProfile`, `courseCompletion` (courseId, rubric scores, formative summaries), `context.event: 'course_mastery'`
+- *Output:* Updated profile with courseId in `masteredCourses`, comprehensive strength updates, contradicted weaknesses removed
+
+### Data flow summary
+
+The **learner profile summary** threads through every agent call as context. The **summative rubric** flows into gap analysis → journey → activity creation (as `rubricCriteria`) → formative assessment (as `rubricCriteriaScores`). The **exemplar** flows from summative generation → activity creation → Q&A context, ensuring all formative work builds toward the same mastery target.
 
 ## Course JSON structure
 

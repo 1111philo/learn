@@ -354,6 +354,8 @@ export async function getSummative(courseId) {
     estimatedTime: row.estimated_time,
     personalized: !!row.personalized,
     conversationId: row.conversation_id,
+    courseIntro: row.course_intro || null,
+    summaryForLearner: row.summary_for_learner || null,
     createdAt: row.created_at,
   };
 }
@@ -361,8 +363,8 @@ export async function getSummative(courseId) {
 export async function saveSummative(courseId, data) {
   run(
     `INSERT OR REPLACE INTO summatives
-     (course_id, task, rubric, exemplar, tool, estimated_time, personalized, conversation_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course_id, task, rubric, exemplar, tool, estimated_time, personalized, conversation_id, course_intro, summary_for_learner, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       courseId,
       JSON.stringify(data.task),
@@ -372,6 +374,8 @@ export async function saveSummative(courseId, data) {
       data.estimatedTime || null,
       data.personalized ? 1 : 0,
       data.conversationId || null,
+      data.courseIntro || null,
+      data.summaryForLearner || null,
       data.createdAt || Date.now(),
     ]
   );
@@ -395,6 +399,7 @@ export async function getSummativeAttempts(courseId) {
     feedback: r.feedback,
     nextSteps: r.next_steps ? JSON.parse(r.next_steps) : [],
     isBaseline: !!r.is_baseline,
+    summaryForLearner: r.summary_for_learner || null,
     timestamp: r.timestamp,
   }));
 }
@@ -403,8 +408,8 @@ export async function saveSummativeAttempt(courseId, attempt) {
   run(
     `INSERT OR REPLACE INTO summative_attempts
      (id, course_id, attempt_number, screenshots, criteria_scores, overall_score,
-      mastery, feedback, next_steps, is_baseline, timestamp)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      mastery, feedback, next_steps, is_baseline, summary_for_learner, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       attempt.id,
       courseId,
@@ -416,6 +421,7 @@ export async function saveSummativeAttempt(courseId, attempt) {
       attempt.feedback || null,
       attempt.nextSteps ? JSON.stringify(attempt.nextSteps) : null,
       attempt.isBaseline ? 1 : 0,
+      attempt.summaryForLearner || null,
       attempt.timestamp || Date.now(),
     ]
   );

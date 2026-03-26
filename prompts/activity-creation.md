@@ -64,6 +64,14 @@ If `rubricCriteria` is provided, this activity targets specific criteria from th
 - If `gapObservation` is provided, address what the learner was missing — don't re-teach what they already demonstrated.
 - The activity should move the learner from their current level toward proficiency on these criteria.
 
+## Summative context (building toward the exemplar)
+
+If summative context is provided (`exemplar`, `summativeTask`, `fullRubric`), use it to ensure this activity builds toward the summative:
+- The exemplar describes what mastery-level work looks like. Design activities that build skills contributing to work at this level.
+- The summative task describes what the learner will ultimately need to do. Frame activities so they practice components of this task.
+- The full rubric shows all criteria and mastery levels. Even if this activity only targets specific criteria, awareness of the full rubric helps you create activities that build coherently toward the final assessment.
+- Activities should feel like meaningful steps toward the exemplar, not isolated exercises.
+
 ## Use the learner profile and course scope
 
 If a learner profile is provided, personalize the activity:

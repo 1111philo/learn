@@ -41,6 +41,8 @@ export async function initCourse(courseGroup) {
     rubric: summativeResult.rubric,
     exemplar: summativeResult.exemplar,
     tool: summativeResult.task?.tool || null,
+    courseIntro: summativeResult.courseIntro || null,
+    summaryForLearner: summativeResult.summaryForLearner || null,
     createdAt: Date.now(),
   };
   await saveSummative(courseGroup.courseId, summativeData);
@@ -68,7 +70,7 @@ export async function sendRubricReviewMessage(courseId, text, summative, message
     { role: 'user', content: text },
   ];
 
-  const result = await orchestrator.converse('diagnostic-conversation', fullMessages, 1024);
+  const result = await orchestrator.converse('summative-conversation', fullMessages, 1024);
 
   // Persist conversation state
   const updatedMessages = [...messages,
@@ -88,6 +90,8 @@ export async function sendRubricReviewMessage(courseId, text, summative, message
       rubric: newSummative.rubric,
       exemplar: newSummative.exemplar,
       tool: newSummative.task?.tool || null,
+      courseIntro: newSummative.courseIntro || null,
+      summaryForLearner: newSummative.summaryForLearner || null,
       personalized: true,
       createdAt: Date.now(),
     };
@@ -152,6 +156,7 @@ export async function submitSummativeAttempt(courseId, courseGroup, captures) {
     feedback: result.feedback,
     nextSteps: result.nextSteps || [],
     isBaseline: priorAttempts.length === 0,
+    summaryForLearner: result.summaryForLearner || null,
     timestamp: Date.now(),
   };
 
@@ -277,8 +282,12 @@ export async function generateFirstActivity(unit, journeyPlan, courseGroup) {
     workProductTool: journeyPlan.workProductTool,
   };
 
+  // Load summative context so activities build toward the exemplar
+  const summative = courseGroup ? await getSummative(courseGroup.courseId) : null;
+  const summativeContext = summative ? { exemplar: summative.exemplar, task: summative.task, rubric: summative.rubric } : null;
+
   const generated = await orchestrator.generateNextActivity(
-    unit, slot, [], profileSummary, planContext
+    unit, slot, [], profileSummary, planContext, null, summativeContext
   );
 
   return {
@@ -290,7 +299,7 @@ export async function generateFirstActivity(unit, journeyPlan, courseGroup) {
 }
 
 /** Generate the next formative activity for a unit. */
-export async function generateNextActivity(unit, progress, journeyPlan) {
+export async function generateNextActivity(unit, progress, journeyPlan, courseGroup) {
   const profileSummary = await getLearnerProfileSummary();
   const journeyUnit = journeyPlan.units?.find(u => u.unitId === unit.unitId);
   if (!journeyUnit) throw new Error('Unit not found in journey plan.');
@@ -303,6 +312,10 @@ export async function generateNextActivity(unit, progress, journeyPlan) {
     workProductTool: journeyPlan.workProductTool,
   };
 
+  // Load summative context so activities build toward the exemplar
+  const summative = courseGroup ? await getSummative(courseGroup.courseId) : null;
+  const summativeContext = summative ? { exemplar: summative.exemplar, task: summative.task, rubric: summative.rubric } : null;
+
   const progressSummary = progress.activities
     .slice(0, progress.currentActivityIndex)
     .map(a => {
@@ -312,7 +325,7 @@ export async function generateNextActivity(unit, progress, journeyPlan) {
     }).join('\n');
 
   const generated = await orchestrator.generateNextActivity(
-    unit, slot, progressSummary, profileSummary, planContext
+    unit, slot, progressSummary, profileSummary, planContext, null, summativeContext
   );
 
   return { ...slot, instruction: generated.instruction, tips: generated.tips, messages: [] };
@@ -403,14 +416,20 @@ export async function submitDispute(unit, progress, activity, draft, feedbackTex
 }
 
 /** Ask a Q&A question about an activity. */
-export async function askAboutActivity(unit, progress, activity, text) {
+export async function askAboutActivity(unit, progress, activity, text, courseGroup) {
   const profileSummary = await getLearnerProfileSummary();
   const latestDraft = progress.drafts.filter(d => d.activityId === activity.id).pop();
+
+  // Load summative context for richer Q&A
+  const summative = courseGroup ? await getSummative(courseGroup.courseId) : null;
 
   const systemPrompt = `You are a helpful learning assistant for 1111 Learn. The learner is working on an activity and has a question. Answer concisely and helpfully.
 
 Activity: ${activity.instruction}
+${activity.rubricCriteria ? `\nThis activity targets these rubric criteria: ${activity.rubricCriteria.join(', ')}` : ''}
+${summative?.exemplar ? `\nCourse exemplar (what mastery looks like): ${summative.exemplar}` : ''}
 ${latestDraft ? `\nLatest feedback: ${latestDraft.feedback}` : ''}
+${latestDraft?.rubricCriteriaScores ? `\nRubric criteria scores: ${JSON.stringify(latestDraft.rubricCriteriaScores)}` : ''}
 Learner profile: ${profileSummary}
 
 Respond in plain text (not JSON). Be brief and direct.`;

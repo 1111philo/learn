@@ -91,8 +91,10 @@ export function validateSummative(parsed) {
     }
   }
   if (!parsed.exemplar || typeof parsed.exemplar !== 'string') return 'Missing exemplar.';
+  if (!parsed.courseIntro || typeof parsed.courseIntro !== 'string') return 'Missing courseIntro.';
+  if (!parsed.summaryForLearner || typeof parsed.summaryForLearner !== 'string') return 'Missing summaryForLearner.';
 
-  const allText = parsed.exemplar + ' ' + parsed.task.steps.map(s => s.instruction).join(' ');
+  const allText = parsed.exemplar + ' ' + parsed.courseIntro + ' ' + parsed.summaryForLearner + ' ' + parsed.task.steps.map(s => s.instruction).join(' ');
   const safety = validateSafety(allText);
   if (safety) return safety;
 
@@ -114,6 +116,7 @@ export function validateSummativeAssessment(parsed, priorAttempt) {
   }
   if (typeof parsed.mastery !== 'boolean') return 'mastery must be a boolean.';
   if (!parsed.feedback || typeof parsed.feedback !== 'string') return 'Missing feedback.';
+  if (!parsed.summaryForLearner || typeof parsed.summaryForLearner !== 'string') return 'Missing summaryForLearner.';
 
   // Ratchet rule: no criterion score can be lower than the prior attempt
   if (priorAttempt?.criteriaScores) {
@@ -129,7 +132,7 @@ export function validateSummativeAssessment(parsed, priorAttempt) {
     }
   }
 
-  const safety = validateSafety(parsed.feedback);
+  const safety = validateSafety(parsed.feedback + ' ' + parsed.summaryForLearner);
   if (safety) return safety;
 
   return null;

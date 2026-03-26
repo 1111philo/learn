@@ -180,6 +180,9 @@ const MIGRATIONS = [
   'ALTER TABLE units ADD COLUMN rubric_criteria TEXT',
   'ALTER TABLE activities ADD COLUMN rubric_criteria TEXT',
   'ALTER TABLE drafts ADD COLUMN rubric_criteria_scores TEXT',
+  'ALTER TABLE summatives ADD COLUMN course_intro TEXT',
+  'ALTER TABLE summatives ADD COLUMN summary_for_learner TEXT',
+  'ALTER TABLE summative_attempts ADD COLUMN summary_for_learner TEXT',
 ];
 
 // -- Initialization -----------------------------------------------------------

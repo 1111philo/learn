@@ -113,7 +113,7 @@ export default function UnitChat() {
 
     setLoading('qa');
     try {
-      const { newProgress } = await askAboutActivity(unit, progress, activity, text);
+      const { newProgress } = await askAboutActivity(unit, progress, activity, text, courseGroup);
       setProgress(newProgress);
       dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
     } catch { /* silent */ }
@@ -145,7 +145,7 @@ export default function UnitChat() {
     if (!newProgress.activities[nextIndex]) {
       setLoading('generating');
       try {
-        const nextActivity = await generateNextActivity(unit, newProgress, journeyPlan);
+        const nextActivity = await generateNextActivity(unit, newProgress, journeyPlan, courseGroup);
         newProgress = { ...newProgress, activities: [...newProgress.activities, nextActivity] };
       } catch (e) {
         setError(e.message || 'Failed to generate next activity.');

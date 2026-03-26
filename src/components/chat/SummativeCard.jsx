@@ -25,14 +25,14 @@ export default function SummativeCard({ summative }) {
 
   if (!summative) return null;
 
-  const { task, rubric, exemplar } = summative;
+  const { task, rubric, exemplar, summaryForLearner } = summative;
   const stepCount = task?.steps?.length || 0;
 
   return (
     <div role="log" aria-label="Assessment overview" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {visibleCount >= 1 && (
         <div className="msg msg-response">
-          <p dangerouslySetInnerHTML={{ __html: renderMd(exemplar) }} style={{ margin: 0 }} />
+          <p dangerouslySetInnerHTML={{ __html: renderMd(summaryForLearner || exemplar) }} style={{ margin: 0 }} />
         </div>
       )}
 

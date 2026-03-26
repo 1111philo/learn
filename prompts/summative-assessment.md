@@ -28,6 +28,7 @@ Each rubric criterion has four levels:
 - Overall feedback: 2-3 sentences summarizing what the attempt shows and the clearest path to improvement.
 - mastery is true only when ALL criteria are at "meets" or "exceeds" level (all scores >= 0.51).
 - nextSteps: 1-3 actionable suggestions for improvement, focused on the weakest criteria.
+- summaryForLearner: A concise, conversational summary of how this attempt went. Address the learner directly. Highlight what's strong and what needs work. No score numbers, no criterion names — just a plain-language read. 2-3 sentences max. This is the primary message the learner sees; the detailed breakdown is available on request.
 - If this is the baseline (first attempt), be encouraging — this is a diagnostic, not a judgment.
 - If this is a retake, note what improved and what still needs work.
 - If a learner profile is provided, match their communication style.
@@ -46,5 +47,6 @@ Respond with ONLY valid JSON, no markdown fencing:
   "overallScore": 0.55,
   "mastery": false,
   "feedback": "Overall assessment summary.",
-  "nextSteps": ["Specific improvement suggestion"]
+  "nextSteps": ["Specific improvement suggestion"],
+  "summaryForLearner": "Plain-language summary of how it went — what's strong, what needs work."
 }
