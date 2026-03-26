@@ -4,7 +4,9 @@
 
 # 1111 Learn
 
-An agentic learning app that runs entirely in the Chrome side panel. Eleven AI agents guide learners through courses using assessment-backward design -- you take a summative first, learn from your gaps, then retake to demonstrate mastery. Built by [11:11 Philosopher's Group](https://github.com/1111philo).
+An agentic learning app that runs entirely in the Chrome side panel. Eleven AI agents guide learners through courses using assessment-backward design -- you take a summative first, learn from your gaps, then retake to demonstrate mastery.
+
+Built by [11:11 Philosopher's Group](https://github.com/1111philo) in collaboration with [UIC Tech Solutions](https://it.uic.edu/), [UIC TS Open Source Fund](https://osf.it.uic.edu/), [Louisiana Tech](https://www.latech.edu/), and the [ULL Louisiana Educate Program](https://louisiana.edu/educate).
 
 ## How it works
 
