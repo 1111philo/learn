@@ -154,30 +154,6 @@ export async function startDiagnostic(courseId, courseGroup) {
   return { messages, summative: summativeData, phase: COURSE_PHASES.BASELINE_ATTEMPT };
 }
 
-/** Capture a screenshot for a summative step. */
-export async function captureSummativeStep(courseId, stepIndex) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const pageUrl = tab?.url || '';
-
-  if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('about:') || pageUrl.startsWith('edge://')) {
-    throw new Error('Navigate to a webpage before capturing.');
-  }
-
-  const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
-  if (!hasPermission) {
-    const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
-    if (!granted) throw new Error('Permission needed to capture screenshots.');
-  }
-
-  const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
-  if (!response?.dataUrl) throw new Error('Screenshot capture failed.');
-
-  const screenshotKey = `summative-${courseId}-step${stepIndex}-${ts()}`;
-  await saveScreenshot(screenshotKey, response.dataUrl);
-
-  return { screenshotKey, dataUrl: response.dataUrl, stepIndex, url: pageUrl };
-}
-
 /** Submit all summative captures/text for assessment. Returns new messages. */
 export async function submitSummativeAttempt(courseId, courseGroup, captures, textResponses) {
   const summative = await getSummative(courseId);
@@ -368,24 +344,11 @@ export async function startUnit(courseId, courseGroup, unit, journeyPlan) {
   return { messages, unit, activity, progress, phase: COURSE_PHASES.FORMATIVE_LEARNING };
 }
 
-/** Record a screenshot draft for the current formative activity. */
-export async function recordScreenshotDraft(courseId, unit, progress, activity) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const pageUrl = tab?.url || '';
-
-  if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('about:') || pageUrl.startsWith('edge://')) {
-    throw new Error('Navigate to a webpage before capturing.');
-  }
-  const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
-  if (!hasPermission) {
-    const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
-    if (!granted) throw new Error('Permission needed to capture screenshots.');
-  }
-
-  const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
-  if (!response?.dataUrl) throw new Error('Screenshot capture failed.');
-  const dataUrl = response.dataUrl;
-
+/** Record a screenshot draft for the current formative activity.
+ *  screenshot: { dataUrl, url } — pre-captured by ComposeBar.
+ */
+export async function recordScreenshotDraft(courseId, unit, progress, activity, screenshot) {
+  const { dataUrl, url: pageUrl } = screenshot;
   const screenshotKey = `activity-${unit.unitId}-${activity.id}-${ts()}`;
   await saveScreenshot(screenshotKey, dataUrl);
 

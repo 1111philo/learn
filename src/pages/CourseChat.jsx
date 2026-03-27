@@ -203,216 +203,175 @@ export default function CourseChat() {
     setLoading('');
   }, [courseGroupId, group, journey, currentUnitId, unitProgress]);
 
-  // -- Capture / Submit (summative steps) -------------------------------------
-
-  const handleSummativeCapture = useCallback(async () => {
-    setLoading('capturing');
-    try {
-      const capture = await engine.captureSummativeStep(courseGroupId, currentStep);
-      const newCaptures = [...captures, capture];
-      setCaptures(newCaptures);
-
-      // Persist for panel reload recovery
-      await saveSummativeCaptureState(courseGroupId, {
-        captures: newCaptures.map(c => ({ screenshotKey: c.screenshotKey, stepIndex: c.stepIndex, url: c.url })),
-      });
-
-      // Submission message
-      appendMessages([{
-        role: 'user', content: '', msgType: MSG_TYPES.SUBMISSION, phase,
-        metadata: { screenshotKey: capture.screenshotKey, url: capture.url, timestamp: Date.now() },
-        timestamp: Date.now(),
-      }]);
-
-      const completedCount = newCaptures.length + textResponses.length;
-      if (completedCount === totalSummativeSteps) {
-        // All steps done — submit for assessment
-        setLoading('assessing');
-        await clearSummativeCaptureState(courseGroupId);
-        const result = await engine.submitSummativeAttempt(courseGroupId, group, newCaptures, textResponses);
-        appendMessages(result.messages);
-        setAttempts(prev => [...prev, result.attempt]);
-        setCaptures([]);
-        setTextResponses([]);
-        setCurrentStep(0);
-        setPhase(result.phase);
-
-        // If failed retake, build remediation
-        if (!result.attempt.mastery && !result.attempt.isBaseline) {
-          setLoading('journey');
-          const remResult = await engine.buildRemediation(courseGroupId, group, result.attempt);
-          appendMessages(remResult.messages);
-          setJourney({ plan: remResult.journey });
-          setPhase(remResult.phase);
-        }
-      } else {
-        // Next step
-        const nextStep = currentStep + 1;
-        setCurrentStep(nextStep);
-        const step = summative.task.steps[nextStep];
-        const stepMsg = {
-          role: 'assistant', content: `Step ${nextStep + 1} of ${totalSummativeSteps}: ${step.instruction}`,
-          msgType: MSG_TYPES.INSTRUCTION, phase,
-          metadata: { stepIndex: nextStep, totalSteps: totalSummativeSteps, format: step.format },
-          timestamp: Date.now(),
-        };
-        appendMessages([stepMsg]);
-        await saveCourseMessage(courseGroupId, stepMsg);
-      }
-    } catch (e) {
-      setError(e.message || 'Capture failed.');
-    }
-    setLoading('');
-  }, [courseGroupId, group, currentStep, captures, textResponses, summative, totalSummativeSteps, phase]);
-
-  const handleSummativeTextSubmit = useCallback(async (text) => {
-    if (!text?.trim()) return;
-    setLoading('capturing');
-    try {
-      const newTextResponses = [...textResponses, { text, stepIndex: currentStep }];
-      setTextResponses(newTextResponses);
-
-      appendMessages([{
-        role: 'user', content: text, msgType: MSG_TYPES.SUBMISSION, phase,
-        metadata: { textResponse: text, timestamp: Date.now() },
-        timestamp: Date.now(),
-      }]);
-
-      const completedCount = captures.length + newTextResponses.length;
-      if (completedCount === totalSummativeSteps) {
-        setLoading('assessing');
-        await clearSummativeCaptureState(courseGroupId);
-        const result = await engine.submitSummativeAttempt(courseGroupId, group, captures, newTextResponses);
-        appendMessages(result.messages);
-        setAttempts(prev => [...prev, result.attempt]);
-        setCaptures([]);
-        setTextResponses([]);
-        setCurrentStep(0);
-        setPhase(result.phase);
-
-        if (!result.attempt.mastery && !result.attempt.isBaseline) {
-          setLoading('journey');
-          const remResult = await engine.buildRemediation(courseGroupId, group, result.attempt);
-          appendMessages(remResult.messages);
-          setJourney({ plan: remResult.journey });
-          setPhase(remResult.phase);
-        }
-      } else {
-        const nextStep = currentStep + 1;
-        setCurrentStep(nextStep);
-        const step = summative.task.steps[nextStep];
-        const stepMsg = {
-          role: 'assistant', content: `Step ${nextStep + 1} of ${totalSummativeSteps}: ${step.instruction}`,
-          msgType: MSG_TYPES.INSTRUCTION, phase,
-          metadata: { stepIndex: nextStep, totalSteps: totalSummativeSteps, format: step.format },
-          timestamp: Date.now(),
-        };
-        appendMessages([stepMsg]);
-        await saveCourseMessage(courseGroupId, stepMsg);
-      }
-    } catch (e) {
-      setError(e.message || 'Submission failed.');
-    }
-    setLoading('');
-  }, [courseGroupId, group, currentStep, captures, textResponses, summative, totalSummativeSteps, phase]);
-
-  // -- Capture / Submit (formative activities) --------------------------------
-
-  const handleFormativeCapture = useCallback(async () => {
-    if (!currentActivity || !unitProgress || !currentUnitId) return;
-    const unit = group.units?.find(u => u.unitId === currentUnitId);
-    if (!unit) return;
-
-    setLoading('assessing');
-    try {
-      const result = await engine.recordScreenshotDraft(courseGroupId, unit, unitProgress, currentActivity);
-      appendMessages(result.messages);
-      setUnitProgress(result.newProgress);
-      dispatch({ type: 'SET_PROGRESS', unitId: currentUnitId, progress: result.newProgress });
-
-      // If passed, show next activity action
-      if (result.draft.recommendation === 'advance') {
-        const actionMsg = {
-          role: 'assistant', content: 'Next Activity', msgType: MSG_TYPES.ACTION,
-          phase: COURSE_PHASES.FORMATIVE_LEARNING,
-          metadata: { action: 'next_activity', label: 'Next Activity' },
-          timestamp: Date.now(),
-        };
-        appendMessages([actionMsg]);
-        await saveCourseMessage(courseGroupId, actionMsg);
-      }
-    } catch (e) {
-      setError(e.message || 'Capture failed.');
-    }
-    setLoading('');
-  }, [courseGroupId, group, currentUnitId, currentActivity, unitProgress, dispatch]);
-
-  const handleFormativeTextSubmit = useCallback(async (text) => {
-    if (!text?.trim() || !currentActivity || !unitProgress || !currentUnitId) return;
-    const unit = group.units?.find(u => u.unitId === currentUnitId);
-    if (!unit) return;
-
-    setLoading('assessing');
-    try {
-      const result = await engine.recordTextDraft(courseGroupId, unit, unitProgress, currentActivity, text);
-      appendMessages(result.messages);
-      setUnitProgress(result.newProgress);
-      dispatch({ type: 'SET_PROGRESS', unitId: currentUnitId, progress: result.newProgress });
-
-      if (result.draft.recommendation === 'advance') {
-        const actionMsg = {
-          role: 'assistant', content: 'Next Activity', msgType: MSG_TYPES.ACTION,
-          phase: COURSE_PHASES.FORMATIVE_LEARNING,
-          metadata: { action: 'next_activity', label: 'Next Activity' },
-          timestamp: Date.now(),
-        };
-        appendMessages([actionMsg]);
-        await saveCourseMessage(courseGroupId, actionMsg);
-      }
-    } catch (e) {
-      setError(e.message || 'Submission failed.');
-    }
-    setLoading('');
-  }, [courseGroupId, group, currentUnitId, currentActivity, unitProgress, dispatch]);
-
-  // -- Q&A send ---------------------------------------------------------------
-
-  const handleSend = useCallback(async (text) => {
-    if (!text?.trim()) return;
-
-    // If in a summative step, text is a step submission
-    if (isSummativeActive) {
-      return handleSummativeTextSubmit(text);
-    }
-
-    // If in formative learning with an active activity, text is a submission
-    if (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity) {
-      return handleFormativeTextSubmit(text);
-    }
-
-    // Otherwise it's a Q&A question
-    setLoading('qa');
-    try {
-      if (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity) {
-        const unit = group.units?.find(u => u.unitId === currentUnitId);
-        const result = await engine.askQuestion(courseGroupId, group, unit, currentActivity, text, unitProgress);
-        appendMessages(result.messages);
-      } else {
-        const result = await engine.askGuide(courseGroupId, group, text, [], {});
-        appendMessages(result.messages);
-      }
-    } catch (e) {
-      setError(e.message || 'Failed to send message.');
-    }
-    setLoading('');
-  }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, isSummativeActive, handleFormativeTextSubmit, handleSummativeTextSubmit, handleCapture]);
-
-  // -- Capture handler (routes based on phase) --------------------------------
+  // -- Capture (just captures, returns data — does NOT submit) -----------------
 
   const handleCapture = useCallback(async () => {
-    if (isSummativeActive) return handleSummativeCapture();
-    if (phase === COURSE_PHASES.FORMATIVE_LEARNING) return handleFormativeCapture();
-  }, [isSummativeActive, phase, handleSummativeCapture, handleFormativeCapture]);
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const pageUrl = tab?.url || '';
+    if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('about:') || pageUrl.startsWith('edge://')) {
+      throw new Error('Navigate to a webpage before capturing.');
+    }
+    const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+    if (!hasPermission) {
+      const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+      if (!granted) throw new Error('Permission needed to capture screenshots.');
+    }
+    const response = await chrome.runtime.sendMessage({ type: 'captureScreenshot' });
+    if (!response?.dataUrl) throw new Error('Screenshot capture failed.');
+    return { dataUrl: response.dataUrl, url: pageUrl };
+  }, []);
+
+  // -- Send (routes based on phase, handles screenshot + text combo) ----------
+  // Uses current state directly (no stale closure issues with useCallback deps)
+
+  const handleSend = useCallback(async (payload) => {
+    const { text, screenshot } = payload;
+    const hasText = !!text?.trim();
+    const hasScreenshot = !!screenshot;
+    if (!hasText && !hasScreenshot) return;
+
+    setError('');
+
+    // Summative step submission
+    if (phase === COURSE_PHASES.BASELINE_ATTEMPT || phase === COURSE_PHASES.SUMMATIVE_RETAKE) {
+      if (hasScreenshot) {
+        // Save screenshot + build capture, then run summative capture flow
+        setLoading('capturing');
+        try {
+          const { saveScreenshot: saveSS } = await import('../../js/storage.js');
+          const screenshotKey = `summative-${courseGroupId}-step${currentStep}-${Date.now()}`;
+          await saveSS(screenshotKey, screenshot.dataUrl);
+          const capture = { screenshotKey, dataUrl: screenshot.dataUrl, stepIndex: currentStep, url: screenshot.url };
+          const newCaptures = [...captures, capture];
+          setCaptures(newCaptures);
+
+          await saveSummativeCaptureState(courseGroupId, {
+            captures: newCaptures.map(c => ({ screenshotKey: c.screenshotKey, stepIndex: c.stepIndex, url: c.url })),
+          });
+
+          appendMessages([{
+            role: 'user', content: '', msgType: MSG_TYPES.SUBMISSION, phase,
+            metadata: { screenshotKey, url: screenshot.url, timestamp: Date.now() },
+            timestamp: Date.now(),
+          }]);
+
+          const completedCount = newCaptures.length + textResponses.length;
+          if (completedCount === totalSummativeSteps) {
+            setLoading('assessing');
+            await clearSummativeCaptureState(courseGroupId);
+            const result = await engine.submitSummativeAttempt(courseGroupId, group, newCaptures, textResponses);
+            appendMessages(result.messages);
+            setAttempts(prev => [...prev, result.attempt]);
+            setCaptures([]); setTextResponses([]); setCurrentStep(0);
+            setPhase(result.phase);
+            if (!result.attempt.mastery && !result.attempt.isBaseline) {
+              setLoading('journey');
+              const rem = await engine.buildRemediation(courseGroupId, group, result.attempt);
+              appendMessages(rem.messages);
+              setJourney({ plan: rem.journey }); setPhase(rem.phase);
+            }
+          } else {
+            const nextStep = currentStep + 1;
+            setCurrentStep(nextStep);
+            const step = summative.task.steps[nextStep];
+            const stepMsg = {
+              role: 'assistant', content: `Step ${nextStep + 1} of ${totalSummativeSteps}: ${step.instruction}`,
+              msgType: MSG_TYPES.INSTRUCTION, phase,
+              metadata: { stepIndex: nextStep, totalSteps: totalSummativeSteps, format: step.format },
+              timestamp: Date.now(),
+            };
+            appendMessages([stepMsg]);
+            await saveCourseMessage(courseGroupId, stepMsg);
+          }
+        } catch (e) { setError(e.message || 'Capture failed.'); }
+        setLoading('');
+        return;
+      }
+      if (hasText) {
+        setLoading('capturing');
+        try {
+          const newTR = [...textResponses, { text, stepIndex: currentStep }];
+          setTextResponses(newTR);
+          appendMessages([{
+            role: 'user', content: text, msgType: MSG_TYPES.SUBMISSION, phase,
+            metadata: { textResponse: text, timestamp: Date.now() }, timestamp: Date.now(),
+          }]);
+          const completedCount = captures.length + newTR.length;
+          if (completedCount === totalSummativeSteps) {
+            setLoading('assessing');
+            await clearSummativeCaptureState(courseGroupId);
+            const result = await engine.submitSummativeAttempt(courseGroupId, group, captures, newTR);
+            appendMessages(result.messages);
+            setAttempts(prev => [...prev, result.attempt]);
+            setCaptures([]); setTextResponses([]); setCurrentStep(0);
+            setPhase(result.phase);
+            if (!result.attempt.mastery && !result.attempt.isBaseline) {
+              setLoading('journey');
+              const rem = await engine.buildRemediation(courseGroupId, group, result.attempt);
+              appendMessages(rem.messages);
+              setJourney({ plan: rem.journey }); setPhase(rem.phase);
+            }
+          } else {
+            const nextStep = currentStep + 1;
+            setCurrentStep(nextStep);
+            const step = summative.task.steps[nextStep];
+            const stepMsg = {
+              role: 'assistant', content: `Step ${nextStep + 1} of ${totalSummativeSteps}: ${step.instruction}`,
+              msgType: MSG_TYPES.INSTRUCTION, phase,
+              metadata: { stepIndex: nextStep, totalSteps: totalSummativeSteps, format: step.format },
+              timestamp: Date.now(),
+            };
+            appendMessages([stepMsg]);
+            await saveCourseMessage(courseGroupId, stepMsg);
+          }
+        } catch (e) { setError(e.message || 'Submission failed.'); }
+        setLoading('');
+        return;
+      }
+      return;
+    }
+
+    // Formative activity submission
+    if (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity && currentUnitId) {
+      const unit = group.units?.find(u => u.unitId === currentUnitId);
+      if (unit) {
+        setLoading('assessing');
+        try {
+          let result;
+          if (hasScreenshot) {
+            result = await engine.recordScreenshotDraft(courseGroupId, unit, unitProgress, currentActivity, screenshot);
+          } else {
+            result = await engine.recordTextDraft(courseGroupId, unit, unitProgress, currentActivity, text);
+          }
+          appendMessages(result.messages);
+          setUnitProgress(result.newProgress);
+          dispatch({ type: 'SET_PROGRESS', unitId: currentUnitId, progress: result.newProgress });
+          if (result.draft.recommendation === 'advance') {
+            const actionMsg = {
+              role: 'assistant', content: 'Next Activity', msgType: MSG_TYPES.ACTION,
+              phase: COURSE_PHASES.FORMATIVE_LEARNING,
+              metadata: { action: 'next_activity', label: 'Next Activity' },
+              timestamp: Date.now(),
+            };
+            appendMessages([actionMsg]);
+            await saveCourseMessage(courseGroupId, actionMsg);
+          }
+        } catch (e) { setError(e.message || 'Submission failed.'); }
+        setLoading('');
+        return;
+      }
+    }
+
+    // Q&A question
+    if (hasText) {
+      setLoading('qa');
+      try {
+        const result = await engine.askGuide(courseGroupId, group, text, [], {});
+        appendMessages(result.messages);
+      } catch (e) { setError(e.message || 'Failed to send message.'); }
+      setLoading('');
+    }
+  }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, captures, textResponses, currentStep, summative, totalSummativeSteps, dispatch]);
 
   // -- Reset ------------------------------------------------------------------
 
@@ -491,8 +450,6 @@ export default function CourseChat() {
     }
   }
 
-  const showCapture = isSummativeActive || phase === COURSE_PHASES.FORMATIVE_LEARNING;
-
   return (
     <div className="course-layout">
       <div className="course-header">
@@ -525,7 +482,7 @@ export default function CourseChat() {
           placeholder={isSummativeActive ? 'Write your response or ask a question...' : (phase === COURSE_PHASES.FORMATIVE_LEARNING ? 'Write a response or ask a question...' : 'Ask a question...')}
           onSend={handleSend}
           disabled={!!loading}
-          onCapture={showCapture ? handleCapture : undefined}
+          onCapture={handleCapture}
         />
       )}
     </div>

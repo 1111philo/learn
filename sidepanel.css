@@ -689,6 +689,43 @@ hr {
   cursor: default;
 }
 
+.compose-preview {
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.compose-preview-img {
+  display: block;
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.compose-preview-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.capture-btn-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
 .capture-btn {
   flex-shrink: 0;
   width: 36px;
