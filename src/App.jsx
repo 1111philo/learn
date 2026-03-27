@@ -10,7 +10,7 @@ import Portfolio from './pages/Portfolio.jsx';
 import PortfolioDetail from './pages/PortfolioDetail.jsx';
 import Settings from './pages/Settings.jsx';
 import ScreenReaderAnnounce from './components/ScreenReaderAnnounce.jsx';
-import { getOnboardingComplete } from '../js/storage.js';
+import { getOnboardingComplete, saveOnboardingComplete } from '../js/storage.js';
 
 export default function App() {
   const { state } = useApp();
@@ -24,10 +24,11 @@ export default function App() {
     if (window.location.hash.includes('/onboarding')) return;
     (async () => {
       const done = await getOnboardingComplete();
-      if (!done && !loggedIn) {
+      if (!done && loggedIn) {
+        // Logged-in users already have an account — skip onboarding, stamp the flag
+        await saveOnboardingComplete();
+      } else if (!done && !loggedIn) {
         navigate('/onboarding', { replace: true });
-      } else if (!done && loggedIn) {
-        navigate('/onboarding/about', { replace: true });
       }
     })();
     // Only run once on initial load
