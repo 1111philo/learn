@@ -240,11 +240,13 @@ export default function CourseChat() {
     if (!text?.trim()) return;
     setError('');
 
-    // Check if it triggers a pending action
-    if (lastActionIndex >= 0) {
-      const pendingAction = messages[lastActionIndex]?.metadata?.action;
-      if (pendingAction && ACTION_TRIGGERS.test(text.trim())) {
-        return handleAction(pendingAction);
+    // Check if it triggers a pending action (use ref-like access to avoid stale closure)
+    if (ACTION_TRIGGERS.test(text.trim())) {
+      // Find the last action in current messages
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].msgType === MSG_TYPES.ACTION && messages[i].metadata?.action) {
+          return handleAction(messages[i].metadata.action);
+        }
       }
     }
 

@@ -23,7 +23,7 @@ Good: "Ready when you are."
 Three short lines, each on its own line:
 1. What this course is about (use the course description from context).
 2. What happens next: "You'll take a quick diagnostic, then get a personalized learning path."
-3. Invite engagement: "Feel free to ask questions or share a screenshot anytime."
+3. Invite engagement: "Ask me anything before you start."
 
 ### baseline_results
 Acknowledge. Frame as a starting point.
