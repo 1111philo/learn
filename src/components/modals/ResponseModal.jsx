@@ -1,14 +1,15 @@
 import { useState, useRef } from 'react';
+import { useModal } from '../../contexts/ModalContext.jsx';
 import { useAutoResize } from '../../hooks/useAutoResize.js';
 
 /**
  * Modal for submitting work — screenshot, text, or both.
- * Capture stages a screenshot preview; text is optional.
- * Submit sends whatever is staged.
+ * Uses the app's existing modal system (ModalContext).
  */
-export default function ResponseModal({ onSubmit, onClose }) {
+export default function ResponseModal({ onSubmit }) {
+  const { hide } = useModal();
   const [text, setText] = useState('');
-  const [screenshot, setScreenshot] = useState(null); // { dataUrl, url }
+  const [screenshot, setScreenshot] = useState(null);
   const [capturing, setCapturing] = useState(false);
   const inputRef = useRef(null);
   const handleResize = useAutoResize();
@@ -40,58 +41,57 @@ export default function ResponseModal({ onSubmit, onClose }) {
 
   const submit = () => {
     if (!hasContent) return;
+    hide();
     onSubmit({ text: text.trim() || null, screenshot });
   };
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" role="dialog" aria-label="Submit your work">
-        <h3 style={{ margin: '0 0 10px', fontSize: '0.95rem' }}>Submit Work</h3>
+    <>
+      <h2>Submit Work</h2>
 
-        {/* Screenshot area */}
-        {screenshot ? (
-          <div className="compose-preview" style={{ marginBottom: '8px' }}>
-            <img src={screenshot.dataUrl} alt="Captured" className="compose-preview-img" />
-            <button className="compose-preview-remove" onClick={() => setScreenshot(null)} aria-label="Remove">&times;</button>
-          </div>
-        ) : (
-          <button
-            className="capture-btn response-action-btn"
-            style={{ width: '100%', justifyContent: 'center', marginBottom: '8px' }}
-            onClick={capture}
-            disabled={capturing}
-          >
-            {capturing ? (
-              <span className="loading-spinner-inline" style={{ width: 14, height: 14 }} aria-hidden="true" />
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
-              </svg>
-            )}
-            <span>Capture Screenshot</span>
-          </button>
-        )}
-
-        {/* Text area */}
-        <textarea
-          ref={inputRef}
-          className="chat-input"
-          rows={3}
-          placeholder="Write your response (optional if screenshot captured)..."
-          value={text}
-          onChange={(e) => { setText(e.target.value); handleResize(e); }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
-            if (e.key === 'Escape') onClose();
-          }}
-          style={{ minHeight: '80px', maxHeight: '160px' }}
-        />
-
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
-          <button className="feedback-action-btn" onClick={onClose}>Cancel</button>
-          <button className="primary-btn" onClick={submit} disabled={!hasContent}>Submit</button>
+      {/* Screenshot area */}
+      {screenshot ? (
+        <div className="compose-preview" style={{ marginBottom: '8px' }}>
+          <img src={screenshot.dataUrl} alt="Captured" className="compose-preview-img" />
+          <button className="compose-preview-remove" onClick={() => setScreenshot(null)} aria-label="Remove">&times;</button>
         </div>
+      ) : (
+        <button
+          className="secondary-btn"
+          style={{ width: '100%', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+          onClick={capture}
+          disabled={capturing}
+        >
+          {capturing ? (
+            <span className="loading-spinner-inline" style={{ width: 14, height: 14 }} aria-hidden="true" />
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+            </svg>
+          )}
+          Capture Screenshot
+        </button>
+      )}
+
+      {/* Text area */}
+      <textarea
+        ref={inputRef}
+        className="chat-input"
+        rows={3}
+        placeholder={screenshot ? 'Add context (optional)...' : 'Write your response...'}
+        value={text}
+        onChange={(e) => { setText(e.target.value); handleResize(e); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+          if (e.key === 'Escape') hide();
+        }}
+        style={{ minHeight: '80px', maxHeight: '160px' }}
+      />
+
+      <div className="action-bar">
+        <button className="secondary-btn" onClick={hide}>Cancel</button>
+        <button className="primary-btn" onClick={submit} disabled={!hasContent}>Submit</button>
       </div>
-    </div>
+    </>
   );
 }

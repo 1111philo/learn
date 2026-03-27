@@ -69,8 +69,7 @@ export default function CourseChat() {
     }
   }, [displayText]);
 
-  // Response modal for text submissions
-  const [showResponseModal, setShowResponseModal] = useState(false);
+  // Response modal uses ModalContext (same as ConfirmModal)
 
   // Collapsed phases for conversation length management
   const [collapsedPhases, setCollapsedPhases] = useState(new Set());
@@ -284,7 +283,6 @@ export default function CourseChat() {
   // -- Submit Work: handles { text, screenshot } from ResponseModal -----------
 
   const handleSubmitWork = useCallback(async ({ text, screenshot }) => {
-    setShowResponseModal(false);
     if (!text && !screenshot) return;
     setError('');
 
@@ -511,7 +509,7 @@ export default function CourseChat() {
         {/* Submit Work button — opens modal for screenshot + text */}
         {(isSummativeActive || (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity)) && (
           <div style={{ textAlign: 'center', margin: '8px 0' }}>
-            <button className="primary-btn" onClick={() => setShowResponseModal(true)} disabled={!!loading}>
+            <button className="primary-btn" onClick={() => showModal(<ResponseModal onSubmit={handleSubmitWork} />)} disabled={!!loading}>
               Submit Work
             </button>
           </div>
@@ -526,12 +524,6 @@ export default function CourseChat() {
         />
       )}
 
-      {showResponseModal && (
-        <ResponseModal
-          onSubmit={handleSubmitWork}
-          onClose={() => setShowResponseModal(false)}
-        />
-      )}
     </div>
   );
 }
