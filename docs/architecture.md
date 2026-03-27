@@ -28,11 +28,13 @@ For the full invocation sequence with inputs and outputs, see [Agent Lifecycle](
 
 [`js/orchestrator.js`](../js/orchestrator.js) is the central layer between agents and the app:
 
-- **`converse(promptName, messages)`** -- multi-turn conversations (onboarding, guide checkpoints). Loads a prompt file, sends message history, returns parsed JSON.
+- **`converse(promptName, messages)`** -- multi-turn conversations (onboarding, guide). Loads a prompt file, sends message history, returns parsed JSON.
 - **`chatWithContext(systemPrompt, messages)`** -- one-off Q&A with an inline system prompt. Returns raw text.
 - **Agent-specific functions** -- `generateSummative()`, `assessSummativeAttempt()`, `analyzeGaps()`, `generateJourney()`, `generateNextActivity()`, `assessDraft()`, `reassessDraft()`, and profile update functions. Each assembles context, calls the API, parses JSON, and runs validation.
 - **Routing** -- if logged in, calls go to the learn-service Bedrock proxy; otherwise, they use the user's Anthropic API key directly.
 - **Retry** -- validation failures retry once automatically. Transient API errors (503, 529, 500) retry up to twice with backoff (3s, 6s).
+
+[`src/lib/courseEngine.js`](../src/lib/courseEngine.js) is the unified state machine that sits above the orchestrator. It manages phase transitions, calls orchestrator functions, invokes the Guide Agent to narrate transitions, and appends all messages to the `course_messages` table. `CourseChat.jsx` calls courseEngine functions in response to user actions.
 
 ## Output validation
 
@@ -87,9 +89,9 @@ All structured data lives in an in-memory SQLite database powered by [sql.js](ht
 - [`js/db.js`](../js/db.js) -- database lifecycle: init, schema creation, persistence, column migrations
 - [`js/storage.js`](../js/storage.js) -- query API: getters/setters for all data types
 
-Key tables: `summatives`, `summative_attempts`, `gap_analysis`, `journeys`, `units`, `activities`, `drafts`, `conversations`, `messages`, `profile`, `preferences`, `work_products`, `auth`, `pending_state`.
+Key tables: `summatives`, `summative_attempts`, `gap_analysis`, `journeys`, `units`, `activities`, `drafts`, `course_messages`, `profile`, `preferences`, `work_products`, `auth`, `pending_state`.
 
-Activity IDs are scoped to their unit in the DB (`unitId::activityId`) to prevent cross-unit collisions. Drafts have both `screenshot_key` (for screenshots in IndexedDB) and `text_response` (for typed responses stored directly). Summative attempts have `text_responses` alongside `screenshots`. In-progress state (summative captures) is persisted to `pending_state` so it survives panel reloads.
+Activity IDs are scoped to their unit in the DB (`unitId::activityId`) to prevent cross-unit collisions. The `course_messages` table stores the unified conversation per course (role, content, msg_type, phase, metadata JSON, timestamp). Completed phases can be collapsed in the UI to manage conversation length. In-progress state (summative captures) is persisted to `pending_state` so it survives panel reloads.
 
 ### IndexedDB (binary assets)
 
@@ -118,9 +120,9 @@ src/                     React app
   App.jsx                Routes
   contexts/              AppContext, AuthContext, ModalContext
   hooks/                 useViewTransition, useAutoResize
-  lib/                   unitEngine, profileQueue, syncDebounce, helpers, constants
+  lib/                   courseEngine, profileQueue, syncDebounce, helpers, constants
   components/            AppShell, chat/*, modals/*
-  pages/                 CoursesList, UnitsList, UnitChat, Portfolio, Settings, onboarding/*
+  pages/                 CoursesList, CourseChat, Portfolio, Settings, onboarding/*
 prompts/                 Agent system prompts (markdown)
 data/courses.json        Course definitions (with unit formats + exemplars)
 tests/                   Node test runner (manifest, courses, validators, storage)

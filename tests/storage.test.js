@@ -55,6 +55,8 @@ CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
 CREATE TABLE IF NOT EXISTS work_products (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id TEXT NOT NULL, course_name TEXT, url TEXT, completed_at INTEGER);
 CREATE TABLE IF NOT EXISTS auth (id INTEGER PRIMARY KEY CHECK (id = 1), access_token TEXT, refresh_token TEXT, user_json TEXT);
 CREATE TABLE IF NOT EXISTS pending_state (key TEXT PRIMARY KEY, state_json TEXT, updated_at INTEGER);
+CREATE TABLE IF NOT EXISTS course_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', msg_type TEXT NOT NULL, phase TEXT, metadata TEXT, timestamp INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_course_msg_course ON course_messages(course_id, timestamp);
 `;
 
 beforeEach(async () => {
@@ -466,5 +468,41 @@ describe('pending state', () => {
     run("DELETE FROM pending_state WHERE key = 'onboarding'");
     const row = query("SELECT * FROM pending_state WHERE key = 'onboarding'");
     assert.equal(row, null);
+  });
+});
+
+describe('course messages', () => {
+  it('stores and retrieves course messages in order', () => {
+    run(
+      `INSERT INTO course_messages (course_id, role, content, msg_type, phase, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['foundations', 'assistant', 'Welcome!', 'guide', 'course_intro', null, 1000]
+    );
+    run(
+      `INSERT INTO course_messages (course_id, role, content, msg_type, phase, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['foundations', 'assistant', 'Start Diagnostic', 'action', 'course_intro', JSON.stringify({ action: 'start_diagnostic' }), 2000]
+    );
+
+    const rows = queryAll(
+      'SELECT * FROM course_messages WHERE course_id = ? ORDER BY timestamp',
+      ['foundations']
+    );
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].content, 'Welcome!');
+    assert.equal(rows[0].msg_type, 'guide');
+    assert.equal(rows[1].msg_type, 'action');
+    assert.deepEqual(JSON.parse(rows[1].metadata), { action: 'start_diagnostic' });
+  });
+
+  it('clears course messages', () => {
+    run(
+      `INSERT INTO course_messages (course_id, role, content, msg_type, timestamp)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['test-clear', 'assistant', 'Hello', 'guide', 1000]
+    );
+    run('DELETE FROM course_messages WHERE course_id = ?', ['test-clear']);
+    const rows = queryAll('SELECT * FROM course_messages WHERE course_id = ?', ['test-clear']);
+    assert.equal(rows.length, 0);
   });
 });

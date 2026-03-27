@@ -33,7 +33,7 @@ For the agent table and architecture overview, see [Architecture](architecture.m
 |---|---|
 | Prompt | [`summative-generation.md`](../prompts/summative-generation.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Learner starts a course ([`unitEngine.initCourse`](../src/lib/unitEngine.js)) |
+| Trigger | Learner starts a course ([`courseEngine.initCourse`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.generateSummative()` |
 | Validation | `validateSummative()` in [`validators.js`](../js/validators.js) |
 
@@ -70,8 +70,8 @@ Each step has a `format` field ("screenshot" or "text") determined by the unit e
 |---|---|
 | Prompt | [`guide.md`](../prompts/guide.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Phase transitions to `course_intro` ([`UnitsList.jsx`](../src/pages/UnitsList.jsx)) |
-| Function | `unitEngine.callGuide()` → `orchestrator.converse('guide', messages)` |
+| Trigger | Phase transitions to `course_intro` ([`CourseChat.jsx`](../src/pages/CourseChat.jsx)) |
+| Function | `courseEngine.callGuide()` → `orchestrator.converse('guide', messages)` |
 
 **Input:** `{ checkpoint: "course_intro", courseName, learnerProfile, rubricCriteria, exemplar }`
 
@@ -89,7 +89,7 @@ The learner sees the guide's message alongside the rubric/exemplar (SummativeCar
 |---|---|
 | Prompt | [`summative-assessment.md`](../prompts/summative-assessment.md) |
 | Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text-only) |
-| Trigger | Learner submits all steps ([`unitEngine.submitSummativeAttempt`](../src/lib/unitEngine.js)) |
+| Trigger | Learner submits all steps ([`courseEngine.submitSummativeAttempt`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.assessSummativeAttempt()` |
 | Validation | `validateSummativeAssessment()` -- enforces ratchet rule |
 
@@ -146,7 +146,7 @@ After the baseline attempt scores come back, the Guide Agent appears with a pers
 |---|---|
 | Prompt | [`gap-analysis.md`](../prompts/gap-analysis.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Learner clicks "Build My Learning Path" ([`unitEngine.generateGapAndJourney`](../src/lib/unitEngine.js)) |
+| Trigger | Learner clicks "Build My Learning Path" ([`courseEngine.generateGapAndJourney`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.analyzeGaps()` |
 | Validation | `validateGapAnalysis()` |
 
@@ -206,7 +206,7 @@ After the journey is generated, the Guide Agent appears with a brief overview of
 |---|---|
 | Prompt | [`activity-creation.md`](../prompts/activity-creation.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Learner enters a unit or advances ([`unitEngine.generateFirstActivity`](../src/lib/unitEngine.js) / `generateNextActivity`) |
+| Trigger | Learner enters a unit or advances ([`courseEngine.generateFirstActivity`](../src/lib/courseEngine.js) / `generateNextActivity`) |
 | Function | `orchestrator.generateNextActivity()` |
 | Validation | `validateActivity()` with `{ format }` |
 
@@ -231,7 +231,7 @@ Screenshot-format activities end with "Hit Capture to capture your screen." Text
 |---|---|
 | Prompt | [`activity-assessment.md`](../prompts/activity-assessment.md) |
 | Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text) |
-| Trigger | Learner captures screenshot ([`unitEngine.recordDraft`](../src/lib/unitEngine.js)) or submits text ([`unitEngine.recordTextDraft`](../src/lib/unitEngine.js)) |
+| Trigger | Learner captures screenshot ([`courseEngine.recordDraft`](../src/lib/courseEngine.js)) or submits text ([`courseEngine.recordTextDraft`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.assessDraft()` |
 | Validation | `validateAssessment()` |
 
@@ -249,7 +249,7 @@ Same as [Agent #5](#5-learner-profile-agent-background), triggered after every f
 |---|---|
 | Prompt | *Inline system prompt* (no prompt file) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Learner asks a question via compose bar ([`unitEngine.askAboutActivity`](../src/lib/unitEngine.js)) |
+| Trigger | Learner asks a question via compose bar ([`courseEngine.askAboutActivity`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.chatWithContext()` |
 
 **Input (inline system prompt):** Activity instruction, rubric criteria, summative exemplar, latest draft feedback + rubric criteria scores, learner profile, Q&A message history.
@@ -262,7 +262,7 @@ Same as [Agent #5](#5-learner-profile-agent-background), triggered after every f
 |---|---|
 | Prompt | Same [`activity-assessment.md`](../prompts/activity-assessment.md) |
 | Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text) |
-| Trigger | Learner disputes a score ([`unitEngine.submitDispute`](../src/lib/unitEngine.js)) |
+| Trigger | Learner disputes a score ([`courseEngine.submitDispute`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.reassessDraft()` |
 
 **Input:** 3-message conversation:
