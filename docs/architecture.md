@@ -28,13 +28,16 @@ For the full invocation sequence with inputs and outputs, see [Agent Lifecycle](
 
 [`js/orchestrator.js`](../js/orchestrator.js) is the central layer between agents and the app:
 
-- **`converse(promptName, messages)`** -- multi-turn conversations (onboarding, guide). Loads a prompt file, sends message history, returns parsed JSON.
+- **`converse(promptName, messages)`** -- multi-turn conversations (onboarding). Loads a prompt file, sends message history, returns parsed JSON.
+- **`converseStream(promptName, messages, onChunk)`** -- streaming conversations (guide). Yields text tokens via callback as they arrive. Falls back to non-streaming for proxy.
 - **`chatWithContext(systemPrompt, messages)`** -- one-off Q&A with an inline system prompt. Returns raw text.
 - **Agent-specific functions** -- `generateSummative()`, `assessSummativeAttempt()`, `analyzeGaps()`, `generateJourney()`, `generateNextActivity()`, `assessDraft()`, `reassessDraft()`, and profile update functions. Each assembles context, calls the API, parses JSON, and runs validation.
 - **Routing** -- if logged in, calls go to the learn-service Bedrock proxy; otherwise, they use the user's Anthropic API key directly.
 - **Retry** -- validation failures retry once automatically. Transient API errors (503, 529, 500) retry up to twice with backoff (3s, 6s).
 
 [`src/lib/courseEngine.js`](../src/lib/courseEngine.js) is the unified state machine that sits above the orchestrator. It manages phase transitions, calls orchestrator functions, invokes the Guide Agent to narrate transitions, and appends all messages to the `course_messages` table. `CourseChat.jsx` calls courseEngine functions in response to user actions.
+
+A program knowledge base ([`data/knowledge-base.md`](../data/knowledge-base.md)) is automatically loaded and appended to the system prompt for the Guide and Onboarding Conversation agents. This gives them context about the AI Leaders program (FAQ, timeline, participants, values) so they can answer program-related questions. The KB is cached after first load.
 
 ## Output validation
 
