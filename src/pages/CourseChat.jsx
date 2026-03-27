@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
 import { useModal } from '../contexts/ModalContext.jsx';
@@ -55,6 +55,18 @@ export default function CourseChat() {
   // Streaming guide text — raw buffer + smoothed display
   const [streamingText, setStreamingText] = useState(null);
   const displayText = useStreamedText(streamingText);
+  const pendingAfterStreamRef = useRef(null);
+
+  // When drain finishes (displayText goes null), apply pending state
+  useEffect(() => {
+    if (displayText === null && pendingAfterStreamRef.current) {
+      const { msgs, p } = pendingAfterStreamRef.current;
+      pendingAfterStreamRef.current = null;
+      if (msgs) setMessages(prev => [...prev, ...msgs]);
+      if (p) setPhase(p);
+      setLoading('');
+    }
+  }, [displayText]);
 
   // Collapsed phases for conversation length management
   const [collapsedPhases, setCollapsedPhases] = useState(new Set());
@@ -85,14 +97,14 @@ export default function CourseChat() {
         setMessages(msgs);
 
         // Collapse old phases
-        const currentPhaseMessages = msgs.filter(m => m.phase === normalizedPhase);
+        const currentPhaseMessages = msgs.filter(m => m.phase === existingPhase);
         if (msgs.length > 0 && currentPhaseMessages.length < msgs.length) {
-          const oldPhases = new Set(msgs.map(m => m.phase).filter(p => p && p !== normalizedPhase));
+          const oldPhases = new Set(msgs.map(m => m.phase).filter(p => p && p !== existingPhase));
           setCollapsedPhases(oldPhases);
         }
 
         // Restore formative state if in learning phase
-        if (normalizedPhase === COURSE_PHASES.FORMATIVE_LEARNING && j?.plan?.units) {
+        if (existingPhase === COURSE_PHASES.FORMATIVE_LEARNING && j?.plan?.units) {
           for (const ju of j.plan.units) {
             const prog = await getUnitProgress(ju.unitId);
             if (prog?.status === 'in_progress') {
@@ -106,7 +118,7 @@ export default function CourseChat() {
         }
 
         // Restore summative captures
-        if (normalizedPhase === COURSE_PHASES.BASELINE_ATTEMPT || normalizedPhase === COURSE_PHASES.SUMMATIVE_RETAKE) {
+        if (existingPhase === COURSE_PHASES.BASELINE_ATTEMPT || existingPhase === COURSE_PHASES.SUMMATIVE_RETAKE) {
           const cs = await getSummativeCaptureState(courseGroupId);
           if (cs?.captures?.length) {
             setCaptures(cs.captures);
@@ -123,13 +135,12 @@ export default function CourseChat() {
             (partial) => { if (!cancelled) setStreamingText(partial); }
           );
           if (cancelled) return;
-          setStreamingText(null);
-          setMessages(msgs);
-          setPhase(p);
+          // Don't apply messages yet — queue them for after the drain finishes
+          pendingAfterStreamRef.current = { msgs, p };
+          setStreamingText(null); // signals drain to finish, then pending applies
         } catch (e) {
-          if (!cancelled) setError(e.message || 'Failed to start course.');
+          if (!cancelled) { setError(e.message || 'Failed to start course.'); setLoading(''); setStreamingText(null); }
         }
-        if (!cancelled) { setLoading(''); setStreamingText(null); }
       }
     })();
 
