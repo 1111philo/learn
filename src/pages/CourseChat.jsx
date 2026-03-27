@@ -174,10 +174,13 @@ export default function CourseChat() {
 
   const totalSummativeSteps = summative?.task?.steps?.length || 0;
 
-  // Find the last action message to determine which is clickable
+  // Track which actions have been triggered (by index in messages array)
+  const [triggeredActions, setTriggeredActions] = useState(new Set());
+
+  // The only clickable action is the last one that hasn't been triggered
   const lastActionIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].msgType === MSG_TYPES.ACTION) return i;
+      if (messages[i].msgType === MSG_TYPES.ACTION && !triggeredActions.has(i)) return i;
     }
     return -1;
   })();
@@ -186,6 +189,14 @@ export default function CourseChat() {
 
   const handleAction = useCallback(async (action) => {
     setError('');
+
+    // Mark this action as triggered so its button disables immediately
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].msgType === MSG_TYPES.ACTION && messages[i].metadata?.action === action) {
+        setTriggeredActions(prev => new Set(prev).add(i));
+        break;
+      }
+    }
 
     if (action === 'back_to_courses') {
       navigate('/courses');

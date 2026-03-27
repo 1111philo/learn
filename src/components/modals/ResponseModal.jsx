@@ -49,7 +49,23 @@ export default function ResponseModal({ onSubmit }) {
     <>
       <h2>Submit Work</h2>
 
-      {/* Screenshot area */}
+      {/* Text area — on top */}
+      <textarea
+        ref={inputRef}
+        className="chat-input"
+        rows={3}
+        placeholder="Write your response..."
+        value={text}
+        onChange={(e) => { setText(e.target.value); handleResize(e); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+          if (e.key === 'Escape') hide();
+        }}
+        style={{ minHeight: '80px', maxHeight: '160px', marginBottom: '8px' }}
+        autoFocus
+      />
+
+      {/* Screenshot area — below text */}
       {screenshot ? (
         <div className="compose-preview" style={{ marginBottom: '8px' }}>
           <img src={screenshot.dataUrl} alt="Captured" className="compose-preview-img" />
@@ -72,21 +88,6 @@ export default function ResponseModal({ onSubmit }) {
           Capture Screenshot
         </button>
       )}
-
-      {/* Text area */}
-      <textarea
-        ref={inputRef}
-        className="chat-input"
-        rows={3}
-        placeholder={screenshot ? 'Add context (optional)...' : 'Write your response...'}
-        value={text}
-        onChange={(e) => { setText(e.target.value); handleResize(e); }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
-          if (e.key === 'Escape') hide();
-        }}
-        style={{ minHeight: '80px', maxHeight: '160px' }}
-      />
 
       <div className="action-bar">
         <button className="secondary-btn" onClick={hide}>Cancel</button>
