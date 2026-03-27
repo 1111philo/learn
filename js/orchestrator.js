@@ -13,6 +13,7 @@ import {
 
 // Prompt cache (loaded once per session)
 const promptCache = {};
+let knowledgeBase = null;
 
 async function loadPrompt(name) {
   if (promptCache[name]) return promptCache[name];
@@ -22,6 +23,22 @@ async function loadPrompt(name) {
   promptCache[name] = text;
   return text;
 }
+
+/** Load the program knowledge base (cached). */
+async function loadKnowledgeBase() {
+  if (knowledgeBase) return knowledgeBase;
+  try {
+    const url = chrome.runtime.getURL('data/knowledge-base.md');
+    const resp = await fetch(url);
+    knowledgeBase = await resp.text();
+  } catch {
+    knowledgeBase = '';
+  }
+  return knowledgeBase;
+}
+
+/** Agents that get the knowledge base injected into their system prompt. */
+const KB_AGENTS = ['guide', 'onboarding-conversation'];
 
 function parseJSON(text) {
   // Try parsing as-is first
@@ -119,7 +136,11 @@ export async function isReady() {
  * get back a parsed JSON response (typically { message, done, ...extras }).
  */
 export async function converse(promptName, messages, maxTokens = 512, { model } = {}) {
-  const systemPrompt = await loadPrompt(promptName);
+  let systemPrompt = await loadPrompt(promptName);
+  if (KB_AGENTS.includes(promptName)) {
+    const kb = await loadKnowledgeBase();
+    if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
+  }
 
   const { content } = await callApi({
     model: model || MODEL_LIGHT,
@@ -138,7 +159,11 @@ export async function converse(promptName, messages, maxTokens = 512, { model } 
  * if the user is logged in (proxy streaming requires learn-service support).
  */
 export async function converseStream(promptName, messages, onChunk, maxTokens = 512, { model } = {}) {
-  const systemPrompt = await loadPrompt(promptName);
+  let systemPrompt = await loadPrompt(promptName);
+  if (KB_AGENTS.includes(promptName)) {
+    const kb = await loadKnowledgeBase();
+    if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
+  }
 
   // Try streaming with direct API key first (works whether logged in or not)
   const apiKey = await getApiKey();
