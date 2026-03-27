@@ -377,20 +377,20 @@ export default function CourseChat() {
 
   // -- Q&A send ---------------------------------------------------------------
 
-  const handleSend = useCallback(async (text, isSubmit = false) => {
+  const handleSend = useCallback(async (text) => {
     if (!text?.trim()) return;
 
-    // Text submission for formative activity
-    if (isSubmit && phase === COURSE_PHASES.FORMATIVE_LEARNING) {
-      return handleFormativeTextSubmit(text);
-    }
-
-    // Text submission for summative step
-    if (isSubmit && isSummativeActive) {
+    // If in a summative step, text is a step submission
+    if (isSummativeActive) {
       return handleSummativeTextSubmit(text);
     }
 
-    // Q&A question
+    // If in formative learning with an active activity, text is a submission
+    if (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity) {
+      return handleFormativeTextSubmit(text);
+    }
+
+    // Otherwise it's a Q&A question
     setLoading('qa');
     try {
       if (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity) {
@@ -405,7 +405,7 @@ export default function CourseChat() {
       setError(e.message || 'Failed to send message.');
     }
     setLoading('');
-  }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, isSummativeActive, handleFormativeTextSubmit, handleSummativeTextSubmit]);
+  }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, isSummativeActive, handleFormativeTextSubmit, handleSummativeTextSubmit, handleCapture]);
 
   // -- Capture handler (routes based on phase) --------------------------------
 
@@ -492,7 +492,6 @@ export default function CourseChat() {
   }
 
   const showCapture = isSummativeActive || phase === COURSE_PHASES.FORMATIVE_LEARNING;
-  const showSubmit = isSummativeActive || phase === COURSE_PHASES.FORMATIVE_LEARNING;
 
   return (
     <div className="course-layout">
@@ -526,7 +525,6 @@ export default function CourseChat() {
           placeholder={isSummativeActive ? 'Write your response or ask a question...' : (phase === COURSE_PHASES.FORMATIVE_LEARNING ? 'Write a response or ask a question...' : 'Ask a question...')}
           onSend={handleSend}
           disabled={!!loading}
-          showSubmit={showSubmit}
           onCapture={showCapture ? handleCapture : undefined}
         />
       )}

@@ -718,10 +718,6 @@ hr {
   cursor: default;
 }
 
-.submit-btn {
-  background: var(--color-success, #16a34a);
-}
-
 .compose-actions {
   display: flex;
   gap: 8px;
