@@ -10,7 +10,7 @@ import Portfolio from './pages/Portfolio.jsx';
 import PortfolioDetail from './pages/PortfolioDetail.jsx';
 import Settings from './pages/Settings.jsx';
 import ScreenReaderAnnounce from './components/ScreenReaderAnnounce.jsx';
-import { getOnboardingComplete, saveOnboardingComplete } from '../js/storage.js';
+import { getOnboardingComplete, saveOnboardingComplete, getLearnerProfile } from '../js/storage.js';
 
 export default function App() {
   const { state } = useApp();
@@ -25,8 +25,15 @@ export default function App() {
     (async () => {
       const done = await getOnboardingComplete();
       if (!done && loggedIn) {
-        // Logged-in users already have an account — skip onboarding, stamp the flag
-        await saveOnboardingComplete();
+        // Logged-in user — check if they already have a profile (synced from server)
+        const profile = await getLearnerProfile();
+        if (profile) {
+          // Profile exists — skip onboarding, stamp the flag
+          await saveOnboardingComplete();
+        } else {
+          // No profile yet — send to About You step to generate one
+          navigate('/onboarding/about', { replace: true });
+        }
       } else if (!done && !loggedIn) {
         navigate('/onboarding', { replace: true });
       }
