@@ -5,8 +5,7 @@ import { useAuth } from './contexts/AuthContext.jsx';
 import AppShell from './components/AppShell.jsx';
 import OnboardingFlow from './pages/onboarding/OnboardingFlow.jsx';
 import CoursesList from './pages/CoursesList.jsx';
-import UnitsList from './pages/UnitsList.jsx';
-import UnitChat from './pages/UnitChat.jsx';
+import CourseChat from './pages/CourseChat.jsx';
 import Portfolio from './pages/Portfolio.jsx';
 import PortfolioDetail from './pages/PortfolioDetail.jsx';
 import Settings from './pages/Settings.jsx';
@@ -47,8 +46,7 @@ export default function App() {
       <Routes>
         <Route path="/onboarding/*" element={<OnboardingFlow />} />
         <Route path="/courses" element={<CoursesList />} />
-        <Route path="/courses/:courseGroupId" element={<UnitsList />} />
-        <Route path="/unit/:unitId" element={<UnitChat />} />
+        <Route path="/courses/:courseGroupId" element={<CourseChat />} />
         <Route path="/work" element={<Portfolio />} />
         <Route path="/work/:courseId" element={<PortfolioDetail />} />
         <Route path="/settings" element={<Settings />} />

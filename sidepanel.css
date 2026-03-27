@@ -335,6 +335,42 @@ nav button:focus-visible {
   margin-top: 8px;
 }
 
+/* ── Progress bar ──────────────────────────────────────────────────────── */
+.progress-bar {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.progress-segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  transition: background 0.3s;
+}
+
+.progress-completed { background: var(--color-success, #16a34a); }
+.progress-active { background: var(--color-accent, #2563eb); }
+.progress-upcoming { background: var(--color-border); }
+
+.phase-collapse-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.phase-collapse-btn:hover {
+  background: var(--color-border);
+}
+
 /* ── Chat / course view ─────────────────────────────────────────────────── */
 .course-layout {
   display: flex;

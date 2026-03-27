@@ -180,6 +180,20 @@ CREATE TABLE IF NOT EXISTS pending_state (
   updated_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS course_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  msg_type TEXT NOT NULL,
+  phase TEXT,
+  metadata TEXT,
+  timestamp INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_msg_course
+  ON course_messages(course_id, timestamp);
+
 `;
 
 // Migrations for adding columns to existing tables.
@@ -194,6 +208,17 @@ const MIGRATIONS = [
   'ALTER TABLE summative_attempts ADD COLUMN summary_for_learner TEXT',
   'ALTER TABLE drafts ADD COLUMN text_response TEXT',
   'ALTER TABLE summative_attempts ADD COLUMN text_responses TEXT',
+  `CREATE TABLE IF NOT EXISTS course_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    msg_type TEXT NOT NULL,
+    phase TEXT,
+    metadata TEXT,
+    timestamp INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_course_msg_course ON course_messages(course_id, timestamp)`,
 ];
 
 // -- Initialization -----------------------------------------------------------

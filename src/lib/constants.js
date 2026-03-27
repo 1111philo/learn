@@ -36,13 +36,36 @@ export const COURSE_PHASES = {
   COMPLETED: 'completed',
 };
 
-/** Phases that are orientation/checkpoint screens with Q&A. */
-export const ORIENTATION_PHASES = [
-  COURSE_PHASES.COURSE_INTRO,
-  COURSE_PHASES.BASELINE_RESULTS,
-  COURSE_PHASES.JOURNEY_OVERVIEW,
-  COURSE_PHASES.RETAKE_READY,
-];
+/** Guide checkpoint names — used by the guide prompt and courseEngine. */
+export const GUIDE_CHECKPOINTS = {
+  COURSE_INTRO: 'course_intro',
+  PRE_DIAGNOSTIC: 'pre_diagnostic',
+  DIAGNOSTIC_STEP: 'diagnostic_step',
+  BASELINE_RESULTS: 'baseline_results',
+  JOURNEY_OVERVIEW: 'journey_overview',
+  UNIT_START: 'unit_start',
+  ACTIVITY_INTRO: 'activity_intro',
+  ACTIVITY_COMPLETE: 'activity_complete',
+  UNIT_COMPLETE: 'unit_complete',
+  RETAKE_READY: 'retake_ready',
+  RETAKE_STEP: 'retake_step',
+  RETAKE_RESULTS: 'retake_results',
+  REMEDIATION_START: 'remediation_start',
+  MASTERY_ACHIEVED: 'mastery_achieved',
+};
+
+/** Message types in the course conversation. */
+export const MSG_TYPES = {
+  GUIDE: 'guide',
+  USER: 'user',
+  INSTRUCTION: 'instruction',
+  SUBMISSION: 'submission',
+  FEEDBACK: 'feedback',
+  RUBRIC_RESULT: 'rubric_result',
+  ACTION: 'action',
+  SECTION: 'section',
+  THINKING: 'thinking',
+};
 
 export const MASTERY_LEVELS = {
   BEGINNING: 'beginning',

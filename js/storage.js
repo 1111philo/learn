@@ -507,6 +507,51 @@ export async function getCoursePhase(courseId) {
   return null;
 }
 
+// -- Course messages (unified conversation per course) ------------------------
+
+export async function getCourseMessages(courseId) {
+  const rows = queryAll(
+    'SELECT * FROM course_messages WHERE course_id = ? ORDER BY timestamp',
+    [courseId]
+  );
+  return rows.map(r => ({
+    id: r.id,
+    courseId: r.course_id,
+    role: r.role,
+    content: r.content,
+    msgType: r.msg_type,
+    phase: r.phase,
+    metadata: r.metadata ? JSON.parse(r.metadata) : null,
+    timestamp: r.timestamp,
+  }));
+}
+
+export async function saveCourseMessage(courseId, msg) {
+  run(
+    `INSERT INTO course_messages (course_id, role, content, msg_type, phase, metadata, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      courseId,
+      msg.role,
+      msg.content || '',
+      msg.msgType,
+      msg.phase || null,
+      msg.metadata ? JSON.stringify(msg.metadata) : null,
+      msg.timestamp || Date.now(),
+    ]
+  );
+}
+
+export async function saveCourseMessages(courseId, msgs) {
+  for (const msg of msgs) {
+    await saveCourseMessage(courseId, msg);
+  }
+}
+
+export async function clearCourseMessages(courseId) {
+  run('DELETE FROM course_messages WHERE course_id = ?', [courseId]);
+}
+
 // -- Conversation state (onboarding) ------------------------------------------
 
 // -- Summative capture state (survives panel reload) --------------------------
