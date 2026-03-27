@@ -60,6 +60,7 @@ export async function getUnitProgress(unitId) {
     id: d.id,
     activityId: d.activity_id?.includes('::') ? d.activity_id.split('::')[1] : d.activity_id,
     screenshotKey: d.screenshot_key,
+    textResponse: d.text_response || null,
     url: d.url,
     feedback: d.feedback,
     strengths: d.strengths ? JSON.parse(d.strengths) : [],
@@ -172,12 +173,13 @@ export async function saveUnitProgress(unitId, progress) {
       currentDraftIds.add(draftId);
       run(
         `INSERT OR REPLACE INTO drafts
-         (id, activity_id, unit_id, screenshot_key, url, score, feedback,
+         (id, activity_id, unit_id, screenshot_key, text_response, url, score, feedback,
           strengths, improvements, recommendation, timestamp, rubric_criteria_scores)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           draftId, `${unitId}::${d.activityId}`, unitId,
           d.screenshotKey || null,
+          d.textResponse || null,
           d.url || null,
           d.score ?? null,
           d.feedback || null,
@@ -393,6 +395,7 @@ export async function getSummativeAttempts(courseId) {
     courseId: r.course_id,
     attemptNumber: r.attempt_number,
     screenshots: r.screenshots ? JSON.parse(r.screenshots) : [],
+    textResponses: r.text_responses ? JSON.parse(r.text_responses) : [],
     criteriaScores: r.criteria_scores ? JSON.parse(r.criteria_scores) : [],
     overallScore: r.overall_score,
     mastery: !!r.mastery,
@@ -407,14 +410,15 @@ export async function getSummativeAttempts(courseId) {
 export async function saveSummativeAttempt(courseId, attempt) {
   run(
     `INSERT OR REPLACE INTO summative_attempts
-     (id, course_id, attempt_number, screenshots, criteria_scores, overall_score,
+     (id, course_id, attempt_number, screenshots, text_responses, criteria_scores, overall_score,
       mastery, feedback, next_steps, is_baseline, summary_for_learner, timestamp)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       attempt.id,
       courseId,
       attempt.attemptNumber,
       JSON.stringify(attempt.screenshots || []),
+      JSON.stringify(attempt.textResponses || []),
       JSON.stringify(attempt.criteriaScores || []),
       attempt.overallScore ?? null,
       attempt.mastery ? 1 : 0,

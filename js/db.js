@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS summative_attempts (
   course_id TEXT NOT NULL,
   attempt_number INTEGER NOT NULL,
   screenshots TEXT,
+  text_responses TEXT,
   criteria_scores TEXT,
   overall_score REAL,
   mastery INTEGER DEFAULT 0,
@@ -145,6 +146,7 @@ CREATE TABLE IF NOT EXISTS drafts (
   activity_id TEXT NOT NULL REFERENCES activities(id),
   unit_id TEXT NOT NULL,
   screenshot_key TEXT,
+  text_response TEXT,
   url TEXT,
   score REAL,
   feedback TEXT,
@@ -190,6 +192,8 @@ const MIGRATIONS = [
   'ALTER TABLE summatives ADD COLUMN course_intro TEXT',
   'ALTER TABLE summatives ADD COLUMN summary_for_learner TEXT',
   'ALTER TABLE summative_attempts ADD COLUMN summary_for_learner TEXT',
+  'ALTER TABLE drafts ADD COLUMN text_response TEXT',
+  'ALTER TABLE summative_attempts ADD COLUMN text_responses TEXT',
 ];
 
 // -- Initialization -----------------------------------------------------------
