@@ -72,6 +72,13 @@ export default function UnitsList() {
   // Build phase-specific context for the Guide Agent
   const getGuideContext = useCallback(() => {
     const ctx = {};
+    // Course info always available from courses.json
+    if (group) {
+      ctx.units = (group.units || []).map(u => ({
+        name: u.name, format: u.format, objectiveCount: u.learningObjectives.length,
+      }));
+      ctx.unitCount = group.units?.length || 0;
+    }
     if (summative) {
       ctx.rubricCriteria = summative.rubric?.map(c => c.name);
       ctx.exemplar = summative.exemplar;
@@ -90,7 +97,7 @@ export default function UnitsList() {
       }));
     }
     return ctx;
-  }, [summative, attempts, journey]);
+  }, [group, summative, attempts, journey]);
 
   // Load course state on mount
   useEffect(() => {
@@ -124,21 +131,9 @@ export default function UnitsList() {
           }
         }
       } else {
-        setLoading('summative');
-        try {
-          const s = await initCourse(group);
-          if (cancelled) return;
-          setSummative(s);
-          // Don't clear loading — transition to guide loading seamlessly.
-          // The phase change triggers the guide useEffect which sets loading='guide'.
-          setLoading('guide');
-          setPhase(COURSE_PHASES.COURSE_INTRO);
-        } catch (e) {
-          if (!cancelled) {
-            setError(e.message || 'Failed to generate summative.');
-            setLoading('');
-          }
-        }
+        // No phase yet — show course intro immediately (no API call).
+        // The guide fires via useEffect on phase change using courses.json data.
+        setPhase(COURSE_PHASES.COURSE_INTRO);
       }
     })();
 
@@ -191,13 +186,25 @@ export default function UnitsList() {
   // -- Phase transitions ------------------------------------------------------
 
   const handleStartDiagnostic = useCallback(async () => {
-    await advancePhase(courseGroupId, COURSE_PHASES.BASELINE_ATTEMPT);
-    await clearSummativeCaptureState(courseGroupId);
-    setCaptures([]);
-    setTextResponses([]);
-    setCurrentStep(0);
-    setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
-  }, [courseGroupId]);
+    setLoading('summative');
+    try {
+      // Generate summative now (deferred from course open)
+      let s = summative;
+      if (!s) {
+        s = await initCourse(group);
+        setSummative(s);
+      }
+      await advancePhase(courseGroupId, COURSE_PHASES.BASELINE_ATTEMPT);
+      await clearSummativeCaptureState(courseGroupId);
+      setCaptures([]);
+      setTextResponses([]);
+      setCurrentStep(0);
+      setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
+    } catch (e) {
+      setError(e.message || 'Failed to generate assessment.');
+    }
+    setLoading('');
+  }, [courseGroupId, group, summative]);
 
   const handleBuildJourney = useCallback(async () => {
     setLoading('journey');
@@ -323,13 +330,13 @@ export default function UnitsList() {
         {phase && <button className="reset-btn" onClick={handleResetCourse} aria-label="Reset course" title="Reset course">&#8635;</button>}
       </div>
 
-      {/* Setup — generating summative */}
-      {(phase === COURSE_PHASES.SUMMATIVE_SETUP || loading === 'summative') && (
+      {/* Setup — only shown if returning to a course mid-generation */}
+      {phase === COURSE_PHASES.SUMMATIVE_SETUP && (
         <ChatArea><ThinkingSpinner /></ChatArea>
       )}
 
       {/* ── COURSE INTRO ── */}
-      {phase === COURSE_PHASES.COURSE_INTRO && summative && (
+      {phase === COURSE_PHASES.COURSE_INTRO && (
         <ChatArea>
           {guideMessages.map((m, i) => (
             m.role === 'user'
@@ -337,13 +344,34 @@ export default function UnitsList() {
               : <AssistantMessage key={i} content={m.content} />
           ))}
           {loading === 'guide' && <ThinkingSpinner />}
-          <div className="chat-section-heading" role="separator">Assessment Overview</div>
-          <SummativeCard summative={summative} />
-          <div style={{ textAlign: 'center', margin: '8px 0' }}>
-            <button className="primary-btn" onClick={handleStartDiagnostic} disabled={loading && loading !== 'guide'}>
-              Start Diagnostic Assessment
-            </button>
+
+          {/* Course overview from courses.json — no API call needed */}
+          <div className="chat-section-heading" role="separator">Course Overview</div>
+          <div className="msg msg-response" style={{ fontSize: '0.85rem' }}>
+            <strong>{group.name}</strong>
+            <p style={{ margin: '4px 0 0' }}>{group.description}</p>
           </div>
+          <div className="course-list" role="list" style={{ margin: '0' }}>
+            {(group.units || []).map((u, i) => (
+              <div key={u.unitId} className="course-card stagger-item" style={{ animationDelay: `${i * 40}ms` }} role="listitem">
+                <span className="course-status" aria-hidden="true">{u.format === 'text' ? '\u270E' : '\u{1F4F7}'}</span>
+                <div className="course-info">
+                  <strong>{u.name}</strong>
+                  <p>{u.description}</p>
+                  <small>{u.learningObjectives.length} objective{u.learningObjectives.length !== 1 ? 's' : ''} &middot; {u.format}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {loading === 'summative' && <ThinkingSpinner text="Generating your diagnostic assessment..." />}
+          {loading !== 'summative' && (
+            <div style={{ textAlign: 'center', margin: '8px 0' }}>
+              <button className="primary-btn" onClick={handleStartDiagnostic}>
+                Start Diagnostic Assessment
+              </button>
+            </div>
+          )}
         </ChatArea>
       )}
 
