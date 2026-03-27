@@ -96,6 +96,91 @@ export async function callClaude({ apiKey, model, systemPrompt, messages, maxTok
  * Call a proxy endpoint that forwards to Bedrock (or any Messages-API-compatible backend).
  * Used for learn-service proxy and custom proxy URLs.
  */
+/**
+ * Stream from the Anthropic API. Returns a ReadableStream of text deltas.
+ * The caller consumes via: for await (const chunk of streamClaude(...)) { ... }
+ */
+export async function streamClaude({ apiKey, model, systemPrompt, messages, maxTokens = 1024 }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let resp;
+  try {
+    resp = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages,
+        stream: true
+      }),
+      signal: controller.signal
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new ApiError('network', 'Request timed out. Try again.');
+    throw new ApiError('network', 'Network error. Check your connection.');
+  }
+
+  if (!resp.ok) {
+    clearTimeout(timer);
+    const status = resp.status;
+    let body;
+    try { body = await resp.json(); } catch { body = {}; }
+    const msg = body?.error?.message || body?.error || `API returned ${status}`;
+    if (status === 401) throw new ApiError('invalid_key', 'Invalid API key.', status);
+    if (status === 429) throw new ApiError('rate_limit', 'Rate limited.', status);
+    if (status === 503 || status === 529) throw new ApiError('overloaded', 'API overloaded.', status);
+    throw new ApiError('api', msg, status);
+  }
+
+  return parseSSEStream(resp.body, () => clearTimeout(timer));
+}
+
+/**
+ * Parse an SSE stream from the Anthropic Messages API.
+ * Yields text delta strings as they arrive.
+ */
+async function* parseSSEStream(body, onDone) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') return;
+
+        let event;
+        try { event = JSON.parse(data); } catch { continue; }
+
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          yield event.delta.text;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+    onDone?.();
+  }
+}
+
 export async function callProxy({ url, headers = {}, model, systemPrompt, messages, maxTokens = 1024 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);

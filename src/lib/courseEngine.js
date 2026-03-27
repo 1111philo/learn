@@ -28,8 +28,8 @@ function collectObjectives(courseGroup) {
 
 function ts() { return Date.now(); }
 
-/** Call the guide agent and return its message text. Falls back to a default on error. */
-async function callGuide(courseGroup, checkpoint, conversationTail, extraContext) {
+/** Build guide message history for the API. */
+async function buildGuideMessages(courseGroup, checkpoint, conversationTail, extraContext) {
   const profileSummary = await getLearnerProfileSummary();
   const context = JSON.stringify({
     checkpoint,
@@ -45,11 +45,20 @@ async function callGuide(courseGroup, checkpoint, conversationTail, extraContext
   if (conversationTail.length === 0) {
     fullMessages.push({ role: 'user', content: 'Orient me.' });
   }
+  return fullMessages;
+}
+
+/**
+ * Call the guide agent with streaming. Calls onChunk(partialText) as tokens arrive.
+ * Returns the full text when done. Falls back gracefully on error.
+ */
+async function callGuide(courseGroup, checkpoint, conversationTail, extraContext, onChunk) {
+  const messages = await buildGuideMessages(courseGroup, checkpoint, conversationTail, extraContext);
   try {
-    const result = await orchestrator.converse('guide', fullMessages, 512);
-    return result.message;
+    const text = await orchestrator.converseStream('guide', messages, onChunk || (() => {}), 512);
+    return text;
   } catch {
-    return null; // caller decides fallback
+    return null;
   }
 }
 
@@ -87,11 +96,13 @@ function buildGuideContext(courseGroup, opts = {}) {
 
 // -- Course lifecycle ---------------------------------------------------------
 
-/** Initialize a new course conversation with the guide intro. No API calls except guide. */
-export async function startCourse(courseId, courseGroup) {
+/** Initialize a new course conversation with the guide intro. No API calls except guide.
+ *  onGuideStream(partialText) is called as tokens arrive for the guide message.
+ */
+export async function startCourse(courseId, courseGroup, onGuideStream) {
   await ensureProfileExists();
 
-  const guideMsg = await callGuide(courseGroup, GUIDE_CHECKPOINTS.COURSE_INTRO, [], buildGuideContext(courseGroup));
+  const guideMsg = await callGuide(courseGroup, GUIDE_CHECKPOINTS.COURSE_INTRO, [], buildGuideContext(courseGroup), onGuideStream);
 
   const messages = [];
   if (guideMsg) {
@@ -611,16 +622,33 @@ Respond in plain text (not JSON). Be brief and direct.`;
   return { messages, response };
 }
 
-/** Ask a Q&A question during orientation (routes to guide agent). */
-export async function askGuide(courseId, courseGroup, text, priorGuideMessages, guideContext) {
-  const userMsg = { role: 'user', content: text, timestamp: ts() };
-  const conversationTail = [...priorGuideMessages, userMsg];
+/** Ask a Q&A question (routes to guide agent with full context).
+ *  onStream(partialText) is called as tokens arrive.
+ */
+export async function askGuide(courseId, courseGroup, text, phase, onStream) {
+  // Build full context so the guide knows everything
+  const summative = await getSummative(courseId);
+  const attempts = await getSummativeAttempts(courseId);
+  const journey = await getJourney(courseId);
+  const ctx = buildGuideContext(courseGroup, {
+    summative,
+    attempt: attempts[attempts.length - 1],
+    journey,
+  });
+  ctx.currentPhase = phase;
 
-  const guideMsg = await callGuide(courseGroup, 'followup', conversationTail, guideContext);
+  // Get recent conversation for continuity (last 10 messages)
+  const allMsgs = await getCourseMessages(courseId);
+  const recentMsgs = allMsgs.slice(-10).map(m => ({ role: m.role, content: m.content }));
+
+  const userMsg = { role: 'user', content: text };
+  const conversationTail = [...recentMsgs, userMsg];
+
+  const guideMsg = await callGuide(courseGroup, 'followup', conversationTail, ctx, onStream);
 
   const messages = [
-    { role: 'user', content: text, msgType: MSG_TYPES.USER, phase: null, timestamp: ts() },
-    { role: 'assistant', content: guideMsg || 'I\'m not sure about that. Try clicking the action button to continue.', msgType: MSG_TYPES.GUIDE, phase: null, timestamp: ts() },
+    { role: 'user', content: text, msgType: MSG_TYPES.USER, phase, timestamp: ts() },
+    { role: 'assistant', content: guideMsg || 'Could you rephrase that?', msgType: MSG_TYPES.GUIDE, phase, timestamp: ts() },
   ];
   await saveCourseMessages(courseId, messages);
   return { messages };

@@ -51,6 +51,9 @@ export default function CourseChat() {
   const [currentActivity, setCurrentActivity] = useState(null);
   const [unitProgress, setUnitProgress] = useState(null);
 
+  // Streaming guide text (shows tokens as they arrive)
+  const [streamingText, setStreamingText] = useState(null);
+
   // Collapsed phases for conversation length management
   const [collapsedPhases, setCollapsedPhases] = useState(new Set());
 
@@ -109,17 +112,22 @@ export default function CourseChat() {
           }
         }
       } else {
-        // New course — start with guide intro (no API except guide)
+        // New course — start with guide intro (streams tokens as they arrive)
         setLoading('guide');
+        setStreamingText('');
         try {
-          const { messages: msgs, phase: p } = await engine.startCourse(courseGroupId, group);
+          const { messages: msgs, phase: p } = await engine.startCourse(
+            courseGroupId, group,
+            (partial) => { if (!cancelled) setStreamingText(partial); }
+          );
           if (cancelled) return;
+          setStreamingText(null);
           setMessages(msgs);
           setPhase(p);
         } catch (e) {
           if (!cancelled) setError(e.message || 'Failed to start course.');
         }
-        if (!cancelled) setLoading('');
+        if (!cancelled) { setLoading(''); setStreamingText(null); }
       }
     })();
 
@@ -365,10 +373,18 @@ export default function CourseChat() {
     // Q&A question
     if (hasText) {
       setLoading('qa');
+      setStreamingText('');
+      // Show user message immediately
+      appendMessages([{ role: 'user', content: text, msgType: MSG_TYPES.USER, phase, timestamp: Date.now() }]);
       try {
-        const result = await engine.askGuide(courseGroupId, group, text, [], {});
-        appendMessages(result.messages);
+        const result = await engine.askGuide(courseGroupId, group, text, phase,
+          (partial) => setStreamingText(partial));
+        setStreamingText(null);
+        // Only append the assistant message (user already shown)
+        const assistantMsg = result.messages.find(m => m.role === 'assistant');
+        if (assistantMsg) appendMessages([assistantMsg]);
       } catch (e) { setError(e.message || 'Failed to send message.'); }
+      setStreamingText(null);
       setLoading('');
     }
   }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, captures, textResponses, currentStep, summative, totalSummativeSteps, dispatch]);
@@ -464,7 +480,10 @@ export default function CourseChat() {
       <ChatArea>
         {collapseSummaries}
         {messages.map(renderMessage)}
-        {loading === 'guide' && <ThinkingSpinner />}
+        {streamingText != null && streamingText.length > 0 && (
+          <AssistantMessage content={streamingText} />
+        )}
+        {loading === 'guide' && !streamingText && <ThinkingSpinner />}
         {loading === 'start_diagnostic' && <ThinkingSpinner text="Generating your diagnostic assessment..." />}
         {loading === 'build_journey' && <ThinkingSpinner text="Building your learning path..." />}
         {loading === 'start_learning' && <ThinkingSpinner text="Preparing your first activity..." />}

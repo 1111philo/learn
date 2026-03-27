@@ -3,7 +3,7 @@
  * parses structured JSON responses.
  */
 
-import { callClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
+import { callClaude, streamClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
 import {
@@ -130,6 +130,45 @@ export async function converse(promptName, messages, maxTokens = 512, { model } 
 
   const parsed = parseJSON(content);
   return parsed;
+}
+
+/**
+ * Stream a conversation response. Calls onChunk(text) as tokens arrive.
+ * Returns the full accumulated text when done. Falls back to non-streaming
+ * if the user is logged in (proxy streaming requires learn-service support).
+ */
+export async function converseStream(promptName, messages, onChunk, maxTokens = 512, { model } = {}) {
+  const systemPrompt = await loadPrompt(promptName);
+
+  // Streaming only works with direct Anthropic API key (not proxy yet)
+  if (!(await isLoggedIn())) {
+    const apiKey = await getApiKey();
+    if (apiKey) {
+      let full = '';
+      const stream = await streamClaude({
+        apiKey,
+        model: model || MODEL_LIGHT,
+        systemPrompt,
+        messages,
+        maxTokens
+      });
+      for await (const chunk of stream) {
+        full += chunk;
+        onChunk(full);
+      }
+      return full;
+    }
+  }
+
+  // Fallback: non-streaming (proxy or no key)
+  const { content } = await callApi({
+    model: model || MODEL_LIGHT,
+    systemPrompt,
+    messages,
+    maxTokens
+  });
+  onChunk(content);
+  return content;
 }
 
 /**
