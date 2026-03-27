@@ -85,9 +85,24 @@ export default function CourseChat() {
       const existingPhase = await getCoursePhase(courseGroupId);
       if (cancelled) return;
 
-      if (existingPhase) {
+      // Also check for existing messages — sync.loadAll() can wipe the journey
+      // phase but messages survive in course_messages table
+      const existingMsgs = await getCourseMessages(courseGroupId);
+      const hasMessages = existingMsgs.length > 0;
+
+      if (existingPhase || hasMessages) {
         // Returning to an existing course — load state
-        setPhase(existingPhase);
+        // Recover phase from messages if journey was wiped by sync
+        const recoveredPhase = existingPhase
+          || existingMsgs.filter(m => m.phase).pop()?.phase
+          || COURSE_PHASES.COURSE_INTRO;
+        setPhase(recoveredPhase);
+
+        // Re-persist phase if it was recovered (so it survives next load)
+        if (!existingPhase && recoveredPhase) {
+          const { updateJourneyPhase } = await import('../../js/storage.js');
+          await updateJourneyPhase(courseGroupId, recoveredPhase);
+        }
 
         const s = await getSummative(courseGroupId);
         if (s) setSummative(s);
@@ -96,19 +111,18 @@ export default function CourseChat() {
         const a = await getSummativeAttempts(courseGroupId);
         setAttempts(a);
 
-        // Load conversation
-        const msgs = await getCourseMessages(courseGroupId);
-        setMessages(msgs);
+        // Load conversation (already fetched above)
+        setMessages(existingMsgs);
 
         // Collapse old phases
-        const currentPhaseMessages = msgs.filter(m => m.phase === existingPhase);
-        if (msgs.length > 0 && currentPhaseMessages.length < msgs.length) {
-          const oldPhases = new Set(msgs.map(m => m.phase).filter(p => p && p !== existingPhase));
+        const currentPhaseMessages = existingMsgs.filter(m => m.phase === recoveredPhase);
+        if (existingMsgs.length > 0 && currentPhaseMessages.length < existingMsgs.length) {
+          const oldPhases = new Set(existingMsgs.map(m => m.phase).filter(p => p && p !== recoveredPhase));
           setCollapsedPhases(oldPhases);
         }
 
         // Restore formative state if in learning phase
-        if (existingPhase === COURSE_PHASES.FORMATIVE_LEARNING && j?.plan?.units) {
+        if (recoveredPhase === COURSE_PHASES.FORMATIVE_LEARNING && j?.plan?.units) {
           for (const ju of j.plan.units) {
             const prog = await getUnitProgress(ju.unitId);
             if (prog?.status === 'in_progress') {
@@ -122,7 +136,7 @@ export default function CourseChat() {
         }
 
         // Restore summative captures
-        if (existingPhase === COURSE_PHASES.BASELINE_ATTEMPT || existingPhase === COURSE_PHASES.SUMMATIVE_RETAKE) {
+        if (recoveredPhase === COURSE_PHASES.BASELINE_ATTEMPT || recoveredPhase === COURSE_PHASES.SUMMATIVE_RETAKE) {
           const cs = await getSummativeCaptureState(courseGroupId);
           if (cs?.captures?.length) {
             setCaptures(cs.captures);
