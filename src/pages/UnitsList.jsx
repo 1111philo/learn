@@ -129,11 +129,16 @@ export default function UnitsList() {
           const s = await initCourse(group);
           if (cancelled) return;
           setSummative(s);
+          // Don't clear loading — transition to guide loading seamlessly.
+          // The phase change triggers the guide useEffect which sets loading='guide'.
+          setLoading('guide');
           setPhase(COURSE_PHASES.COURSE_INTRO);
         } catch (e) {
-          if (!cancelled) setError(e.message || 'Failed to generate summative.');
+          if (!cancelled) {
+            setError(e.message || 'Failed to generate summative.');
+            setLoading('');
+          }
         }
-        if (!cancelled) setLoading('');
       }
     })();
 
@@ -334,13 +339,11 @@ export default function UnitsList() {
           {loading === 'guide' && <ThinkingSpinner />}
           <div className="chat-section-heading" role="separator">Assessment Overview</div>
           <SummativeCard summative={summative} />
-          {!loading && (
-            <div style={{ textAlign: 'center', margin: '8px 0' }}>
-              <button className="primary-btn" onClick={handleStartDiagnostic}>
-                Start Diagnostic Assessment
-              </button>
-            </div>
-          )}
+          <div style={{ textAlign: 'center', margin: '8px 0' }}>
+            <button className="primary-btn" onClick={handleStartDiagnostic} disabled={loading && loading !== 'guide'}>
+              Start Diagnostic Assessment
+            </button>
+          </div>
         </ChatArea>
       )}
 
@@ -405,13 +408,11 @@ export default function UnitsList() {
           ))}
           {loading === 'guide' && <ThinkingSpinner />}
           {loading === 'journey' && <ThinkingSpinner text="Building your learning path..." />}
-          {!loading && (
-            <div style={{ textAlign: 'center', margin: '8px 0' }}>
-              <button className="primary-btn" onClick={handleBuildJourney}>
-                Build My Learning Path
-              </button>
-            </div>
-          )}
+          <div style={{ textAlign: 'center', margin: '8px 0' }}>
+            <button className="primary-btn" onClick={handleBuildJourney} disabled={loading === 'journey'}>
+              Build My Learning Path
+            </button>
+          </div>
         </ChatArea>
       )}
 
@@ -452,13 +453,11 @@ export default function UnitsList() {
                 : <AssistantMessage key={i} content={m.content} />
             ))}
             {loading === 'guide' && guideMessages.length > 0 && <ThinkingSpinner />}
-            {!loading && (
-              <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                <button className="primary-btn" onClick={handleStartLearning}>
-                  Start Learning
-                </button>
-              </div>
-            )}
+            <div style={{ textAlign: 'center', margin: '8px 0' }}>
+              <button className="primary-btn" onClick={handleStartLearning}>
+                Start Learning
+              </button>
+            </div>
           </ChatArea>
         </>
       )}
@@ -536,13 +535,11 @@ export default function UnitsList() {
               : <AssistantMessage key={i} content={m.content} />
           ))}
           {loading === 'guide' && <ThinkingSpinner />}
-          {!loading && (
-            <div style={{ textAlign: 'center', margin: '8px 0' }}>
-              <button className="primary-btn" onClick={handleStartRetake}>
-                Start Assessment
-              </button>
-            </div>
-          )}
+          <div style={{ textAlign: 'center', margin: '8px 0' }}>
+            <button className="primary-btn" onClick={handleStartRetake}>
+              Start Assessment
+            </button>
+          </div>
         </ChatArea>
       )}
 
