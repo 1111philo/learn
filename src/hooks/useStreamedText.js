@@ -30,16 +30,11 @@ export function useStreamedText(rawText) {
     const timer = setInterval(() => {
       const target = bufferRef.current;
       if (posRef.current < target.length) {
-        // Advance by 2 chars (or to end of current word for smoother feel)
-        let next = posRef.current + 2;
-        // Snap to end of word if close
-        while (next < target.length && target[next] !== ' ' && next - posRef.current < 6) {
-          next++;
-        }
-        posRef.current = Math.min(next, target.length);
+        // Advance one character at a time
+        posRef.current++;
         setDisplay(target.slice(0, posRef.current));
       }
-    }, 15);
+    }, 30);
 
     return () => clearInterval(timer);
   }, [rawText != null]); // only start/stop when streaming starts/ends
