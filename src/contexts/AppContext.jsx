@@ -44,22 +44,17 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     async function load() {
-      const preferences = await getPreferences();
       const courseGroups = await loadCourses();
       const units = flattenCourses(courseGroups);
+
+      // If logged in, sync BEFORE reading local data so profile/progress are fresh
+      if (await auth.isLoggedIn()) {
+        try { await sync.loadAll(); } catch { /* offline — local cache is fine */ }
+      }
+
+      const preferences = await getPreferences();
       const allProgress = await getAllProgress();
       dispatch({ type: 'INIT_DATA', payload: { preferences, courseGroups, units, allProgress } });
-
-      // Background sync if logged in
-      if (await auth.isLoggedIn()) {
-        try {
-          await sync.loadAll();
-          const freshProgress = await getAllProgress();
-          const freshPrefs = await getPreferences();
-          dispatch({ type: 'UPDATE_ALL_PROGRESS', allProgress: freshProgress });
-          dispatch({ type: 'SET_PREFERENCES', preferences: freshPrefs });
-        } catch { /* offline — local cache is fine */ }
-      }
     }
     load();
   }, []);
