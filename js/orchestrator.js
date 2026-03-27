@@ -140,27 +140,25 @@ export async function converse(promptName, messages, maxTokens = 512, { model } 
 export async function converseStream(promptName, messages, onChunk, maxTokens = 512, { model } = {}) {
   const systemPrompt = await loadPrompt(promptName);
 
-  // Streaming only works with direct Anthropic API key (not proxy yet)
-  if (!(await isLoggedIn())) {
-    const apiKey = await getApiKey();
-    if (apiKey) {
-      let full = '';
-      const stream = await streamClaude({
-        apiKey,
-        model: model || MODEL_LIGHT,
-        systemPrompt,
-        messages,
-        maxTokens
-      });
-      for await (const chunk of stream) {
-        full += chunk;
-        onChunk(full);
-      }
-      return full;
+  // Try streaming with direct API key first (works whether logged in or not)
+  const apiKey = await getApiKey();
+  if (apiKey) {
+    let full = '';
+    const stream = await streamClaude({
+      apiKey,
+      model: model || MODEL_LIGHT,
+      systemPrompt,
+      messages,
+      maxTokens
+    });
+    for await (const chunk of stream) {
+      full += chunk;
+      onChunk(full);
     }
+    return full;
   }
 
-  // Fallback: non-streaming (proxy or no key)
+  // Fallback: non-streaming (proxy with no local key)
   const { content } = await callApi({
     model: model || MODEL_LIGHT,
     systemPrompt,
