@@ -102,14 +102,14 @@ export default function UnitChat() {
   const unitDef = courseGroup?.units?.find(u => u.unitId === unitId);
   const unitFormat = unitDef?.format || 'screenshot';
 
-  // Activity Q&A (or text submission for text-format units)
+  // Activity Q&A or text submission
   const handleActivitySend = useCallback(async (text, isSubmit = false) => {
     if (!progress) return;
     const activity = progress.activities[progress.currentActivityIndex];
     if (!activity) return;
 
-    // Text-format submission
-    if (isSubmit && unitFormat === 'text') {
+    // Text submission for assessment
+    if (isSubmit) {
       setLoading('recording');
       try {
         const { newProgress } = await recordTextDraft(unit, progress, activity, text);
@@ -137,7 +137,7 @@ export default function UnitChat() {
       dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
     } catch { /* silent */ }
     setLoading('');
-  }, [progress, unit, unitId, unitFormat, dispatch, courseGroup]);
+  }, [progress, unit, unitId, dispatch, courseGroup]);
 
   // Record screenshot draft
   const handleRecord = useCallback(async () => {
@@ -270,20 +270,12 @@ export default function UnitChat() {
               {TYPE_LABELS[activity.type] || activity.type}: {activity.goal}
             </div>
             <InstructionMessage text={activity.instruction} rubricCriteria={activity.rubricCriteria} />
-            {renderTimeline(activity, activityDrafts, true, handleDispute, unitFormat === 'screenshot' ? handleRecord : null)}
+            {renderTimeline(activity, activityDrafts, true, handleDispute, handleRecord)}
 
             {loading === 'recording' && <ThinkingSpinner text="Evaluating your work..." />}
             {loading === 'qa' && <ThinkingSpinner />}
             {loading === 'generating' && progress?.activities?.length > 0 && <ThinkingSpinner text="Preparing next activity..." />}
 
-            {!activityDrafts.length && !loading && unitFormat === 'screenshot' && (
-              <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                <button className="record-btn" onClick={handleRecord} aria-label="Capture screenshot">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '6px' }}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  Capture
-                </button>
-              </div>
-            )}
             {isPassed && remaining > 0 && (
               <button className="primary-btn" onClick={handleNextActivity}>
                 Continue to next activity ({remaining} remaining)
@@ -314,16 +306,13 @@ export default function UnitChat() {
         {error && <div className="msg msg-response" role="alert" aria-live="assertive" style={{ color: 'var(--color-warning)' }}>{error}</div>}
       </ChatArea>
 
-      {/* Compose bar for Q&A (screenshot format) or text submission + Q&A (text format) */}
+      {/* Compose bar — capture + text always available */}
       {activity && !isUnitDone && !loading && (
         <ComposeBar
-          placeholder={unitFormat === 'text' && !isPassed
-            ? 'Write your response, or ask a question...'
-            : 'Ask a question about this activity...'}
+          placeholder={!isPassed ? 'Write a response or ask a question...' : 'Ask a question about this activity...'}
           onSend={handleActivitySend}
           disabled={!!loading}
-          showSubmit={unitFormat === 'text' && !isPassed}
-          showCapture={unitFormat === 'screenshot' && activityDrafts.length > 0 && !isPassed}
+          showSubmit={!isPassed}
           onCapture={handleRecord}
         />
       )}
