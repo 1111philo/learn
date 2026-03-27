@@ -154,6 +154,8 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     for await (const chunk of stream) {
       full += chunk;
       onChunk(full);
+      // Yield to event loop so React can render between tokens
+      await new Promise(r => setTimeout(r, 0));
     }
     return full;
   }
