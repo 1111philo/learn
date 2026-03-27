@@ -232,6 +232,9 @@ export default function CourseChat() {
   // -- Send (routes based on phase, handles screenshot + text combo) ----------
   // Uses current state directly (no stale closure issues with useCallback deps)
 
+  // Check if text triggers the pending action button
+  const ACTION_TRIGGERS = /^(start|begin|go|ready|yes|ok|okay|sure|let'?s go|let'?s do it|continue|next|proceed|take it|do it|i'?m ready)[\s!.]*$/i;
+
   const handleSend = useCallback(async (payload) => {
     const { text, screenshot } = payload;
     const hasText = !!text?.trim();
@@ -239,6 +242,14 @@ export default function CourseChat() {
     if (!hasText && !hasScreenshot) return;
 
     setError('');
+
+    // If text matches a trigger phrase and there's a pending action, fire it
+    if (hasText && !hasScreenshot && lastActionIndex >= 0) {
+      const pendingAction = messages[lastActionIndex]?.metadata?.action;
+      if (pendingAction && ACTION_TRIGGERS.test(text.trim())) {
+        return handleAction(pendingAction);
+      }
+    }
 
     // Summative step submission
     if (phase === COURSE_PHASES.BASELINE_ATTEMPT || phase === COURSE_PHASES.SUMMATIVE_RETAKE) {
@@ -387,7 +398,7 @@ export default function CourseChat() {
       setStreamingText(null);
       setLoading('');
     }
-  }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, captures, textResponses, currentStep, summative, totalSummativeSteps, dispatch]);
+  }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, captures, textResponses, currentStep, summative, totalSummativeSteps, dispatch, lastActionIndex, messages, handleAction]);
 
   // -- Reset ------------------------------------------------------------------
 
