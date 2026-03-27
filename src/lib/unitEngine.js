@@ -64,8 +64,11 @@ export async function sendRubricReviewMessage(courseId, text, summative, message
     learnerProfile: profileSummary,
   });
 
+  // Context goes first as a user message; insert an assistant ack to maintain
+  // the alternating user/assistant turn order the API requires.
   const fullMessages = [
     { role: 'user', content: context },
+    { role: 'assistant', content: 'Ready.' },
     ...messages,
     { role: 'user', content: text },
   ];
