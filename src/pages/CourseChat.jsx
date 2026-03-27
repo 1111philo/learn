@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
 import { useModal } from '../contexts/ModalContext.jsx';
+import { useStreamedText } from '../hooks/useStreamedText.js';
 import { COURSE_PHASES, MSG_TYPES } from '../lib/constants.js';
 import {
   getCoursePhase, getSummative, getJourney, getSummativeAttempts,
@@ -51,8 +52,9 @@ export default function CourseChat() {
   const [currentActivity, setCurrentActivity] = useState(null);
   const [unitProgress, setUnitProgress] = useState(null);
 
-  // Streaming guide text (shows tokens as they arrive)
+  // Streaming guide text — raw buffer + smoothed display
   const [streamingText, setStreamingText] = useState(null);
+  const displayText = useStreamedText(streamingText);
 
   // Collapsed phases for conversation length management
   const [collapsedPhases, setCollapsedPhases] = useState(new Set());
@@ -491,10 +493,10 @@ export default function CourseChat() {
       <ChatArea>
         {collapseSummaries}
         {messages.map(renderMessage)}
-        {streamingText != null && streamingText.length > 0 && (
-          <AssistantMessage content={streamingText} />
+        {displayText != null && displayText.length > 0 && (
+          <AssistantMessage content={displayText} />
         )}
-        {loading === 'guide' && !streamingText && <ThinkingSpinner />}
+        {loading === 'guide' && !displayText && <ThinkingSpinner />}
         {loading === 'start_diagnostic' && <ThinkingSpinner text="Generating your diagnostic assessment..." />}
         {loading === 'build_journey' && <ThinkingSpinner text="Building your learning path..." />}
         {loading === 'start_learning' && <ThinkingSpinner text="Preparing your first activity..." />}
