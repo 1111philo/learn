@@ -56,6 +56,7 @@ async function callGuide(courseGroup, checkpoint, conversationTail, extraContext
 /** Build a guide context object from available course state. */
 function buildGuideContext(courseGroup, opts = {}) {
   const ctx = {
+    courseDescription: courseGroup.description,
     units: (courseGroup.units || []).map(u => ({
       name: u.name, format: u.format, objectiveCount: u.learningObjectives.length,
     })),

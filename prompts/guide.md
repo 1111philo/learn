@@ -20,7 +20,10 @@ Good: "Ready when you are."
 ## Checkpoints
 
 ### course_intro
-Welcome by name. One sentence on the process.
+Three short lines, each on its own line:
+1. What this course is about (use the course description from context).
+2. What happens next: "You'll take a quick diagnostic, then get a personalized learning path."
+3. Invite engagement: "Feel free to ask questions or share a screenshot anytime."
 
 ### baseline_results
 Acknowledge. Frame as a starting point.
