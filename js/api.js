@@ -7,7 +7,7 @@ export const MODEL_LIGHT = 'claude-haiku-4-5-20251001';
 export const MODEL_HEAVY = 'claude-sonnet-4-6';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const TIMEOUT_MS = 30000;
+const TIMEOUT_MS = 60000;
 const PROXY_TIMEOUT_MS = 90000;
 
 export class ApiError extends Error {
@@ -47,6 +47,11 @@ export async function parseResponse(resp) {
   const textBlock = data.content?.find(b => b.type === 'text');
   if (!textBlock) throw new ApiError('parse', 'No text content in API response.');
 
+  // Warn if response was truncated due to max_tokens
+  if (data.stop_reason === 'max_tokens') {
+    console.warn('[1111] Response truncated — max_tokens reached. Output may be incomplete.');
+  }
+
   return { content: textBlock.text, usage: data.usage };
 }
 
@@ -78,7 +83,7 @@ export async function callClaude({ apiKey, model, systemPrompt, messages, maxTok
   } catch (e) {
     clearTimeout(timer);
     if (e.name === 'AbortError') {
-      throw new ApiError('network', 'Request timed out after 30 seconds.');
+      throw new ApiError('network', 'Request timed out. Try again.');
     }
     throw new ApiError('network', 'Network error. Check your connection.');
   }

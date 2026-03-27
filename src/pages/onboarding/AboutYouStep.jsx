@@ -58,7 +58,8 @@ export default function AboutYouStep({ data, updateData, onComplete }) {
         return clean;
       });
       // Use vision model since messages may contain screenshots
-      const result = await orchestrator.converse('onboarding-conversation', msgs, 1024, { model: MODEL_HEAVY });
+      // 2048 tokens: the done=true response includes a full profile object
+      const result = await orchestrator.converse('onboarding-conversation', msgs, 2048, { model: MODEL_HEAVY });
 
       setMessages(prev => [...prev, { role: 'assistant', content: JSON.stringify(result) }]);
 
