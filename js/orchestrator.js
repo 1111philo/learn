@@ -156,10 +156,19 @@ export async function initializeLearnerProfile(name, statement) {
 export async function generateSummative(course, allObjectives, profileSummary, personalizationNotes) {
   const systemPrompt = await loadPrompt('summative-generation');
 
+  // Collect unit exemplars and formats for the agent
+  const unitExemplars = (course.units || []).map(u => ({
+    unitId: u.unitId,
+    name: u.name,
+    format: u.format,
+    exemplar: u.exemplar,
+  }));
+
   const userContent = JSON.stringify({
     courseName: course.name,
     courseDescription: course.description,
     learningObjectives: allObjectives,
+    unitExemplars,
     learnerProfile: profileSummary || 'No profile yet',
     personalizationNotes: personalizationNotes || null,
   });
@@ -178,10 +187,11 @@ export async function generateSummative(course, allObjectives, profileSummary, p
 }
 
 /**
- * Assess a summative attempt (multi-capture, vision-based).
+ * Assess a summative attempt (multi-step, supports screenshots and/or text responses).
  * screenshots is an array of { dataUrl, stepIndex }.
+ * textResponses is an array of { text, stepIndex }.
  */
-export async function assessSummativeAttempt(course, summative, screenshots, priorAttempts, profileSummary) {
+export async function assessSummativeAttempt(course, summative, screenshots, priorAttempts, profileSummary, textResponses) {
   const systemPrompt = await loadPrompt('summative-assessment');
 
   const contentParts = [];
@@ -203,7 +213,7 @@ export async function assessSummativeAttempt(course, summative, screenshots, pri
   });
 
   // Add image blocks for each step screenshot
-  for (const ss of screenshots) {
+  for (const ss of (screenshots || [])) {
     if (ss.dataUrl) {
       const match = ss.dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
       if (match) {
@@ -220,6 +230,16 @@ export async function assessSummativeAttempt(course, summative, screenshots, pri
           }
         });
       }
+    }
+  }
+
+  // Add text response blocks for each step text submission
+  for (const tr of (textResponses || [])) {
+    if (tr.text) {
+      contentParts.push({
+        type: 'text',
+        text: `Text response for step ${tr.stepIndex + 1}:\n\n${tr.text}`
+      });
     }
   }
 
@@ -282,6 +302,7 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
     units: units.map(u => ({
       unitId: u.unitId, name: u.name, description: u.description,
       learningObjectives: u.learningObjectives, dependsOn: u.dependsOn,
+      format: u.format, exemplar: u.exemplar,
     })),
     gapAnalysis,
     rubric,
@@ -306,13 +327,15 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
 
 /**
  * Generate the next formative activity's instruction.
+ * format: "text" or "screenshot" — determines whether the activity ends with Submit or Capture.
  */
-export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope, summativeContext) {
+export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope, summativeContext, { format } = {}) {
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
     course: { name: unit.name, learningObjectives: unit.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
+    format: format || 'screenshot',
     rubricCriteria: planSlot.rubricCriteria || null,
     gapObservation: planSlot.gapObservation || null,
     workProduct: planContext?.workProductDescription || planContext?.finalWorkProductDescription || '',
@@ -320,6 +343,7 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
     priorActivities: progressSummary,
     learnerProfile: profileSummary || 'No profile yet',
     courseScope: courseScope || null,
+    unitExemplar: unit.exemplar || null,
     exemplar: summativeContext?.exemplar || null,
     summativeTask: summativeContext?.task?.description || null,
     fullRubric: summativeContext?.rubric || null,
@@ -335,13 +359,14 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
     return parseJSON(content);
   };
 
-  return callWithValidation(callAgent, validateActivity, 'activity-creation');
+  return callWithValidation(callAgent, (p) => validateActivity(p, { format: format || 'screenshot' }), 'activity-creation');
 }
 
 /**
- * Assess a formative draft submission with vision.
+ * Assess a formative draft submission with vision (screenshot) or text.
+ * Pass screenshotDataUrl for screenshot-format, textResponse for text-format.
  */
-export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
+export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment', textResponse = null) {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -385,9 +410,19 @@ export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, pr
     }
   }
 
+  if (textResponse) {
+    contentParts.push({
+      type: 'text',
+      text: `Learner's text response:\n\n${textResponse}`
+    });
+  }
+
+  // Use lighter model for text-only assessments (no vision needed)
+  const model = screenshotDataUrl ? MODEL_HEAVY : MODEL_LIGHT;
+
   const callAgent = async () => {
     const { content } = await callApi({
-      model: MODEL_HEAVY,
+      model,
       systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
       maxTokens: 1024
@@ -400,9 +435,9 @@ export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, pr
 
 /**
  * Reassess a draft with learner feedback on the assessment.
- * Re-evaluates the same screenshot, factoring in the learner's dispute.
+ * Re-evaluates the same screenshot/text, factoring in the learner's dispute.
  */
-export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment') {
+export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment', textResponse = null) {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -444,15 +479,26 @@ export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, 
     }
   }
 
+  if (textResponse) {
+    contentParts.push({
+      type: 'text',
+      text: `Learner's text response:\n\n${textResponse}`
+    });
+  }
+
+  const submissionType = screenshotDataUrl ? 'screenshot' : 'text response';
   const messages = [
     { role: 'user', content: contentParts },
     { role: 'assistant', content: JSON.stringify(previousAssessment) },
-    { role: 'user', content: `The learner disputes this assessment: "${learnerFeedback}"\n\nRe-evaluate the same screenshot, taking their feedback into account. You may adjust your score, recommendation, and feedback if their point is valid. Respond with the same JSON format.` }
+    { role: 'user', content: `The learner disputes this assessment: "${learnerFeedback}"\n\nRe-evaluate the same ${submissionType}, taking their feedback into account. You may adjust your score, recommendation, and feedback if their point is valid. Respond with the same JSON format.` }
   ];
+
+  // Use lighter model for text-only reassessments (no vision needed)
+  const model = screenshotDataUrl ? MODEL_HEAVY : MODEL_LIGHT;
 
   const callAgent = async () => {
     const { content } = await callApi({
-      model: MODEL_HEAVY,
+      model,
       systemPrompt,
       messages,
       maxTokens: 1024

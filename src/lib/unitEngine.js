@@ -79,27 +79,6 @@ export async function sendRubricReviewMessage(courseId, text, summative, message
   ];
   await saveRubricReviewState(courseId, { messages: updatedMessages });
 
-  // If the learner requested regeneration, regenerate the summative
-  if (result.regenerate && result.regenerationNotes) {
-    const newSummative = await orchestrator.generateSummative(
-      courseGroup, collectObjectives(courseGroup),
-      profileSummary, result.regenerationNotes
-    );
-    const summativeData = {
-      task: newSummative.task,
-      rubric: newSummative.rubric,
-      exemplar: newSummative.exemplar,
-      tool: newSummative.task?.tool || null,
-      courseIntro: newSummative.courseIntro || null,
-      summaryForLearner: newSummative.summaryForLearner || null,
-      personalized: true,
-      createdAt: Date.now(),
-    };
-    await saveSummative(courseId, summativeData);
-    syncInBackground(`summative:${courseId}`);
-    return { result, summative: summativeData, messages: updatedMessages };
-  }
-
   return { result, summative: null, messages: updatedMessages };
 }
 
@@ -134,22 +113,24 @@ export async function recordSummativeCapture(courseId, stepIndex) {
   return { screenshotKey, dataUrl: response.dataUrl, stepIndex, url: pageUrl };
 }
 
-/** Submit a summative attempt (all steps captured). */
-export async function submitSummativeAttempt(courseId, courseGroup, captures) {
+/** Submit a summative attempt (all steps captured/submitted). Supports mixed screenshot + text. */
+export async function submitSummativeAttempt(courseId, courseGroup, captures, textResponses) {
   const summative = await getSummative(courseId);
   const priorAttempts = await getSummativeAttempts(courseId);
   const profileSummary = await getLearnerProfileSummary();
 
-  const screenshots = captures.map(c => ({ dataUrl: c.dataUrl, stepIndex: c.stepIndex }));
+  const screenshots = (captures || []).map(c => ({ dataUrl: c.dataUrl, stepIndex: c.stepIndex }));
+  const texts = (textResponses || []).map(t => ({ text: t.text, stepIndex: t.stepIndex }));
 
   const result = await orchestrator.assessSummativeAttempt(
-    courseGroup, summative, screenshots, priorAttempts, profileSummary
+    courseGroup, summative, screenshots, priorAttempts, profileSummary, texts
   );
 
   const attempt = {
     id: `attempt-${courseId}-${Date.now()}`,
     attemptNumber: priorAttempts.length + 1,
-    screenshots: captures.map(c => ({ screenshot_key: c.screenshotKey, step_index: c.stepIndex, url: c.url })),
+    screenshots: (captures || []).map(c => ({ screenshot_key: c.screenshotKey, step_index: c.stepIndex, url: c.url })),
+    textResponses: texts,
     criteriaScores: result.criteriaScores,
     overallScore: result.overallScore,
     mastery: result.mastery,
@@ -287,7 +268,7 @@ export async function generateFirstActivity(unit, journeyPlan, courseGroup) {
   const summativeContext = summative ? { exemplar: summative.exemplar, task: summative.task, rubric: summative.rubric } : null;
 
   const generated = await orchestrator.generateNextActivity(
-    unit, slot, [], profileSummary, planContext, null, summativeContext
+    unit, slot, [], profileSummary, planContext, null, summativeContext, { format: unit.format || 'screenshot' }
   );
 
   return {
@@ -325,7 +306,7 @@ export async function generateNextActivity(unit, progress, journeyPlan, courseGr
     }).join('\n');
 
   const generated = await orchestrator.generateNextActivity(
-    unit, slot, progressSummary, profileSummary, planContext, null, summativeContext
+    unit, slot, progressSummary, profileSummary, planContext, null, summativeContext, { format: unit.format || 'screenshot' }
   );
 
   return { ...slot, instruction: generated.instruction, tips: generated.tips, messages: [] };
@@ -384,9 +365,40 @@ export async function recordDraft(unit, progress, activity) {
   return { newProgress, draft };
 }
 
+/** Record a text-based formative draft (submit text + assess). */
+export async function recordTextDraft(unit, progress, activity, textResponse) {
+  if (!textResponse?.trim()) throw new Error('Please write a response before submitting.');
+
+  const profileSummary = await getLearnerProfileSummary();
+  const priorDrafts = progress.drafts.filter(d => d.activityId === activity.id);
+  const result = await orchestrator.assessDraft(unit, activity, null, null, priorDrafts, profileSummary, 'activity-assessment', textResponse);
+
+  const draft = {
+    id: `draft-${Date.now()}`,
+    activityId: activity.id,
+    textResponse,
+    feedback: result.feedback,
+    strengths: result.strengths,
+    improvements: result.improvements,
+    score: result.score,
+    recommendation: result.recommendation,
+    rubricCriteriaScores: result.rubricCriteriaScores || null,
+    timestamp: Date.now(),
+  };
+
+  const newProgress = { ...progress };
+  newProgress.drafts = [...newProgress.drafts, draft];
+
+  await saveUnitProgress(unit.unitId, newProgress);
+  syncInBackground(`progress:${unit.unitId}`);
+  updateProfileInBackground(result, unit, activity);
+
+  return { newProgress, draft };
+}
+
 /** Submit a dispute on a draft assessment. */
 export async function submitDispute(unit, progress, activity, draft, feedbackText) {
-  const screenshotDataUrl = await getScreenshot(draft.screenshotKey);
+  const screenshotDataUrl = draft.screenshotKey ? await getScreenshot(draft.screenshotKey) : null;
   const profileSummary = await getLearnerProfileSummary();
   const priorDrafts = progress.drafts.filter(d => d.activityId === activity.id && d.id !== draft.id);
   const previousAssessment = {
@@ -397,7 +409,8 @@ export async function submitDispute(unit, progress, activity, draft, feedbackTex
 
   const result = await orchestrator.reassessDraft(
     unit, activity, screenshotDataUrl, draft.url,
-    priorDrafts, profileSummary, previousAssessment, feedbackText
+    priorDrafts, profileSummary, previousAssessment, feedbackText,
+    'activity-assessment', draft.textResponse || null
   );
 
   const newDrafts = progress.drafts.map(d => d.id === draft.id ? {
