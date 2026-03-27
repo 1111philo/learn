@@ -194,7 +194,7 @@ After the baseline attempt scores come back, the Guide Agent appears with a pers
 
 ### Guide Agent (checkpoint: `journey_overview`)
 
-After the journey is generated, the Guide Agent appears with a brief overview of the learning path. The learner sees the unit cards and can ask questions. Clicking "Start Learning" advances to formative learning.
+After the journey is generated, the Guide Agent appears with a brief overview of the personalized learning path. The learner can ask questions. Clicking "Start Learning" advances to formative learning — all activities flow inline in the chat.
 
 ---
 

@@ -285,56 +285,6 @@ nav button:focus-visible {
   font-size: 0.75rem;
 }
 
-.unit-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 1px 5px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.unit-badge-required {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.unit-badge-optional {
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-}
-
-/* ── Units header ──────────────────────────────────────────────────────── */
-.units-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.units-header h2 {
-  margin: 0;
-}
-
-/* ── Coming soon ───────────────────────────────────────────────────────── */
-.coming-soon-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 88px;
-  padding: var(--space);
-  border: 3px dashed var(--color-border);
-  border-radius: var(--radius);
-  background: transparent;
-  opacity: 0.45;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  font-weight: 700;
-  margin-top: 8px;
-}
-
 /* ── Progress bar ──────────────────────────────────────────────────────── */
 .progress-bar {
   display: flex;

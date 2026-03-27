@@ -66,8 +66,7 @@ export default function CourseChat() {
 
       if (existingPhase) {
         // Returning to an existing course — load state
-        const normalizedPhase = existingPhase === 'rubric_review' ? COURSE_PHASES.COURSE_INTRO : existingPhase;
-        setPhase(normalizedPhase);
+        setPhase(existingPhase);
 
         const s = await getSummative(courseGroupId);
         if (s) setSummative(s);

@@ -73,9 +73,9 @@ Between every major step, the learner sees an orientation screen powered by the 
 
 | Phase | Checkpoint | What the learner sees |
 |-------|-----------|----------------------|
-| `course_intro` | Before diagnostic | Guide greeting + rubric/exemplar overview |
+| `course_intro` | Before diagnostic | Guide greeting + course overview |
 | `baseline_results` | After diagnostic | Scores + guide framing results as a starting point |
-| `journey_overview` | After journey generated | Guide overview + unit cards |
+| `journey_overview` | After journey generated | Guide overview of personalized learning path |
 | `retake_ready` | Before retake | Prior scores + guide encouragement |
 
 At each checkpoint, the compose bar is available for Q&A. The rubric is FIXED — the guide explains it but cannot change it.

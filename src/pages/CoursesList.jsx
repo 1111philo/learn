@@ -16,8 +16,6 @@ const PHASE_LABELS = {
   [COURSE_PHASES.RETAKE_READY]: 'Ready to retake',
   [COURSE_PHASES.SUMMATIVE_RETAKE]: 'Retaking assessment',
   [COURSE_PHASES.COMPLETED]: 'Mastery achieved',
-  // Legacy
-  'rubric_review': 'Getting started',
 };
 
 export default function CoursesList() {

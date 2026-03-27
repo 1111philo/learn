@@ -77,7 +77,7 @@ Courses → Summative Assessment → Units → Formative Activities. `data/cours
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
 - Completion summary card shows stats (steps, captures, elapsed time) when a course finishes. Time is displayed as minutes, hours, or days depending on duration.
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
-- Unit cards show estimated time computed as `learningObjectives.length * 5 + 2` minutes (5 min per activity + 2 min for the diagnostic). Course-level cards sum the time across all units.
+- Course-level cards on the courses list show estimated time computed from total learning objectives across all units.
 
 ## CI/CD
 Two GitHub Actions workflows handle versioning and releases across two branches:
@@ -166,9 +166,7 @@ src/                     React app
       DraftMessage.jsx    Draft captured indicator
       FeedbackCard.jsx    Score, strengths/improvements, rubric criteria scores, actions
       CompletionSummary.jsx Stats + confetti trigger
-      SummativeCard.jsx   Summative task, exemplar, rubric display with expandable criteria
       RubricFeedback.jsx  Per-criterion score display with mastery level indicators
-      CaptureStep.jsx     Multi-step summative capture UI
   pages/
     CoursesList.jsx       Course cards with phase status
     CourseChat.jsx        Unified course chat: guide + diagnostic + activities + retakes (replaces UnitsList + UnitChat)
