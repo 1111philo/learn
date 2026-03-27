@@ -61,6 +61,7 @@ export default function UnitsList() {
   const [attempts, setAttempts] = useState([]);
   const [reviewMessages, setReviewMessages] = useState([]);
   const [captures, setCaptures] = useState([]);
+  const [textResponses, setTextResponses] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
@@ -142,10 +143,47 @@ export default function UnitsList() {
     await clearSummativeCaptureState(courseGroupId);
     setCurrentStep(0);
     setCaptures([]);
+    setTextResponses([]);
     setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
   }, [courseGroupId]);
 
-  // Capture current summative step, then advance to next
+  // Check if all steps are done and submit if so
+  const checkAndSubmitAttempt = useCallback(async (newCaptures, newTextResponses) => {
+    const totalSteps = summative?.task?.steps?.length || 0;
+    const completedCount = newCaptures.length + newTextResponses.length;
+
+    if (completedCount === totalSteps) {
+      await clearSummativeCaptureState(courseGroupId);
+      setLoading('assessing');
+      const { attempt, mastery } = await submitSummativeAttempt(courseGroupId, group, newCaptures, newTextResponses);
+      setAttempts(prev => [...prev, attempt]);
+      setCaptures([]);
+      setTextResponses([]);
+      setCurrentStep(0);
+
+      if (mastery) {
+        setPhase(COURSE_PHASES.COMPLETED);
+        updateProfileOnMasteryInBackground(group, attempt, []);
+      } else if (attempt.isBaseline) {
+        setLoading('journey');
+        const { journey: j } = await generateGapAndJourney(courseGroupId, group);
+        setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
+        setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
+      } else {
+        setLoading('journey');
+        const weakCriteria = (attempt.criteriaScores || [])
+          .filter(cs => cs.score < 0.51)
+          .map(cs => cs.criterion);
+        const { journey: j } = await generateRemediationActivities(courseGroupId, group, weakCriteria);
+        setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
+        setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
+      }
+      return true;
+    }
+    return false;
+  }, [courseGroupId, summative, group]);
+
+  // Capture current summative step (screenshot), then advance to next
   const handleStepCapture = useCallback(async () => {
     setLoading('capturing');
     try {
@@ -158,48 +196,39 @@ export default function UnitsList() {
         captures: newCaptures.map(c => ({ screenshotKey: c.screenshotKey, stepIndex: c.stepIndex, url: c.url })),
       });
 
-      const totalSteps = summative?.task?.steps?.length || 0;
-
-      if (newCaptures.length === totalSteps) {
-        // All steps captured — submit for assessment
-        await clearSummativeCaptureState(courseGroupId);
-        setLoading('assessing');
-        const { attempt, mastery } = await submitSummativeAttempt(courseGroupId, group, newCaptures);
-        setAttempts(prev => [...prev, attempt]);
-        setCaptures([]);
-        setCurrentStep(0);
-
-        if (mastery) {
-          setPhase(COURSE_PHASES.COMPLETED);
-          updateProfileOnMasteryInBackground(group, attempt, []);
-        } else if (attempt.isBaseline) {
-          setLoading('journey');
-          const { journey: j } = await generateGapAndJourney(courseGroupId, group);
-          setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
-          setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
-        } else {
-          setLoading('journey');
-          const weakCriteria = (attempt.criteriaScores || [])
-            .filter(cs => cs.score < 0.51)
-            .map(cs => cs.criterion);
-          const { journey: j } = await generateRemediationActivities(courseGroupId, group, weakCriteria);
-          setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
-          setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
-        }
-      } else {
-        // Advance to next step
-        setCurrentStep(newCaptures.length);
+      const done = await checkAndSubmitAttempt(newCaptures, textResponses);
+      if (!done) {
+        setCurrentStep(prev => prev + 1);
       }
     } catch (e) {
       setError(e.message || 'Capture failed.');
     }
     setLoading('');
-  }, [courseGroupId, currentStep, captures, summative, group]);
+  }, [courseGroupId, currentStep, captures, textResponses, checkAndSubmitAttempt]);
+
+  // Submit text for current summative step, then advance to next
+  const handleStepTextSubmit = useCallback(async (text) => {
+    if (!text?.trim()) return;
+    setLoading('capturing');
+    try {
+      const newTextResponses = [...textResponses, { text, stepIndex: currentStep }];
+      setTextResponses(newTextResponses);
+
+      const done = await checkAndSubmitAttempt(captures, newTextResponses);
+      if (!done) {
+        setCurrentStep(prev => prev + 1);
+      }
+    } catch (e) {
+      setError(e.message || 'Submission failed.');
+    }
+    setLoading('');
+  }, [currentStep, captures, textResponses, checkAndSubmitAttempt]);
 
   const handleRetake = useCallback(async () => {
     await requestSummativeRetake(courseGroupId);
     await clearSummativeCaptureState(courseGroupId);
     setCaptures([]);
+    setTextResponses([]);
     setCurrentStep(0);
     setPhase(COURSE_PHASES.SUMMATIVE_RETAKE);
   }, [courseGroupId]);
@@ -267,13 +296,24 @@ export default function UnitsList() {
             {isBaseline ? 'Diagnostic Assessment' : 'Summative Assessment'}
           </div>
 
-          {/* Completed steps */}
+          {/* Completed screenshot steps */}
           {captures.map((cap, i) => {
             const step = steps[cap.stepIndex];
             return (
-              <div key={i}>
+              <div key={`cap-${i}`}>
                 <InstructionMessage text={step?.instruction} />
                 <DraftMessage draft={{ screenshotKey: cap.screenshotKey, url: cap.url, timestamp: Date.now() }} />
+              </div>
+            );
+          })}
+
+          {/* Completed text steps */}
+          {textResponses.map((tr, i) => {
+            const step = steps[tr.stepIndex];
+            return (
+              <div key={`text-${i}`}>
+                <InstructionMessage text={step?.instruction} />
+                <DraftMessage draft={{ textResponse: tr.text, timestamp: Date.now() }} />
               </div>
             );
           })}
@@ -282,18 +322,28 @@ export default function UnitsList() {
           {currentStep < steps.length && !loading && (
             <>
               <InstructionMessage text={`Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep].instruction}`} />
-              <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                <button className="record-btn" onClick={handleStepCapture} aria-label="Capture screenshot">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '6px' }}>
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
-                  </svg>
-                  Capture
-                </button>
-              </div>
+              {steps[currentStep].format === 'text' ? (
+                <ComposeBar
+                  placeholder="Write your response..."
+                  onSend={(text) => handleStepTextSubmit(text)}
+                  disabled={!!loading}
+                  showSubmit
+                  submitOnly
+                />
+              ) : (
+                <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                  <button className="record-btn" onClick={handleStepCapture} aria-label="Capture screenshot">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '6px' }}>
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+                    </svg>
+                    Capture
+                  </button>
+                </div>
+              )}
             </>
           )}
 
-          {loading === 'capturing' && <ThinkingSpinner text="Capturing..." />}
+          {loading === 'capturing' && <ThinkingSpinner text={steps[currentStep]?.format === 'text' ? 'Submitting...' : 'Capturing...'} />}
           {loading === 'assessing' && <ThinkingSpinner text="Evaluating your work..." />}
           {loading === 'journey' && <ThinkingSpinner text="Building your learning journey..." />}
         </ChatArea>

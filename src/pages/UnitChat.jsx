@@ -8,7 +8,7 @@ import { getUnitProgress, saveUnitProgress, getJourney } from '../../js/storage.
 import { syncInBackground } from '../lib/syncDebounce.js';
 import {
   generateFirstActivity, generateNextActivity,
-  recordDraft, submitDispute, askAboutActivity,
+  recordDraft, recordTextDraft, submitDispute, askAboutActivity,
 } from '../lib/unitEngine.js';
 
 import ChatArea from '../components/chat/ChatArea.jsx';
@@ -98,12 +98,31 @@ export default function UnitChat() {
     return () => { cancelled = true; };
   }, [unitId]);
 
-  // Activity Q&A
-  const handleActivitySend = useCallback(async (text) => {
+  // Determine format from course unit definition
+  const unitDef = courseGroup?.units?.find(u => u.unitId === unitId);
+  const unitFormat = unitDef?.format || 'screenshot';
+
+  // Activity Q&A (or text submission for text-format units)
+  const handleActivitySend = useCallback(async (text, isSubmit = false) => {
     if (!progress) return;
     const activity = progress.activities[progress.currentActivityIndex];
     if (!activity) return;
 
+    // Text-format submission
+    if (isSubmit && unitFormat === 'text') {
+      setLoading('recording');
+      try {
+        const { newProgress } = await recordTextDraft(unit, progress, activity, text);
+        setProgress(newProgress);
+        dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
+      } catch (e) {
+        setError(e.message || 'Submission failed.');
+      }
+      setLoading('');
+      return;
+    }
+
+    // Q&A flow
     const userMsg = { role: 'user', content: text, timestamp: Date.now() };
     const updatedActivities = progress.activities.map(a =>
       a.id === activity.id ? { ...a, messages: [...(a.messages || []), userMsg] } : a
@@ -118,9 +137,9 @@ export default function UnitChat() {
       dispatch({ type: 'SET_PROGRESS', unitId, progress: newProgress });
     } catch { /* silent */ }
     setLoading('');
-  }, [progress, unit, unitId, dispatch]);
+  }, [progress, unit, unitId, unitFormat, dispatch, courseGroup]);
 
-  // Record draft
+  // Record screenshot draft
   const handleRecord = useCallback(async () => {
     if (!progress) return;
     const activity = progress.activities[progress.currentActivityIndex];
@@ -251,13 +270,13 @@ export default function UnitChat() {
               {TYPE_LABELS[activity.type] || activity.type}: {activity.goal}
             </div>
             <InstructionMessage text={activity.instruction} rubricCriteria={activity.rubricCriteria} />
-            {renderTimeline(activity, activityDrafts, true, handleDispute, handleRecord)}
+            {renderTimeline(activity, activityDrafts, true, handleDispute, unitFormat === 'screenshot' ? handleRecord : null)}
 
             {loading === 'recording' && <ThinkingSpinner text="Evaluating your work..." />}
             {loading === 'qa' && <ThinkingSpinner />}
             {loading === 'generating' && progress?.activities?.length > 0 && <ThinkingSpinner text="Preparing next activity..." />}
 
-            {!activityDrafts.length && !loading && (
+            {!activityDrafts.length && !loading && unitFormat === 'screenshot' && (
               <div style={{ textAlign: 'center', margin: '8px 0' }}>
                 <button className="record-btn" onClick={handleRecord} aria-label="Capture screenshot">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '6px' }}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -295,12 +314,17 @@ export default function UnitChat() {
         {error && <div className="msg msg-response" role="alert" aria-live="assertive" style={{ color: 'var(--color-warning)' }}>{error}</div>}
       </ChatArea>
 
-      {/* Compose bar for Q&A */}
+      {/* Compose bar for Q&A (screenshot format) or text submission + Q&A (text format) */}
       {activity && !isUnitDone && !loading && (
         <ComposeBar
-          placeholder="Ask a question about this activity..."
+          placeholder={unitFormat === 'text' && !isPassed
+            ? 'Write your response, or ask a question...'
+            : 'Ask a question about this activity...'}
           onSend={handleActivitySend}
           disabled={!!loading}
+          showSubmit={unitFormat === 'text' && !isPassed}
+          showCapture={unitFormat === 'screenshot' && activityDrafts.length > 0 && !isPassed}
+          onCapture={handleRecord}
         />
       )}
     </div>
