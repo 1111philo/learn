@@ -57,26 +57,38 @@ export async function advancePhase(courseId, nextPhase) {
   syncInBackground(`journey:${courseId}`);
 }
 
-/** Ask a Q&A question at any orientation checkpoint. */
-export async function askAboutCourse(courseGroup, text, messages, phaseContext) {
+/**
+ * Call the Guide Agent at an orientation checkpoint.
+ * First call (no prior messages): generates the initial greeting.
+ * Subsequent calls: answers follow-up questions.
+ * Returns { message } from the agent.
+ */
+export async function callGuide(courseGroup, checkpoint, messages, extraContext) {
   const profileSummary = await getLearnerProfileSummary();
-  const allObjectives = collectObjectives(courseGroup);
 
-  const systemPrompt = `You are a learning assistant for 1111 Learn. The learner has a question about their course.
+  // Build context as the first user message
+  const context = JSON.stringify({
+    checkpoint,
+    courseName: courseGroup.name,
+    learnerProfile: profileSummary || 'No profile yet',
+    ...extraContext,
+  });
 
-Course: ${courseGroup.name}
-Learning objectives: ${allObjectives.join('; ')}
-Learner profile: ${profileSummary || 'No profile yet'}
+  // First call: context → assistant ack → "Begin" trigger
+  // Follow-up: context → assistant ack → prior messages → new user message
+  const fullMessages = [
+    { role: 'user', content: context },
+    { role: 'assistant', content: 'Ready.' },
+    ...messages,
+  ];
 
-${phaseContext || ''}
+  // If no prior conversation, add a trigger for the initial greeting
+  if (messages.length === 0) {
+    fullMessages.push({ role: 'user', content: 'Orient me.' });
+  }
 
-Answer concisely (2-3 sentences). Be direct and helpful. The rubric is fixed and cannot be changed. Respond in plain text (not JSON).`;
-
-  const history = (messages || []).map(m => ({ role: m.role, content: m.content }));
-  history.push({ role: 'user', content: text });
-
-  const response = await orchestrator.chatWithContext(systemPrompt, history);
-  return response;
+  const result = await orchestrator.converse('guide', fullMessages, 512);
+  return result;
 }
 
 /** Capture a screenshot for one step of the multi-step summative. */

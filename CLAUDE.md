@@ -8,7 +8,7 @@ Eleven agents drive the learning experience:
 - **Onboarding Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that gets to know the learner and builds their initial profile
 - **Onboarding Profile Agent** (`MODEL_LIGHT`) -- creates an initial learner profile (fallback when conversation is skipped)
 - **Summative Generation Agent** (`MODEL_LIGHT`) -- generates the summative assessment (multi-step task + rubric + exemplar + learner-facing `courseIntro` and `summaryForLearner`) from all course learning objectives and unit exemplars/formats
-- *(Rubric review agent removed — rubric is fixed; orientation Q&A uses `chatWithContext` instead)*
+- **Guide Agent** (`MODEL_LIGHT`) -- appears at every orientation checkpoint (course intro, baseline results, journey overview, retake ready) to orient the learner, explain what's coming next, and answer questions; uses phase-specific context (scores, journey, rubric)
 - **Summative Assessment Agent** (`MODEL_HEAVY` for screenshots, `MODEL_LIGHT` for text) -- scores submissions (screenshots and/or text responses) against rubric criteria; produces a `summaryForLearner` (concise plain-language read) plus detailed per-criterion scores; enforces ratchet rule (scores only go up)
 - **Gap Analysis Agent** (`MODEL_LIGHT`) -- analyzes baseline summative attempt to identify per-criterion gaps and priorities
 - **Journey Generation Agent** (`MODEL_LIGHT`) -- selects, orders, and sizes predefined units with formative activities mapped to rubric criteria
