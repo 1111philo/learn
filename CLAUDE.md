@@ -199,7 +199,7 @@ PRIVACY.md               Privacy policy
 ## Documentation
 Detailed docs live in `docs/` and are linked from `README.md`:
 - `docs/architecture.md` -- agents overview, storage, content hierarchy, data flow, file structure
-- `docs/agent-lifecycle.md` -- full Phase 0-7 walkthrough of every agent call with inputs, outputs, and validation
+- `docs/agent-lifecycle.md` -- full Phase 0-10 walkthrough of every agent call with inputs, outputs, and validation
 - `docs/cloud-sync.md` -- auth, remote storage, AI provider routing
 - `docs/releases.md` -- CI/CD, versioning, branch protection, permissions, secrets, course JSON structure
 - `CONTRIBUTING.md` -- dev setup, workflow, guidelines, submitting changes
