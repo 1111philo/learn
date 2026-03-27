@@ -398,18 +398,19 @@ export default function CourseChat() {
     if (hasText) {
       setLoading('qa');
       setStreamingText('');
-      // Show user message immediately
       appendMessages([{ role: 'user', content: text, msgType: MSG_TYPES.USER, phase, timestamp: Date.now() }]);
       try {
         const result = await engine.askGuide(courseGroupId, group, text, phase,
           (partial) => setStreamingText(partial));
-        setStreamingText(null);
-        // Only append the assistant message (user already shown)
+        // Queue the assistant message for after the drain finishes typing
         const assistantMsg = result.messages.find(m => m.role === 'assistant');
-        if (assistantMsg) appendMessages([assistantMsg]);
-      } catch (e) { setError(e.message || 'Failed to send message.'); }
-      setStreamingText(null);
-      setLoading('');
+        pendingAfterStreamRef.current = { msgs: assistantMsg ? [assistantMsg] : [] };
+        setStreamingText(null);
+      } catch (e) {
+        setError(e.message || 'Failed to send message.');
+        setStreamingText(null);
+        setLoading('');
+      }
     }
   }, [courseGroupId, group, phase, currentActivity, currentUnitId, unitProgress, captures, textResponses, currentStep, summative, totalSummativeSteps, dispatch, lastActionIndex, messages, handleAction]);
 
