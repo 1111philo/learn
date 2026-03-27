@@ -54,6 +54,12 @@ describe('courses.json', () => {
         assert.ok(typeof obj === 'string' && obj.length > 0,
           `Unit ${unit.unitId} has invalid learning objective`);
       }
+      // format must be "text" or "screenshot"
+      assert.ok(unit.format === 'text' || unit.format === 'screenshot',
+        `Unit ${unit.unitId} format must be "text" or "screenshot", got: ${unit.format}`);
+      // exemplar must be a non-empty string
+      assert.ok(unit.exemplar && typeof unit.exemplar === 'string',
+        `Unit ${unit.unitId} missing exemplar`);
     }
   });
 

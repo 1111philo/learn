@@ -1,7 +1,15 @@
 import { useState, useRef } from 'react';
 import { useAutoResize } from '../../hooks/useAutoResize.js';
 
-export default function ComposeBar({ placeholder = 'Ask a question...', onSend, disabled = false }) {
+/**
+ * Chat compose bar — always Q&A. Text submissions and screenshots
+ * are handled separately via ResponseModal and capture buttons.
+ */
+export default function ComposeBar({
+  placeholder = 'Ask a question...',
+  onSend,
+  disabled = false,
+}) {
   const [text, setText] = useState('');
   const inputRef = useRef(null);
   const handleResize = useAutoResize();

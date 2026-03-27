@@ -24,13 +24,47 @@ export const VIEW_DEPTH = {
 
 export const COURSE_PHASES = {
   SUMMATIVE_SETUP: 'summative_setup',
-  RUBRIC_REVIEW: 'rubric_review',
+  COURSE_INTRO: 'course_intro',
   BASELINE_ATTEMPT: 'baseline_attempt',
+  BASELINE_RESULTS: 'baseline_results',
   GAP_ANALYSIS: 'gap_analysis',
   JOURNEY_GENERATION: 'journey_generation',
+  JOURNEY_OVERVIEW: 'journey_overview',
   FORMATIVE_LEARNING: 'formative_learning',
+  RETAKE_READY: 'retake_ready',
   SUMMATIVE_RETAKE: 'summative_retake',
   COMPLETED: 'completed',
+};
+
+/** Guide checkpoint names — used by the guide prompt and courseEngine. */
+export const GUIDE_CHECKPOINTS = {
+  COURSE_INTRO: 'course_intro',
+  PRE_DIAGNOSTIC: 'pre_diagnostic',
+  DIAGNOSTIC_STEP: 'diagnostic_step',
+  BASELINE_RESULTS: 'baseline_results',
+  JOURNEY_OVERVIEW: 'journey_overview',
+  UNIT_START: 'unit_start',
+  ACTIVITY_INTRO: 'activity_intro',
+  ACTIVITY_COMPLETE: 'activity_complete',
+  UNIT_COMPLETE: 'unit_complete',
+  RETAKE_READY: 'retake_ready',
+  RETAKE_STEP: 'retake_step',
+  RETAKE_RESULTS: 'retake_results',
+  REMEDIATION_START: 'remediation_start',
+  MASTERY_ACHIEVED: 'mastery_achieved',
+};
+
+/** Message types in the course conversation. */
+export const MSG_TYPES = {
+  GUIDE: 'guide',
+  USER: 'user',
+  INSTRUCTION: 'instruction',
+  SUBMISSION: 'submission',
+  FEEDBACK: 'feedback',
+  RUBRIC_RESULT: 'rubric_result',
+  ACTION: 'action',
+  SECTION: 'section',
+  THINKING: 'thinking',
 };
 
 export const MASTERY_LEVELS = {

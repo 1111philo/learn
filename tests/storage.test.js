@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS profile (id INTEGER PRIMARY KEY CHECK (id = 1), data 
 CREATE TABLE IF NOT EXISTS profile_summary (id INTEGER PRIMARY KEY CHECK (id = 1), summary TEXT NOT NULL DEFAULT '', updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS courses (course_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, depends_on TEXT, is_user_created INTEGER DEFAULT 0, created_at INTEGER);
 CREATE TABLE IF NOT EXISTS units (unit_id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(course_id), name TEXT NOT NULL, description TEXT, depends_on TEXT, sequence INTEGER, status TEXT DEFAULT 'not_started', current_activity_index INTEGER DEFAULT 0, started_at INTEGER, completed_at INTEGER, final_work_product_url TEXT, journey_order INTEGER, rubric_criteria TEXT);
-CREATE TABLE IF NOT EXISTS summatives (course_id TEXT PRIMARY KEY, task TEXT NOT NULL, rubric TEXT NOT NULL, exemplar TEXT NOT NULL, tool TEXT, estimated_time INTEGER, personalized INTEGER DEFAULT 0, conversation_id TEXT, created_at INTEGER);
-CREATE TABLE IF NOT EXISTS summative_attempts (id TEXT PRIMARY KEY, course_id TEXT NOT NULL, attempt_number INTEGER NOT NULL, screenshots TEXT, criteria_scores TEXT, overall_score REAL, mastery INTEGER DEFAULT 0, feedback TEXT, next_steps TEXT, is_baseline INTEGER DEFAULT 0, timestamp INTEGER);
+CREATE TABLE IF NOT EXISTS summatives (course_id TEXT PRIMARY KEY, task TEXT NOT NULL, rubric TEXT NOT NULL, exemplar TEXT NOT NULL, tool TEXT, estimated_time INTEGER, personalized INTEGER DEFAULT 0, conversation_id TEXT, course_intro TEXT, summary_for_learner TEXT, created_at INTEGER);
+CREATE TABLE IF NOT EXISTS summative_attempts (id TEXT PRIMARY KEY, course_id TEXT NOT NULL, attempt_number INTEGER NOT NULL, screenshots TEXT, criteria_scores TEXT, overall_score REAL, mastery INTEGER DEFAULT 0, feedback TEXT, next_steps TEXT, is_baseline INTEGER DEFAULT 0, summary_for_learner TEXT, text_responses TEXT, timestamp INTEGER);
 CREATE INDEX IF NOT EXISTS idx_summative_attempts_course ON summative_attempts(course_id, attempt_number);
 CREATE TABLE IF NOT EXISTS gap_analysis (course_id TEXT PRIMARY KEY, gaps TEXT NOT NULL, suggested_focus TEXT, created_at INTEGER, updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS journeys (course_id TEXT PRIMARY KEY, plan TEXT NOT NULL, phase TEXT DEFAULT 'summative_setup', created_at INTEGER, updated_at INTEGER);
@@ -50,11 +50,13 @@ CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, unit_id TEXT REFE
 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL REFERENCES conversations(id), role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, timestamp);
 CREATE TABLE IF NOT EXISTS activities (id TEXT PRIMARY KEY, unit_id TEXT NOT NULL REFERENCES units(unit_id), type TEXT NOT NULL, goal TEXT NOT NULL, instruction TEXT, tips TEXT, sequence INTEGER, conversation_id TEXT REFERENCES conversations(id), rubric_criteria TEXT);
-CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL REFERENCES activities(id), unit_id TEXT NOT NULL, screenshot_key TEXT, url TEXT, score REAL, feedback TEXT, strengths TEXT, improvements TEXT, recommendation TEXT, timestamp INTEGER, rubric_criteria_scores TEXT);
+CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL REFERENCES activities(id), unit_id TEXT NOT NULL, screenshot_key TEXT, url TEXT, score REAL, feedback TEXT, strengths TEXT, improvements TEXT, recommendation TEXT, timestamp INTEGER, rubric_criteria_scores TEXT, text_response TEXT);
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
 CREATE TABLE IF NOT EXISTS work_products (id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id TEXT NOT NULL, course_name TEXT, url TEXT, completed_at INTEGER);
 CREATE TABLE IF NOT EXISTS auth (id INTEGER PRIMARY KEY CHECK (id = 1), access_token TEXT, refresh_token TEXT, user_json TEXT);
 CREATE TABLE IF NOT EXISTS pending_state (key TEXT PRIMARY KEY, state_json TEXT, updated_at INTEGER);
+CREATE TABLE IF NOT EXISTS course_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', msg_type TEXT NOT NULL, phase TEXT, metadata TEXT, timestamp INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_course_msg_course ON course_messages(course_id, timestamp);
 `;
 
 beforeEach(async () => {
@@ -316,13 +318,16 @@ describe('summatives', () => {
       tool: 'Google Docs',
       estimatedTime: 30,
       personalized: false,
+      courseIntro: 'This course covers portfolio building. Take the assessment first, then learn.',
+      summaryForLearner: 'You will build a portfolio page in Google Docs.',
     };
 
     run(
-      `INSERT INTO summatives (course_id, task, rubric, exemplar, tool, estimated_time, personalized, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO summatives (course_id, task, rubric, exemplar, tool, estimated_time, personalized, course_intro, summary_for_learner, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [courseId, JSON.stringify(summative.task), JSON.stringify(summative.rubric),
-       summative.exemplar, summative.tool, summative.estimatedTime, 0, Date.now()]
+       summative.exemplar, summative.tool, summative.estimatedTime, 0,
+       summative.courseIntro, summative.summaryForLearner, Date.now()]
     );
 
     const row = query('SELECT * FROM summatives WHERE course_id = ?', [courseId]);
@@ -331,6 +336,8 @@ describe('summatives', () => {
     assert.deepEqual(JSON.parse(row.rubric), summative.rubric);
     assert.equal(row.exemplar, summative.exemplar);
     assert.equal(row.tool, 'Google Docs');
+    assert.equal(row.course_intro, summative.courseIntro);
+    assert.equal(row.summary_for_learner, summative.summaryForLearner);
   });
 });
 
@@ -339,19 +346,19 @@ describe('summative attempts', () => {
     const courseId = 'foundations';
 
     run(
-      `INSERT INTO summative_attempts (id, course_id, attempt_number, screenshots, criteria_scores, overall_score, mastery, feedback, is_baseline, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO summative_attempts (id, course_id, attempt_number, screenshots, criteria_scores, overall_score, mastery, feedback, is_baseline, summary_for_learner, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ['att-1', courseId, 1, JSON.stringify([{ screenshot_key: 's1', step_index: 0 }]),
        JSON.stringify([{ criterion: 'Comm', level: 'developing', score: 0.5 }]),
-       0.5, 0, 'Good baseline', 1, 1000]
+       0.5, 0, 'Good baseline', 1, 'Solid start — your structure is there but needs depth.', 1000]
     );
 
     run(
-      `INSERT INTO summative_attempts (id, course_id, attempt_number, screenshots, criteria_scores, overall_score, mastery, feedback, is_baseline, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO summative_attempts (id, course_id, attempt_number, screenshots, criteria_scores, overall_score, mastery, feedback, is_baseline, summary_for_learner, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ['att-2', courseId, 2, JSON.stringify([{ screenshot_key: 's2', step_index: 0 }]),
        JSON.stringify([{ criterion: 'Comm', level: 'proficient', score: 0.8 }]),
-       0.8, 1, 'Mastery achieved', 0, 2000]
+       0.8, 1, 'Mastery achieved', 0, 'Strong work across the board.', 2000]
     );
 
     const rows = queryAll('SELECT * FROM summative_attempts WHERE course_id = ? ORDER BY attempt_number', [courseId]);
@@ -447,12 +454,12 @@ describe('auth (singleton)', () => {
 });
 
 describe('pending state', () => {
-  it('stores and retrieves rubric review state', () => {
-    const state = { messages: [{ role: 'user', content: 'Can the rubric include X?' }] };
+  it('stores and retrieves pending state', () => {
+    const state = { captures: [{ screenshotKey: 'test-key', stepIndex: 0 }] };
     run('INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
-      ['rubric-review:foundations', JSON.stringify(state), Date.now()]);
+      ['summative-capture:foundations', JSON.stringify(state), Date.now()]);
 
-    const row = query("SELECT state_json FROM pending_state WHERE key = 'rubric-review:foundations'");
+    const row = query("SELECT state_json FROM pending_state WHERE key = 'summative-capture:foundations'");
     assert.deepEqual(JSON.parse(row.state_json), state);
   });
 
@@ -461,5 +468,41 @@ describe('pending state', () => {
     run("DELETE FROM pending_state WHERE key = 'onboarding'");
     const row = query("SELECT * FROM pending_state WHERE key = 'onboarding'");
     assert.equal(row, null);
+  });
+});
+
+describe('course messages', () => {
+  it('stores and retrieves course messages in order', () => {
+    run(
+      `INSERT INTO course_messages (course_id, role, content, msg_type, phase, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['foundations', 'assistant', 'Welcome!', 'guide', 'course_intro', null, 1000]
+    );
+    run(
+      `INSERT INTO course_messages (course_id, role, content, msg_type, phase, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['foundations', 'assistant', 'Start Diagnostic', 'action', 'course_intro', JSON.stringify({ action: 'start_diagnostic' }), 2000]
+    );
+
+    const rows = queryAll(
+      'SELECT * FROM course_messages WHERE course_id = ? ORDER BY timestamp',
+      ['foundations']
+    );
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].content, 'Welcome!');
+    assert.equal(rows[0].msg_type, 'guide');
+    assert.equal(rows[1].msg_type, 'action');
+    assert.deepEqual(JSON.parse(rows[1].metadata), { action: 'start_diagnostic' });
+  });
+
+  it('clears course messages', () => {
+    run(
+      `INSERT INTO course_messages (course_id, role, content, msg_type, timestamp)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['test-clear', 'assistant', 'Hello', 'guide', 1000]
+    );
+    run('DELETE FROM course_messages WHERE course_id = ?', ['test-clear']);
+    const rows = queryAll('SELECT * FROM course_messages WHERE course_id = ?', ['test-clear']);
+    assert.equal(rows.length, 0);
   });
 });

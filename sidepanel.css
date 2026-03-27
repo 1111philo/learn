@@ -285,54 +285,57 @@ nav button:focus-visible {
   font-size: 0.75rem;
 }
 
-.unit-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 1px 5px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+/* ── Progress bar ──────────────────────────────────────────────────────── */
+.progress-bar {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
 }
 
-.unit-badge-required {
-  background: var(--color-accent);
-  color: #fff;
+.progress-segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  transition: background 0.3s;
 }
 
-.unit-badge-optional {
+.progress-completed { background: var(--color-success, #16a34a); }
+.progress-active { background: var(--color-accent, #2563eb); }
+.progress-upcoming { background: var(--color-border); }
+
+.response-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.response-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.phase-collapse-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
   background: var(--color-surface);
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
 }
 
-/* ── Units header ──────────────────────────────────────────────────────── */
-.units-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.units-header h2 {
-  margin: 0;
-}
-
-/* ── Coming soon ───────────────────────────────────────────────────────── */
-.coming-soon-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 88px;
-  padding: var(--space);
-  border: 3px dashed var(--color-border);
-  border-radius: var(--radius);
-  background: transparent;
-  opacity: 0.45;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  font-weight: 700;
-  margin-top: 8px;
+.phase-collapse-btn:hover {
+  background: var(--color-border);
 }
 
 /* ── Chat / course view ─────────────────────────────────────────────────── */
@@ -431,6 +434,9 @@ nav button:focus-visible {
   max-width: 95%;
   font-size: 0.9rem;
 }
+
+.msg p { margin: 0; }
+.msg p + p { margin-top: 6px; }
 
 .msg ul, .msg ol {
   padding-left: 1.2em;
@@ -699,6 +705,72 @@ hr {
 }
 
 .send-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.compose-preview {
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.compose-preview-img {
+  display: block;
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.compose-preview-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.capture-btn-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.capture-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.capture-btn:hover {
+  background: var(--color-border);
+}
+
+.capture-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.capture-btn:disabled {
   opacity: 0.3;
   cursor: default;
 }

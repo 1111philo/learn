@@ -33,6 +33,8 @@ function validAssessment(overrides = {}) {
 
 function validSummative(overrides = {}) {
   return {
+    courseIntro: 'This course covers professional portfolio development. You will take an assessment first, learn from your results, then retake to show mastery.',
+    summaryForLearner: 'You will build a professional portfolio page in Google Docs. Mastery means clear structure, professional voice, and effective tool usage.',
     task: {
       steps: [
         { instruction: 'Create a professional portfolio page in Google Docs.' },
@@ -74,6 +76,7 @@ function validSummativeAssessment(overrides = {}) {
     mastery: false,
     feedback: 'Good progress, keep working on technical skills.',
     nextSteps: ['Practice formatting', 'Review examples'],
+    summaryForLearner: 'Good start with your portfolio structure. Your professional summary needs more detail, and the formatting could be more polished.',
     ...overrides,
   };
 }
@@ -120,8 +123,14 @@ describe('validateSafety', () => {
 // -- validateActivity ---------------------------------------------------------
 
 describe('validateActivity', () => {
-  it('accepts a valid activity', () => {
+  it('accepts a valid screenshot-format activity', () => {
     assert.equal(validateActivity(validActivity()), null);
+  });
+
+  it('accepts a valid text-format activity', () => {
+    assert.equal(validateActivity(validActivity({
+      instruction: '1. Write a short paragraph about your goals\n2. Hit Submit to submit your response.',
+    }), { format: 'text' }), null);
   });
 
   it('rejects missing instruction', () => {
@@ -132,10 +141,16 @@ describe('validateActivity', () => {
     assert.ok(validateActivity(validActivity({ tips: 'nope' })));
   });
 
-  it('rejects instruction not ending with Capture', () => {
+  it('rejects screenshot activity not ending with Capture', () => {
     assert.ok(validateActivity(validActivity({
       instruction: '1. Write something\n2. Submit your work.',
     })));
+  });
+
+  it('rejects text activity not ending with Submit', () => {
+    assert.ok(validateActivity(validActivity({
+      instruction: '1. Write something\n2. Hit Capture to capture your screen.',
+    }), { format: 'text' }));
   });
 
   it('rejects too many steps (>5 total)', () => {
@@ -274,6 +289,14 @@ describe('validateSummative', () => {
     assert.ok(validateSummative(validSummative({ exemplar: '' })));
   });
 
+  it('rejects missing courseIntro', () => {
+    assert.ok(validateSummative(validSummative({ courseIntro: '' })));
+  });
+
+  it('rejects missing summaryForLearner', () => {
+    assert.ok(validateSummative(validSummative({ summaryForLearner: '' })));
+  });
+
   it('rejects unsafe content in exemplar', () => {
     assert.ok(validateSummative(validSummative({ exemplar: 'how to hack a database' })));
   });
@@ -312,6 +335,10 @@ describe('validateSummativeAssessment', () => {
 
   it('rejects missing feedback', () => {
     assert.ok(validateSummativeAssessment(validSummativeAssessment({ feedback: '' })));
+  });
+
+  it('rejects missing summaryForLearner', () => {
+    assert.ok(validateSummativeAssessment(validSummativeAssessment({ summaryForLearner: '' })));
   });
 
   it('enforces ratchet rule — rejects lower score than prior attempt', () => {

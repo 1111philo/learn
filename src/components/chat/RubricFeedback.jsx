@@ -11,7 +11,7 @@ const LEVEL_COLORS = {
 export default function RubricFeedback({ attempt, onRetake }) {
   if (!attempt) return null;
 
-  const { criteriaScores, overallScore, mastery, feedback, nextSteps, isBaseline } = attempt;
+  const { criteriaScores, overallScore, mastery, feedback, nextSteps, isBaseline, summaryForLearner } = attempt;
   const overallLabel = scoreToLabel(overallScore || 0);
 
   return (
@@ -24,7 +24,7 @@ export default function RubricFeedback({ attempt, onRetake }) {
         }
       </div>
 
-      <p dangerouslySetInnerHTML={{ __html: renderMd(feedback || '') }} style={{ margin: '0 0 8px' }} />
+      <p dangerouslySetInnerHTML={{ __html: renderMd(summaryForLearner || feedback || '') }} style={{ margin: '0 0 8px' }} />
 
       {/* Per-criterion scores */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>

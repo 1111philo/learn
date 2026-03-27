@@ -60,6 +60,7 @@ export async function getUnitProgress(unitId) {
     id: d.id,
     activityId: d.activity_id?.includes('::') ? d.activity_id.split('::')[1] : d.activity_id,
     screenshotKey: d.screenshot_key,
+    textResponse: d.text_response || null,
     url: d.url,
     feedback: d.feedback,
     strengths: d.strengths ? JSON.parse(d.strengths) : [],
@@ -172,12 +173,13 @@ export async function saveUnitProgress(unitId, progress) {
       currentDraftIds.add(draftId);
       run(
         `INSERT OR REPLACE INTO drafts
-         (id, activity_id, unit_id, screenshot_key, url, score, feedback,
+         (id, activity_id, unit_id, screenshot_key, text_response, url, score, feedback,
           strengths, improvements, recommendation, timestamp, rubric_criteria_scores)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           draftId, `${unitId}::${d.activityId}`, unitId,
           d.screenshotKey || null,
+          d.textResponse || null,
           d.url || null,
           d.score ?? null,
           d.feedback || null,
@@ -354,6 +356,8 @@ export async function getSummative(courseId) {
     estimatedTime: row.estimated_time,
     personalized: !!row.personalized,
     conversationId: row.conversation_id,
+    courseIntro: row.course_intro || null,
+    summaryForLearner: row.summary_for_learner || null,
     createdAt: row.created_at,
   };
 }
@@ -361,8 +365,8 @@ export async function getSummative(courseId) {
 export async function saveSummative(courseId, data) {
   run(
     `INSERT OR REPLACE INTO summatives
-     (course_id, task, rubric, exemplar, tool, estimated_time, personalized, conversation_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course_id, task, rubric, exemplar, tool, estimated_time, personalized, conversation_id, course_intro, summary_for_learner, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       courseId,
       JSON.stringify(data.task),
@@ -372,6 +376,8 @@ export async function saveSummative(courseId, data) {
       data.estimatedTime || null,
       data.personalized ? 1 : 0,
       data.conversationId || null,
+      data.courseIntro || null,
+      data.summaryForLearner || null,
       data.createdAt || Date.now(),
     ]
   );
@@ -389,12 +395,14 @@ export async function getSummativeAttempts(courseId) {
     courseId: r.course_id,
     attemptNumber: r.attempt_number,
     screenshots: r.screenshots ? JSON.parse(r.screenshots) : [],
+    textResponses: r.text_responses ? JSON.parse(r.text_responses) : [],
     criteriaScores: r.criteria_scores ? JSON.parse(r.criteria_scores) : [],
     overallScore: r.overall_score,
     mastery: !!r.mastery,
     feedback: r.feedback,
     nextSteps: r.next_steps ? JSON.parse(r.next_steps) : [],
     isBaseline: !!r.is_baseline,
+    summaryForLearner: r.summary_for_learner || null,
     timestamp: r.timestamp,
   }));
 }
@@ -402,20 +410,22 @@ export async function getSummativeAttempts(courseId) {
 export async function saveSummativeAttempt(courseId, attempt) {
   run(
     `INSERT OR REPLACE INTO summative_attempts
-     (id, course_id, attempt_number, screenshots, criteria_scores, overall_score,
-      mastery, feedback, next_steps, is_baseline, timestamp)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id, course_id, attempt_number, screenshots, text_responses, criteria_scores, overall_score,
+      mastery, feedback, next_steps, is_baseline, summary_for_learner, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       attempt.id,
       courseId,
       attempt.attemptNumber,
       JSON.stringify(attempt.screenshots || []),
+      JSON.stringify(attempt.textResponses || []),
       JSON.stringify(attempt.criteriaScores || []),
       attempt.overallScore ?? null,
       attempt.mastery ? 1 : 0,
       attempt.feedback || null,
       attempt.nextSteps ? JSON.stringify(attempt.nextSteps) : null,
       attempt.isBaseline ? 1 : 0,
+      attempt.summaryForLearner || null,
       attempt.timestamp || Date.now(),
     ]
   );
@@ -497,24 +507,71 @@ export async function getCoursePhase(courseId) {
   return null;
 }
 
-// -- Conversation state (rubric review + onboarding) --------------------------
+// -- Course messages (unified conversation per course) ------------------------
 
-export async function getRubricReviewState(courseId) {
-  const key = `rubric-review:${courseId}`;
+export async function getCourseMessages(courseId) {
+  const rows = queryAll(
+    'SELECT * FROM course_messages WHERE course_id = ? ORDER BY timestamp',
+    [courseId]
+  );
+  return rows.map(r => ({
+    id: r.id,
+    courseId: r.course_id,
+    role: r.role,
+    content: r.content,
+    msgType: r.msg_type,
+    phase: r.phase,
+    metadata: r.metadata ? JSON.parse(r.metadata) : null,
+    timestamp: r.timestamp,
+  }));
+}
+
+export async function saveCourseMessage(courseId, msg) {
+  run(
+    `INSERT INTO course_messages (course_id, role, content, msg_type, phase, metadata, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      courseId,
+      msg.role,
+      msg.content || '',
+      msg.msgType,
+      msg.phase || null,
+      msg.metadata ? JSON.stringify(msg.metadata) : null,
+      msg.timestamp || Date.now(),
+    ]
+  );
+}
+
+export async function saveCourseMessages(courseId, msgs) {
+  for (const msg of msgs) {
+    await saveCourseMessage(courseId, msg);
+  }
+}
+
+export async function clearCourseMessages(courseId) {
+  run('DELETE FROM course_messages WHERE course_id = ?', [courseId]);
+}
+
+// -- Conversation state (onboarding) ------------------------------------------
+
+// -- Summative capture state (survives panel reload) --------------------------
+
+export async function getSummativeCaptureState(courseId) {
+  const key = `summative-capture:${courseId}`;
   const row = query('SELECT state_json FROM pending_state WHERE key = ?', [key]);
   return row ? JSON.parse(row.state_json) : null;
 }
 
-export async function saveRubricReviewState(courseId, state) {
-  const key = `rubric-review:${courseId}`;
+export async function saveSummativeCaptureState(courseId, state) {
+  const key = `summative-capture:${courseId}`;
   run(
     'INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
     [key, JSON.stringify(state), Date.now()]
   );
 }
 
-export async function clearRubricReviewState(courseId) {
-  run('DELETE FROM pending_state WHERE key = ?', [`rubric-review:${courseId}`]);
+export async function clearSummativeCaptureState(courseId) {
+  run('DELETE FROM pending_state WHERE key = ?', [`summative-capture:${courseId}`]);
 }
 
 export async function getOnboardingState() {

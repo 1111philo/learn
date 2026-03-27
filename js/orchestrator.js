@@ -3,7 +3,7 @@
  * parses structured JSON responses.
  */
 
-import { callClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
+import { callClaude, streamClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
 import {
@@ -13,6 +13,7 @@ import {
 
 // Prompt cache (loaded once per session)
 const promptCache = {};
+let knowledgeBase = null;
 
 async function loadPrompt(name) {
   if (promptCache[name]) return promptCache[name];
@@ -22,6 +23,22 @@ async function loadPrompt(name) {
   promptCache[name] = text;
   return text;
 }
+
+/** Load the program knowledge base (cached). */
+async function loadKnowledgeBase() {
+  if (knowledgeBase) return knowledgeBase;
+  try {
+    const url = chrome.runtime.getURL('data/knowledge-base.md');
+    const resp = await fetch(url);
+    knowledgeBase = await resp.text();
+  } catch {
+    knowledgeBase = '';
+  }
+  return knowledgeBase;
+}
+
+/** Agents that get the knowledge base injected into their system prompt. */
+const KB_AGENTS = ['guide', 'onboarding-conversation'];
 
 function parseJSON(text) {
   // Try parsing as-is first
@@ -38,6 +55,9 @@ function parseJSON(text) {
     try { return JSON.parse(match[0]); } catch { /* fall through */ }
   }
 
+  // Log truncated/unparseable content for debugging
+  const preview = trimmed.length > 200 ? trimmed.slice(0, 200) + '…' : trimmed;
+  console.error('[1111] Unparseable agent response:', preview);
   throw new ApiError('parse', 'Failed to parse agent JSON response.');
 }
 
@@ -63,7 +83,7 @@ async function callWithValidation(agentFn, validator, agentName) {
 
 /**
  * Route an API call to the right backend based on auth state and configuration.
- * Retries once on transient errors (503, 529, 500) after a short delay.
+ * Retries up to twice on transient errors (503, 529, 500) with backoff.
  */
 async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
   const attempt = async () => {
@@ -84,16 +104,22 @@ async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
     throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
   };
 
-  try {
-    return await attempt();
-  } catch (e) {
-    if (e.type === 'overloaded' || (e.type === 'api' && e.status === 500)) {
-      console.error(`[1111] API ${e.status} — retrying in 3s...`);
-      await new Promise(r => setTimeout(r, 3000));
-      return attempt();
+  const RETRIES = 2;
+  const DELAYS = [3000, 6000];
+
+  let lastError;
+  for (let i = 0; i <= RETRIES; i++) {
+    try {
+      return await attempt();
+    } catch (e) {
+      lastError = e;
+      const isRetryable = e.type === 'overloaded' || (e.type === 'api' && e.status === 500);
+      if (!isRetryable || i === RETRIES) throw e;
+      console.error(`[1111] API ${e.status} — retry ${i + 1}/${RETRIES} in ${DELAYS[i] / 1000}s...`);
+      await new Promise(r => setTimeout(r, DELAYS[i]));
     }
-    throw e;
   }
+  throw lastError;
 }
 
 /**
@@ -110,7 +136,11 @@ export async function isReady() {
  * get back a parsed JSON response (typically { message, done, ...extras }).
  */
 export async function converse(promptName, messages, maxTokens = 512, { model } = {}) {
-  const systemPrompt = await loadPrompt(promptName);
+  let systemPrompt = await loadPrompt(promptName);
+  if (KB_AGENTS.includes(promptName)) {
+    const kb = await loadKnowledgeBase();
+    if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
+  }
 
   const { content } = await callApi({
     model: model || MODEL_LIGHT,
@@ -121,6 +151,47 @@ export async function converse(promptName, messages, maxTokens = 512, { model } 
 
   const parsed = parseJSON(content);
   return parsed;
+}
+
+/**
+ * Stream a conversation response. Calls onChunk(text) as tokens arrive.
+ * Returns the full accumulated text when done. Falls back to non-streaming
+ * if the user is logged in (proxy streaming requires learn-service support).
+ */
+export async function converseStream(promptName, messages, onChunk, maxTokens = 512, { model } = {}) {
+  let systemPrompt = await loadPrompt(promptName);
+  if (KB_AGENTS.includes(promptName)) {
+    const kb = await loadKnowledgeBase();
+    if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
+  }
+
+  // Try streaming with direct API key first (works whether logged in or not)
+  const apiKey = await getApiKey();
+  if (apiKey) {
+    let full = '';
+    const stream = await streamClaude({
+      apiKey,
+      model: model || MODEL_LIGHT,
+      systemPrompt,
+      messages,
+      maxTokens
+    });
+    for await (const chunk of stream) {
+      full += chunk;
+      onChunk(full);
+    }
+    return full;
+  }
+
+  // Fallback: non-streaming (proxy with no local key)
+  const { content } = await callApi({
+    model: model || MODEL_LIGHT,
+    systemPrompt,
+    messages,
+    maxTokens
+  });
+  onChunk(content);
+  return content;
 }
 
 /**
@@ -156,10 +227,19 @@ export async function initializeLearnerProfile(name, statement) {
 export async function generateSummative(course, allObjectives, profileSummary, personalizationNotes) {
   const systemPrompt = await loadPrompt('summative-generation');
 
+  // Collect unit exemplars and formats for the agent
+  const unitExemplars = (course.units || []).map(u => ({
+    unitId: u.unitId,
+    name: u.name,
+    format: u.format,
+    exemplar: u.exemplar,
+  }));
+
   const userContent = JSON.stringify({
     courseName: course.name,
     courseDescription: course.description,
     learningObjectives: allObjectives,
+    unitExemplars,
     learnerProfile: profileSummary || 'No profile yet',
     personalizationNotes: personalizationNotes || null,
   });
@@ -178,11 +258,12 @@ export async function generateSummative(course, allObjectives, profileSummary, p
 }
 
 /**
- * Assess a summative attempt (multi-capture, vision-based).
+ * Assess a summative attempt (multi-step, supports screenshots and/or text responses).
  * screenshots is an array of { dataUrl, stepIndex }.
+ * textResponses is an array of { text, stepIndex }.
  */
-export async function assessSummativeAttempt(course, summative, screenshots, priorAttempts, profileSummary) {
-  const systemPrompt = await loadPrompt('diagnostic-assessment');
+export async function assessSummativeAttempt(course, summative, screenshots, priorAttempts, profileSummary, textResponses) {
+  const systemPrompt = await loadPrompt('summative-assessment');
 
   const contentParts = [];
 
@@ -203,7 +284,7 @@ export async function assessSummativeAttempt(course, summative, screenshots, pri
   });
 
   // Add image blocks for each step screenshot
-  for (const ss of screenshots) {
+  for (const ss of (screenshots || [])) {
     if (ss.dataUrl) {
       const match = ss.dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
       if (match) {
@@ -220,6 +301,16 @@ export async function assessSummativeAttempt(course, summative, screenshots, pri
           }
         });
       }
+    }
+  }
+
+  // Add text response blocks for each step text submission
+  for (const tr of (textResponses || [])) {
+    if (tr.text) {
+      contentParts.push({
+        type: 'text',
+        text: `Text response for step ${tr.stepIndex + 1}:\n\n${tr.text}`
+      });
     }
   }
 
@@ -282,6 +373,7 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
     units: units.map(u => ({
       unitId: u.unitId, name: u.name, description: u.description,
       learningObjectives: u.learningObjectives, dependsOn: u.dependsOn,
+      format: u.format, exemplar: u.exemplar,
     })),
     gapAnalysis,
     rubric,
@@ -306,20 +398,26 @@ export async function generateJourney(course, units, gapAnalysis, rubric, profil
 
 /**
  * Generate the next formative activity's instruction.
+ * format: "text" or "screenshot" — determines whether the activity ends with Submit or Capture.
  */
-export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope) {
+export async function generateNextActivity(unit, planSlot, progressSummary, profileSummary, planContext, courseScope, summativeContext, { format } = {}) {
   const systemPrompt = await loadPrompt('activity-creation');
 
   const userContent = JSON.stringify({
     course: { name: unit.name, learningObjectives: unit.learningObjectives },
     activity: { type: planSlot.type, goal: planSlot.goal },
+    format: format || 'screenshot',
     rubricCriteria: planSlot.rubricCriteria || null,
     gapObservation: planSlot.gapObservation || null,
     workProduct: planContext?.workProductDescription || planContext?.finalWorkProductDescription || '',
     workProductTool: planContext?.workProductTool || '',
     priorActivities: progressSummary,
     learnerProfile: profileSummary || 'No profile yet',
-    courseScope: courseScope || null
+    courseScope: courseScope || null,
+    unitExemplar: unit.exemplar || null,
+    exemplar: summativeContext?.exemplar || null,
+    summativeTask: summativeContext?.task?.description || null,
+    fullRubric: summativeContext?.rubric || null,
   });
 
   const callAgent = async () => {
@@ -332,13 +430,14 @@ export async function generateNextActivity(unit, planSlot, progressSummary, prof
     return parseJSON(content);
   };
 
-  return callWithValidation(callAgent, validateActivity, 'activity-creation');
+  return callWithValidation(callAgent, (p) => validateActivity(p, { format: format || 'screenshot' }), 'activity-creation');
 }
 
 /**
- * Assess a formative draft submission with vision.
+ * Assess a formative draft submission with vision (screenshot) or text.
+ * Pass screenshotDataUrl for screenshot-format, textResponse for text-format.
  */
-export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment') {
+export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, promptName = 'activity-assessment', textResponse = null) {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -382,9 +481,19 @@ export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, pr
     }
   }
 
+  if (textResponse) {
+    contentParts.push({
+      type: 'text',
+      text: `Learner's text response:\n\n${textResponse}`
+    });
+  }
+
+  // Use lighter model for text-only assessments (no vision needed)
+  const model = screenshotDataUrl ? MODEL_HEAVY : MODEL_LIGHT;
+
   const callAgent = async () => {
     const { content } = await callApi({
-      model: MODEL_HEAVY,
+      model,
       systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
       maxTokens: 1024
@@ -397,9 +506,9 @@ export async function assessDraft(unit, activity, screenshotDataUrl, pageUrl, pr
 
 /**
  * Reassess a draft with learner feedback on the assessment.
- * Re-evaluates the same screenshot, factoring in the learner's dispute.
+ * Re-evaluates the same screenshot/text, factoring in the learner's dispute.
  */
-export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment') {
+export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, priorDrafts, profileSummary, previousAssessment, learnerFeedback, promptName = 'activity-assessment', textResponse = null) {
   const systemPrompt = await loadPrompt(promptName);
 
   const compressedDrafts = priorDrafts.map(d => ({
@@ -441,15 +550,26 @@ export async function reassessDraft(unit, activity, screenshotDataUrl, pageUrl, 
     }
   }
 
+  if (textResponse) {
+    contentParts.push({
+      type: 'text',
+      text: `Learner's text response:\n\n${textResponse}`
+    });
+  }
+
+  const submissionType = screenshotDataUrl ? 'screenshot' : 'text response';
   const messages = [
     { role: 'user', content: contentParts },
     { role: 'assistant', content: JSON.stringify(previousAssessment) },
-    { role: 'user', content: `The learner disputes this assessment: "${learnerFeedback}"\n\nRe-evaluate the same screenshot, taking their feedback into account. You may adjust your score, recommendation, and feedback if their point is valid. Respond with the same JSON format.` }
+    { role: 'user', content: `The learner disputes this assessment: "${learnerFeedback}"\n\nRe-evaluate the same ${submissionType}, taking their feedback into account. You may adjust your score, recommendation, and feedback if their point is valid. Respond with the same JSON format.` }
   ];
+
+  // Use lighter model for text-only reassessments (no vision needed)
+  const model = screenshotDataUrl ? MODEL_HEAVY : MODEL_LIGHT;
 
   const callAgent = async () => {
     const { content } = await callApi({
-      model: MODEL_HEAVY,
+      model,
       systemPrompt,
       messages,
       maxTokens: 1024

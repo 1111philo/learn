@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS units (
   current_activity_index INTEGER DEFAULT 0,
   started_at INTEGER,
   completed_at INTEGER,
-  final_work_product_url TEXT
+  final_work_product_url TEXT,
+  journey_order INTEGER,
+  rubric_criteria TEXT
 );
 
 CREATE TABLE IF NOT EXISTS summatives (
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS summatives (
   estimated_time INTEGER,
   personalized INTEGER DEFAULT 0,
   conversation_id TEXT,
+  course_intro TEXT,
+  summary_for_learner TEXT,
   created_at INTEGER
 );
 
@@ -77,12 +81,14 @@ CREATE TABLE IF NOT EXISTS summative_attempts (
   course_id TEXT NOT NULL,
   attempt_number INTEGER NOT NULL,
   screenshots TEXT,
+  text_responses TEXT,
   criteria_scores TEXT,
   overall_score REAL,
   mastery INTEGER DEFAULT 0,
   feedback TEXT,
   next_steps TEXT,
   is_baseline INTEGER DEFAULT 0,
+  summary_for_learner TEXT,
   timestamp INTEGER
 );
 
@@ -128,7 +134,8 @@ CREATE TABLE IF NOT EXISTS activities (
   instruction TEXT,
   tips TEXT,
   sequence INTEGER,
-  conversation_id TEXT REFERENCES conversations(id)
+  conversation_id TEXT REFERENCES conversations(id),
+  rubric_criteria TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_summative_attempts_course
@@ -139,13 +146,15 @@ CREATE TABLE IF NOT EXISTS drafts (
   activity_id TEXT NOT NULL REFERENCES activities(id),
   unit_id TEXT NOT NULL,
   screenshot_key TEXT,
+  text_response TEXT,
   url TEXT,
   score REAL,
   feedback TEXT,
   strengths TEXT,
   improvements TEXT,
   recommendation TEXT,
-  timestamp INTEGER
+  timestamp INTEGER,
+  rubric_criteria_scores TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
@@ -171,6 +180,20 @@ CREATE TABLE IF NOT EXISTS pending_state (
   updated_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS course_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  msg_type TEXT NOT NULL,
+  phase TEXT,
+  metadata TEXT,
+  timestamp INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_msg_course
+  ON course_messages(course_id, timestamp);
+
 `;
 
 // Migrations for adding columns to existing tables.
@@ -180,6 +203,22 @@ const MIGRATIONS = [
   'ALTER TABLE units ADD COLUMN rubric_criteria TEXT',
   'ALTER TABLE activities ADD COLUMN rubric_criteria TEXT',
   'ALTER TABLE drafts ADD COLUMN rubric_criteria_scores TEXT',
+  'ALTER TABLE summatives ADD COLUMN course_intro TEXT',
+  'ALTER TABLE summatives ADD COLUMN summary_for_learner TEXT',
+  'ALTER TABLE summative_attempts ADD COLUMN summary_for_learner TEXT',
+  'ALTER TABLE drafts ADD COLUMN text_response TEXT',
+  'ALTER TABLE summative_attempts ADD COLUMN text_responses TEXT',
+  `CREATE TABLE IF NOT EXISTS course_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    msg_type TEXT NOT NULL,
+    phase TEXT,
+    metadata TEXT,
+    timestamp INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_course_msg_course ON course_messages(course_id, timestamp)`,
 ];
 
 // -- Initialization -----------------------------------------------------------

@@ -17,24 +17,32 @@ export function validateSafety(text) {
   return null;
 }
 
-export function validateActivity(parsed) {
+export function validateActivity(parsed, { format } = {}) {
   if (!parsed.instruction || typeof parsed.instruction !== 'string') return 'Missing instruction.';
   if (!Array.isArray(parsed.tips)) return 'Missing tips array.';
 
   const instr = parsed.instruction;
+  const isText = format === 'text';
 
   // Safety
   const safety = validateSafety(instr + ' ' + parsed.tips.join(' '));
   if (safety) return safety;
 
-  // Must end with "Capture"
   const lines = instr.split('\n').filter(l => l.trim());
-  const lastLine = lines[lines.length - 1]?.toLowerCase() || '';
-  if (!lastLine.includes('capture')) return 'Last step must tell the learner to hit Capture.';
 
-  // Max 4 content steps + the mandatory Capture step = 5 total
+  if (isText) {
+    // Text-format activities must end with "Submit"
+    const lastLine = lines[lines.length - 1]?.toLowerCase() || '';
+    if (!lastLine.includes('submit')) return 'Last step must tell the learner to hit Submit.';
+  } else {
+    // Screenshot-format activities must end with "Capture"
+    const lastLine = lines[lines.length - 1]?.toLowerCase() || '';
+    if (!lastLine.includes('capture')) return 'Last step must tell the learner to hit Capture.';
+  }
+
+  // Max 4 content steps + the mandatory final step = 5 total
   const steps = instr.match(/^\d+\.\s/gm);
-  if (steps && steps.length > 5) return 'Too many steps (max 4 plus Capture).';
+  if (steps && steps.length > 5) return 'Too many steps (max 4 plus final step).';
 
   // No platform-specific shortcuts
   if (PLATFORM_SHORTCUTS.test(instr)) return 'Contains platform-specific keyboard shortcuts.';
@@ -49,7 +57,7 @@ export function validateActivity(parsed) {
   if (DEVTOOLS_PATTERN.test(instr)) return 'Activity must not use DevTools — screenshots cannot capture browser panels.';
 
   // Must require the learner to produce something (not just visit a page)
-  // Check the steps before the final "Record" step
+  // Check the steps before the final step
   const stepsBeforeRecord = lines.slice(0, -1).join(' ');
   if (!PRODUCES_WORK.test(stepsBeforeRecord)) return 'Activity must require the learner to produce visible work, not just visit a page.';
 
@@ -91,8 +99,10 @@ export function validateSummative(parsed) {
     }
   }
   if (!parsed.exemplar || typeof parsed.exemplar !== 'string') return 'Missing exemplar.';
+  if (!parsed.courseIntro || typeof parsed.courseIntro !== 'string') return 'Missing courseIntro.';
+  if (!parsed.summaryForLearner || typeof parsed.summaryForLearner !== 'string') return 'Missing summaryForLearner.';
 
-  const allText = parsed.exemplar + ' ' + parsed.task.steps.map(s => s.instruction).join(' ');
+  const allText = parsed.exemplar + ' ' + parsed.courseIntro + ' ' + parsed.summaryForLearner + ' ' + parsed.task.steps.map(s => s.instruction).join(' ');
   const safety = validateSafety(allText);
   if (safety) return safety;
 
@@ -114,6 +124,7 @@ export function validateSummativeAssessment(parsed, priorAttempt) {
   }
   if (typeof parsed.mastery !== 'boolean') return 'mastery must be a boolean.';
   if (!parsed.feedback || typeof parsed.feedback !== 'string') return 'Missing feedback.';
+  if (!parsed.summaryForLearner || typeof parsed.summaryForLearner !== 'string') return 'Missing summaryForLearner.';
 
   // Ratchet rule: no criterion score can be lower than the prior attempt
   if (priorAttempt?.criteriaScores) {
@@ -129,7 +140,7 @@ export function validateSummativeAssessment(parsed, priorAttempt) {
     }
   }
 
-  const safety = validateSafety(parsed.feedback);
+  const safety = validateSafety(parsed.feedback + ' ' + parsed.summaryForLearner);
   if (safety) return safety;
 
   return null;
