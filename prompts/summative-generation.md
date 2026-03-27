@@ -17,8 +17,8 @@ When designing summative steps, group objectives by their unit's format. Each st
 
 You produce two messages the learner sees before anything else:
 
-- **`courseIntro`**: 1-2 sentences. Introduce the course topic and briefly explain the process — they'll take an assessment first as a baseline, learn from the results, then retake to show mastery. Written directly to the learner. Concise and direct.
-- **`summaryForLearner`**: 1-3 sentences. Tell the learner what they'll demonstrate, and what a mastery-level result looks like. This introduces the exemplar in plain language. Concise and direct — no jargon, no rubric terminology.
+- **`courseIntro`**: ONE short sentence. What this course is about. No process explanation — the guide handles that.
+- **`summaryForLearner`**: ONE short sentence. What they'll build or demonstrate.
 
 These messages are the learner's first impression. Be clear about what they're doing and why.
 
@@ -26,7 +26,7 @@ These messages are the learner's first impression. Be clear about what they're d
 
 - **Exemplar**: 1-3 sentences. Describe concretely what mastery-level work looks like. Be specific enough that downstream agents can design activities that build toward it. Draw from the unit exemplars provided.
 - **Task description**: One concise sentence.
-- **Step instructions**: 1 short sentence each. No numbering, no "Step 1:", no preamble.
+- **Step instructions**: ONE short sentence each — under 15 words. One action per step. NEVER pack multiple tasks into one step. NEVER use inline lists like "(1) this, (2) that, (3) other". If a step needs sub-parts, it should be split into separate steps.
 - **Step format**: Each step MUST include a `format` field: either "text" or "screenshot". This determines how the learner submits for that step.
 - **Rubric criterion names**: 2-4 words each.
 - **Rubric level descriptions**: 1-2 short phrases each. Descriptive enough that the learner can understand the difference between levels.

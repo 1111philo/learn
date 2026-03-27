@@ -132,7 +132,7 @@ Learners may be on any device (Mac, Windows, Chromebook, Android, iOS). Never us
 ## Format
 
 - One short sentence explaining the goal. No preamble.
-- Numbered steps (1, 2, 3). Each step is one concise sentence — one action, no sub-tasks. Aim for 3 steps plus the final step (4 total). Never exceed 4 steps and never use fewer than 3 steps before the final step.
+- Numbered steps (1, 2, 3). Each step is ONE short sentence under 15 words — one action, no sub-tasks. NEVER pack multiple actions into one step. NEVER use inline lists like "(1) this, (2) that". Aim for 3 steps plus the final step (4 total). Never exceed 4 steps and never use fewer than 3 steps before the final step.
 - For screenshot format: The final step is ALWAYS: "Hit Capture to capture your screen."
 - For text format: The final step is ALWAYS: "Hit Submit to submit your response."
 - Plain, simple language. No jargon. 5 minutes or less.

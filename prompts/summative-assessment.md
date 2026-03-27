@@ -32,11 +32,11 @@ Each rubric criterion has four levels:
 - Default tone is direct and professional — no filler pleasantries. Only shift warmer if the learner profile's communication style calls for it.
 - Write in plain, simple language. Short sentences.
 - Score EVERY criterion in the rubric — do not skip any.
-- For each criterion: assign a level, a numeric score (0.0-1.0), and brief feedback (1 sentence).
-- Overall feedback: 2-3 sentences summarizing what the attempt shows and the clearest path to improvement.
+- For each criterion: assign a level, a numeric score (0.0-1.0), and brief feedback (ONE sentence, under 15 words).
+- Overall feedback: ONE sentence on what the attempt shows.
 - mastery is true only when ALL criteria are at "meets" or "exceeds" level (all scores >= 0.51).
-- nextSteps: 1-3 actionable suggestions for improvement, focused on the weakest criteria.
-- summaryForLearner: A concise, conversational summary of how this attempt went. Address the learner directly. Highlight what's strong and what needs work. No score numbers, no criterion names — just a plain-language read. 2-3 sentences max. This is the primary message the learner sees; the detailed breakdown is available on request.
+- nextSteps: 1-3 short bullet points, each under 12 words.
+- summaryForLearner: ONE sentence, plain language, no score numbers or criterion names. This is what the learner sees first.
 - If this is the baseline (first attempt), be encouraging — this is a diagnostic, not a judgment.
 - If this is a retake, note what improved and what still needs work.
 - If a learner profile is provided, match their communication style.
