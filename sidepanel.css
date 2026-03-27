@@ -303,6 +303,23 @@ nav button:focus-visible {
 .progress-active { background: var(--color-accent, #2563eb); }
 .progress-upcoming { background: var(--color-border); }
 
+.response-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.response-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 .phase-collapse-btn {
   display: block;
   width: 100%;
