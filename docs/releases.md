@@ -65,12 +65,14 @@ See [Chrome Web Store API docs](https://developer.chrome.com/docs/webstore/using
 
 ## Course JSON structure
 
-Each course in `data/courses.json` has:
+Each course in `data/courses.json` has a `courseId`, `name`, `description`, and a `units` array. Each unit has:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `courseId` | `string` | Unique identifier |
+| `unitId` | `string` | Unique identifier |
 | `name` | `string` | Display title |
 | `description` | `string` | One sentence explaining why the learner benefits |
-| `dependsOn` | `string?` | Optional prerequisite course ID |
-| `learningObjectives` | `string[]` | Outcome statements the course achieves |
+| `dependsOn` | `string?` | Optional prerequisite unit ID |
+| `format` | `"text" \| "screenshot"` | How learners submit work for this unit |
+| `exemplar` | `string` | Description of mastery-level outcome (example, not content to copy) |
+| `learningObjectives` | `string[]` | Outcome statements the unit achieves |

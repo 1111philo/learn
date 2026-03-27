@@ -4,18 +4,19 @@
 
 # 1111 Learn
 
-An agentic learning app that runs entirely in the Chrome side panel. Eleven AI agents guide learners through courses using assessment-backward design -- you take a summative first, learn from your gaps, then retake to demonstrate mastery.
+An agentic learning app that runs entirely in the Chrome side panel. Ten AI agents guide learners through courses using assessment-backward design -- you take a summative first, learn from your gaps, then retake to demonstrate mastery. A Guide Agent orients you at every checkpoint.
 
 Built by [11:11 Philosopher's Group](https://github.com/1111philo) in collaboration with [UIC Tech Solutions](https://it.uic.edu/), [UIC TS Open Source Fund](https://osf.it.uic.edu/), [Louisiana Tech](https://www.latech.edu/), and the [ULL Louisiana Educate Program](https://louisiana.edu/educate).
 
 ## How it works
 
-1. **Take a summative assessment** -- the AI generates a multi-step capture task from the course's learning objectives
-2. **See your gaps** -- a gap analysis identifies what you need to learn, mapped to rubric criteria
-3. **Learn through formative activities** -- personalized activities build one work product, each targeting your weak spots
-4. **Retake and demonstrate mastery** -- scores can only go up (ratchet rule); when all criteria hit "meets" or above, you're done
+1. **Get oriented** -- a Guide Agent introduces the course and your diagnostic assessment
+2. **Take a diagnostic** -- the AI generates a multi-step task from unit exemplars and learning objectives; you submit screenshots or text
+3. **See your results** -- a gap analysis identifies what you need to learn, mapped to rubric criteria
+4. **Learn through activities** -- personalized activities target your weak spots, guided by unit exemplars
+5. **Retake and demonstrate mastery** -- scores can only go up (ratchet rule); when all criteria hit "meets" or above, you're done
 
-Everything happens in the browser. Screenshots are captured, assessed by vision-capable AI, and stored locally. No data leaves your device unless you opt into cloud sync.
+The Guide Agent orients you at every checkpoint — course intro, after diagnostic results, before your learning path, and before retakes. Everything happens in the browser. Screenshots and text responses are assessed by AI and stored locally. No data leaves your device unless you opt into cloud sync.
 
 ## Quick start
 
@@ -35,7 +36,7 @@ You'll need an [Anthropic API key](https://console.anthropic.com/) or a 1111 Lea
 | Doc | What's in it |
 |-----|-------------|
 | [Architecture](docs/architecture.md) | Agents, storage, content hierarchy, data flow |
-| [Agent Lifecycle](docs/agent-lifecycle.md) | Full Phase 0-7 walkthrough: every agent call, its inputs, outputs, and validation |
+| [Agent Lifecycle](docs/agent-lifecycle.md) | Full Phase 0-10 walkthrough: every agent call, its inputs, outputs, and validation |
 | [Cloud Sync](docs/cloud-sync.md) | Auth, remote storage, AI provider routing |
 | [Releases](docs/releases.md) | CI/CD, versioning, branch protection, permissions, secrets |
 | [Contributing](CONTRIBUTING.md) | Dev setup, workflow, guidelines, how to submit changes |

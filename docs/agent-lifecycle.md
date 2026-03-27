@@ -13,7 +13,7 @@ For the agent table and architecture overview, see [Architecture](architecture.m
 | | |
 |---|---|
 | Prompt | [`onboarding-conversation.md`](../prompts/onboarding-conversation.md) |
-| Model | `MODEL_LIGHT` |
+| Model | `MODEL_HEAVY` + vision |
 | Trigger | "About You" step in onboarding wizard ([`AboutYouStep.jsx`](../src/pages/onboarding/AboutYouStep.jsx)) |
 | Function | `orchestrator.converse('onboarding-conversation', messages)` |
 
@@ -40,40 +40,44 @@ For the agent table and architecture overview, see [Architecture](architecture.m
 **Input:**
 - `courseName`, `courseDescription`
 - `learningObjectives` -- flattened from all units in the course
+- `unitExemplars` -- per-unit `{ unitId, name, format, exemplar }` from [`courses.json`](../data/courses.json)
 - `learnerProfile` -- summary string
-- `personalizationNotes` -- null on first generation; set if regenerated from rubric review feedback
 
 **Output:**
 ```json
 {
   "courseIntro": "1-2 sentences explaining the course and assessment-backward process",
-  "summaryForLearner": "1-3 sentences: what they'll build, the tool, what mastery looks like",
-  "task": { "description": "...", "tool": "...", "steps": [{ "instruction": "..." }] },
+  "summaryForLearner": "1-3 sentences: what they'll demonstrate, what mastery looks like",
+  "task": {
+    "description": "...",
+    "tool": "...",
+    "steps": [{ "instruction": "...", "format": "screenshot|text" }]
+  },
   "rubric": [{ "name": "...", "levels": { "incomplete": "...", "approaching": "...", "meets": "...", "exceeds": "..." } }],
   "exemplar": "1-3 sentences describing mastery-level work"
 }
 ```
 
-The learner sees `courseIntro` and `summaryForLearner` first. The rubric and detailed data surface through conversation.
+Each step has a `format` field ("screenshot" or "text") determined by the unit exemplars. The rubric is **FIXED** once generated — it cannot be changed.
 
 ---
 
-## Phase 2: Rubric Review
+## Phase 2: Course Intro (orientation checkpoint)
 
-### 3. Summative Rubric Review Agent
+### 3. Guide Agent
 
 | | |
 |---|---|
-| Prompt | [`summative-conversation.md`](../prompts/summative-conversation.md) |
+| Prompt | [`guide.md`](../prompts/guide.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Learner reviews rubric/exemplar ([`unitEngine.sendRubricReviewMessage`](../src/lib/unitEngine.js)) |
-| Function | `orchestrator.converse('summative-conversation', messages)` |
+| Trigger | Phase transitions to `course_intro` ([`UnitsList.jsx`](../src/pages/UnitsList.jsx)) |
+| Function | `unitEngine.callGuide()` → `orchestrator.converse('guide', messages)` |
 
-**Input:** First message is a JSON context block containing the full summative (task, rubric, exemplar), courseName, learningObjectives, and learnerProfile. Then the conversation history + new user message.
+**Input:** `{ checkpoint: "course_intro", courseName, learnerProfile, rubricCriteria, exemplar }`
 
-**Output:** `{ message, done, regenerate?, regenerationNotes? }`
+**Output:** `{ message }` -- personalized 2-3 sentence greeting framing the diagnostic as low-stakes.
 
-**Side effect:** If `regenerate: true`, re-runs [Agent #2](#2-summative-generation-agent) with `personalizationNotes` from the learner's feedback.
+The learner sees the guide's message alongside the rubric/exemplar (SummativeCard). They can ask follow-up questions via the compose bar (multi-turn via `converse`). Clicking "Start Diagnostic Assessment" advances to the baseline attempt.
 
 ---
 
@@ -84,8 +88,8 @@ The learner sees `courseIntro` and `summaryForLearner` first. The rubric and det
 | | |
 |---|---|
 | Prompt | [`summative-assessment.md`](../prompts/summative-assessment.md) |
-| Model | `MODEL_HEAVY` + vision |
-| Trigger | Learner submits all step screenshots ([`unitEngine.submitSummativeAttempt`](../src/lib/unitEngine.js)) |
+| Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text-only) |
+| Trigger | Learner submits all steps ([`unitEngine.submitSummativeAttempt`](../src/lib/unitEngine.js)) |
 | Function | `orchestrator.assessSummativeAttempt()` |
 | Validation | `validateSummativeAssessment()` -- enforces ratchet rule |
 
@@ -94,7 +98,8 @@ The learner sees `courseIntro` and `summaryForLearner` first. The rubric and det
 - `attemptNumber`, `isBaseline` flag
 - `priorAttemptScores` -- null for baseline, latest scores for retake
 - `learnerProfile`
-- Base64 screenshot images -- one per step, labeled by step index
+- Screenshots (base64 images, one per screenshot-format step)
+- Text responses (one per text-format step)
 
 **Output:**
 ```json
@@ -108,9 +113,7 @@ The learner sees `courseIntro` and `summaryForLearner` first. The rubric and det
 }
 ```
 
-The learner sees `summaryForLearner` as the primary message. Detailed per-criterion breakdown is available on request.
-
-**Ratchet rule:** Each criterion score must be >= the prior attempt's score for that criterion. This is enforced by the validator.
+**Ratchet rule:** Each criterion score must be >= the prior attempt's score. Enforced by the validator.
 
 ### 5. Learner Profile Agent (background)
 
@@ -127,7 +130,15 @@ The learner sees `summaryForLearner` as the primary message. Detailed per-criter
 
 ---
 
-## Phase 4: Gap Analysis + Journey
+## Phase 4: Baseline Results (orientation checkpoint)
+
+### Guide Agent (checkpoint: `baseline_results`)
+
+After the baseline attempt scores come back, the Guide Agent appears with a personalized message framing the results as a starting point. The learner sees their per-criterion scores (RubricFeedback) and can ask questions. Clicking "Build My Learning Path" triggers gap analysis + journey generation.
+
+---
+
+## Phase 5: Gap Analysis + Journey
 
 ### 6. Gap Analysis Agent
 
@@ -135,11 +146,11 @@ The learner sees `summaryForLearner` as the primary message. Detailed per-criter
 |---|---|
 | Prompt | [`gap-analysis.md`](../prompts/gap-analysis.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | After baseline attempt ([`unitEngine.generateGapAndJourney`](../src/lib/unitEngine.js)) |
+| Trigger | Learner clicks "Build My Learning Path" ([`unitEngine.generateGapAndJourney`](../src/lib/unitEngine.js)) |
 | Function | `orchestrator.analyzeGaps()` |
 | Validation | `validateGapAnalysis()` |
 
-**Input:** `courseName`, `rubric`, `baselineScores` (per-criterion from attempt), `overallScore`, `learnerProfile`
+**Input:** `courseName`, `rubric`, `baselineScores` (per-criterion), `overallScore`, `learnerProfile`
 
 **Output:**
 ```json
@@ -161,7 +172,7 @@ The learner sees `summaryForLearner` as the primary message. Detailed per-criter
 
 **Input:**
 - `courseName`
-- `units[]` -- predefined units from [`courses.json`](../data/courses.json) (unitId, name, description, learningObjectives, dependsOn)
+- `units[]` -- predefined units from [`courses.json`](../data/courses.json) (unitId, name, description, learningObjectives, dependsOn, format, exemplar)
 - `gapAnalysis` -- from Agent #6
 - `rubric` -- the summative rubric
 - `learnerProfile`
@@ -179,7 +190,15 @@ The learner sees `summaryForLearner` as the primary message. Detailed per-criter
 
 ---
 
-## Phase 5: Formative Learning (per unit, per activity)
+## Phase 6: Journey Overview (orientation checkpoint)
+
+### Guide Agent (checkpoint: `journey_overview`)
+
+After the journey is generated, the Guide Agent appears with a brief overview of the learning path. The learner sees the unit cards and can ask questions. Clicking "Start Learning" advances to formative learning.
+
+---
+
+## Phase 7: Formative Learning (per unit, per activity)
 
 ### 8. Activity Creation Agent (repeated per activity)
 
@@ -189,31 +208,34 @@ The learner sees `summaryForLearner` as the primary message. Detailed per-criter
 | Model | `MODEL_LIGHT` |
 | Trigger | Learner enters a unit or advances ([`unitEngine.generateFirstActivity`](../src/lib/unitEngine.js) / `generateNextActivity`) |
 | Function | `orchestrator.generateNextActivity()` |
-| Validation | `validateActivity()` |
+| Validation | `validateActivity()` with `{ format }` |
 
 **Input:**
-- Unit info (name, learningObjectives)
+- Unit info (name, learningObjectives, format, exemplar)
 - Activity `type`/`goal` from the journey plan slot
+- `format` -- "screenshot" or "text" (from unit definition)
 - `rubricCriteria` -- which summative criteria this activity targets
 - `gapObservation` -- what the learner was missing
-- `workProduct`/`workProductTool` -- the single work product for the course
+- `workProduct`/`workProductTool` -- the single work product (screenshot-format units only)
 - `priorActivities` -- summary of completed activities with best scores
 - `learnerProfile`
-- **Summative context:** `exemplar`, `summativeTask` (description), full `rubric` -- so activities build toward the exemplar
+- **Summative context:** `unitExemplar`, `exemplar`, `summativeTask`, full `rubric`
 
 **Output:** `{ instruction, tips[] }`
 
-### 9. Activity Assessment Agent (repeated per capture)
+Screenshot-format activities end with "Hit Capture to capture your screen." Text-format activities end with "Hit Submit to submit your response." Both capture and text submission are always available to the learner regardless of format.
+
+### 9. Activity Assessment Agent (repeated per submission)
 
 | | |
 |---|---|
 | Prompt | [`activity-assessment.md`](../prompts/activity-assessment.md) |
-| Model | `MODEL_HEAVY` + vision |
-| Trigger | Learner hits "Capture" ([`unitEngine.recordDraft`](../src/lib/unitEngine.js)) |
+| Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text) |
+| Trigger | Learner captures screenshot ([`unitEngine.recordDraft`](../src/lib/unitEngine.js)) or submits text ([`unitEngine.recordTextDraft`](../src/lib/unitEngine.js)) |
 | Function | `orchestrator.assessDraft()` |
 | Validation | `validateAssessment()` |
 
-**Input:** Unit/activity info, `rubricCriteria`, `pageUrl`, `priorDrafts` (score/feedback/recommendation), `learnerProfile`, base64 screenshot
+**Input:** Unit/activity info, `rubricCriteria`, `pageUrl`, `priorDrafts` (score/feedback/recommendation), `learnerProfile`, base64 screenshot OR text response
 
 **Output:** `{ feedback, strengths[], improvements[], score, recommendation, passed, rubricCriteriaScores? }`
 
@@ -239,27 +261,35 @@ Same as [Agent #5](#5-learner-profile-agent-background), triggered after every f
 | | |
 |---|---|
 | Prompt | Same [`activity-assessment.md`](../prompts/activity-assessment.md) |
-| Model | `MODEL_HEAVY` + vision |
+| Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text) |
 | Trigger | Learner disputes a score ([`unitEngine.submitDispute`](../src/lib/unitEngine.js)) |
 | Function | `orchestrator.reassessDraft()` |
 
 **Input:** 3-message conversation:
-1. Original assessment context + screenshot (user message)
+1. Original assessment context + screenshot/text (user message)
 2. Assistant's previous assessment (injected as assistant message)
 3. Learner's dispute text (user message)
 
 ---
 
-## Phase 6: Summative Retake
+## Phase 8: Retake Ready (orientation checkpoint)
 
-Repeats [Agent #4](#4-summative-assessment-agent) (Summative Assessment) and [Agent #5](#5-learner-profile-agent-background) (Profile Update). The ratchet rule is enforced.
+### Guide Agent (checkpoint: `retake_ready`)
 
-- If mastery achieved → course complete → [Phase 7](#phase-7-course-mastery)
-- If not mastery → re-runs [Agent #6](#6-gap-analysis-agent) (Gap Analysis) + [Agent #7](#7-journey-generation-agent) (Journey) with `completedFormatives` populated so it doesn't repeat activities → back to [Phase 5](#phase-5-formative-learning-per-unit-per-activity)
+After completing formative activities, the learner sees the Guide Agent with encouragement and a reminder that scores can only go up (ratchet rule). They can ask questions. Clicking "Start Assessment" advances to the summative retake.
 
 ---
 
-## Phase 7: Course Mastery
+## Phase 9: Summative Retake
+
+Repeats [Agent #4](#4-summative-assessment-agent) (Summative Assessment) and [Agent #5](#5-learner-profile-agent-background) (Profile Update). The ratchet rule is enforced.
+
+- If mastery achieved → course complete → [Phase 10](#phase-10-course-mastery)
+- If not mastery → re-runs [Agent #6](#6-gap-analysis-agent) (Gap Analysis) + [Agent #7](#7-journey-generation-agent) (Journey) with `completedFormatives` populated so it doesn't repeat activities → back to [Journey Overview](#phase-6-journey-overview-orientation-checkpoint) with remediation units
+
+---
+
+## Phase 10: Course Mastery
 
 ### 13. Learner Profile Agent -- Mastery Update
 
@@ -281,13 +311,21 @@ Repeats [Agent #4](#4-summative-assessment-agent) (Summative Assessment) and [Ag
 ```
 Learner Profile ──────────────────────── threads through every agent call
          │
+Guide Agent ──── appears at checkpoints (course_intro, baseline_results,
+         │       journey_overview, retake_ready) with personalized context
+         │
 Summative Rubric ─── Gap Analysis ─── Journey ─── Activity Creation (rubricCriteria)
          │                                              │
          │                                    Activity Assessment (rubricCriteriaScores)
          │
-    Exemplar ──────── Activity Creation ──── Activity Q&A context
+Unit Exemplars ─── Summative Generation ─── Activity Creation ─── Activity Q&A
+         │
+   Unit Formats ─── Activity Creation (screenshot vs text ending)
+                 ─── Activity Assessment (vision vs text model)
 ```
 
 - The **learner profile summary** is passed as context to every agent call.
-- The **summative rubric** flows through: gap analysis → journey generation → activity creation (as `rubricCriteria` per activity) → formative assessment (as `rubricCriteriaScores`).
-- The **exemplar** flows from summative generation → activity creation → Q&A context, ensuring all formative work builds toward the same mastery target.
+- The **Guide Agent** receives phase-specific context (scores, journey, rubric) at each orientation checkpoint and generates personalized orientation messages.
+- The **summative rubric** flows through: gap analysis → journey generation → activity creation (as `rubricCriteria` per activity) → formative assessment (as `rubricCriteriaScores`). The rubric is FIXED once generated.
+- The **unit exemplars** flow from courses.json → summative generation → activity creation, ensuring all work builds toward mastery-level outcomes.
+- The **unit format** ("text" or "screenshot") determines: how activities end (Capture vs Submit), which model assesses (Heavy vs Light), and how submissions are stored (IndexedDB vs SQLite).
