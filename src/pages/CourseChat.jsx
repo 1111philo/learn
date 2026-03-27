@@ -63,7 +63,10 @@ export default function CourseChat() {
     if (displayText === null && pendingAfterStreamRef.current) {
       const { msgs, p } = pendingAfterStreamRef.current;
       pendingAfterStreamRef.current = null;
-      if (msgs) setMessages(prev => [...prev, ...msgs]);
+      if (msgs) {
+        if (msgs.some(m => m.msgType === MSG_TYPES.ACTION)) setActionTaken(false);
+        setMessages(prev => [...prev, ...msgs]);
+      }
       if (p) setPhase(p);
       setLoading('');
     }
@@ -167,6 +170,10 @@ export default function CourseChat() {
   // -- Helpers ----------------------------------------------------------------
 
   const appendMessages = (newMsgs) => {
+    // If new messages include an action button, reset so it can render
+    if (newMsgs.some(m => m.msgType === MSG_TYPES.ACTION)) {
+      setActionTaken(false);
+    }
     setMessages(prev => [...prev, ...newMsgs]);
   };
 
@@ -174,24 +181,16 @@ export default function CourseChat() {
 
   const totalSummativeSteps = summative?.task?.steps?.length || 0;
 
-  // Track triggered action timestamps — these won't render
-  const [triggeredActions, setTriggeredActions] = useState(new Set());
+  // Once any action fires, all action buttons are gone until new ones appear
+  const [actionTaken, setActionTaken] = useState(false);
 
   // -- Actions ----------------------------------------------------------------
 
   const handleAction = useCallback(async (action) => {
     setError('');
 
-    // Mark all action messages with this action type as triggered (won't render)
-    setTriggeredActions(prev => {
-      const next = new Set(prev);
-      messages.forEach(m => {
-        if (m.msgType === MSG_TYPES.ACTION && m.metadata?.action === action) {
-          next.add(m.timestamp || m.id || m.content);
-        }
-      });
-      return next;
-    });
+    // Hide all action buttons immediately
+    setActionTaken(true);
 
     if (action === 'back_to_courses') {
       navigate('/courses');
@@ -449,12 +448,9 @@ export default function CourseChat() {
         return <FeedbackCard key={idx} draft={msg.metadata || {}} isLatest={false} isPassed={msg.metadata?.recommendation === 'advance'} />;
       case MSG_TYPES.RUBRIC_RESULT:
         return <RubricFeedback key={idx} attempt={msg.metadata || {}} />;
-      case MSG_TYPES.ACTION: {
-        // Triggered actions disappear from the chat
-        const key = msg.timestamp || msg.id || msg.content;
-        if (triggeredActions.has(key)) return null;
+      case MSG_TYPES.ACTION:
+        if (actionTaken) return null;
         return <ActionButton key={idx} label={msg.metadata?.label || msg.content} onClick={() => handleAction(msg.metadata?.action)} disabled={!!loading} />;
-      }
       case MSG_TYPES.SECTION:
         return <div key={idx} className="chat-section-heading" role="separator">{msg.content}</div>;
       default:
