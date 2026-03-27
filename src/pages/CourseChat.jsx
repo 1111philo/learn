@@ -533,16 +533,16 @@ export default function CourseChat() {
         {loading === 'qa' && <ThinkingSpinner />}
         {error && <div className="msg msg-response" role="alert" style={{ color: 'var(--color-warning)' }}>{error}</div>}
 
-        {/* Submission buttons — shown when an activity/step is active */}
-        {!loading && (isSummativeActive || (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity)) && (
+        {/* Submission buttons — shown when an activity/step is active, disabled while loading */}
+        {(isSummativeActive || (phase === COURSE_PHASES.FORMATIVE_LEARNING && currentActivity)) && (
           <div className="response-actions">
-            <button className="capture-btn response-action-btn" onClick={handleCapture} aria-label="Capture screenshot" title="Capture screenshot">
+            <button className="capture-btn response-action-btn" onClick={handleCapture} disabled={!!loading} aria-label="Capture screenshot" title="Capture screenshot">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
               </svg>
               <span>Capture</span>
             </button>
-            <button className="capture-btn response-action-btn" onClick={() => setShowResponseModal(true)} aria-label="Write response" title="Write a text response">
+            <button className="capture-btn response-action-btn" onClick={() => setShowResponseModal(true)} disabled={!!loading} aria-label="Write response" title="Write a text response">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
