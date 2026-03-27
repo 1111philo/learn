@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
-import { COURSE_PHASES } from '../lib/constants.js';
+import { COURSE_PHASES, ORIENTATION_PHASES } from '../lib/constants.js';
 import {
   getSummative, getCoursePhase, getJourney, getSummativeAttempts,
-  getRubricReviewState, getSummativeCaptureState, saveSummativeCaptureState,
+  getSummativeCaptureState, saveSummativeCaptureState,
   clearSummativeCaptureState, getScreenshot,
 } from '../../js/storage.js';
 import {
-  initCourse, sendRubricReviewMessage, confirmRubric,
+  initCourse, advancePhase, askAboutCourse,
   recordSummativeCapture, submitSummativeAttempt,
   generateGapAndJourney, requestSummativeRetake,
   generateRemediationActivities,
@@ -30,9 +30,8 @@ import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 export default function UnitsList() {
   const { courseGroupId } = useParams();
   const navigate = useNavigate();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { courseGroups, allProgress } = state;
-  const { dispatch } = useApp();
   const { show: showModal } = useModal();
   const group = courseGroups.find(cg => cg.courseId === courseGroupId);
 
@@ -46,7 +45,6 @@ export default function UnitsList() {
           const { deleteCourseProgress } = await import('../../js/storage.js');
           await deleteCourseProgress(courseGroupId);
           await clearSummativeCaptureState(courseGroupId);
-          // Clear unit progress from app state
           const unitIds = (group.units || []).map(u => u.unitId);
           for (const uid of unitIds) dispatch({ type: 'RESET_UNIT', unitId: uid });
           navigate('/courses');
@@ -59,12 +57,17 @@ export default function UnitsList() {
   const [summative, setSummative] = useState(null);
   const [journey, setJourney] = useState(null);
   const [attempts, setAttempts] = useState([]);
-  const [reviewMessages, setReviewMessages] = useState([]);
   const [captures, setCaptures] = useState([]);
   const [textResponses, setTextResponses] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
+
+  // Orientation Q&A state (not persisted — resets on reload)
+  const [orientationMessages, setOrientationMessages] = useState([]);
+
+  // Migrate old rubric_review phase to course_intro
+  const normalizePhase = (p) => p === 'rubric_review' ? COURSE_PHASES.COURSE_INTRO : p;
 
   // Load course state on mount
   useEffect(() => {
@@ -76,19 +79,17 @@ export default function UnitsList() {
       if (cancelled) return;
 
       if (existingPhase) {
-        setPhase(existingPhase);
+        const p = normalizePhase(existingPhase);
+        setPhase(p);
         const s = await getSummative(courseGroupId);
         if (s) setSummative(s);
         const j = await getJourney(courseGroupId);
         if (j) setJourney(j);
         const a = await getSummativeAttempts(courseGroupId);
         setAttempts(a);
-        const rs = await getRubricReviewState(courseGroupId);
-        if (rs?.messages) setReviewMessages(rs.messages);
-        // Restore in-progress summative captures (survives panel reload)
+        // Restore in-progress summative captures
         const cs = await getSummativeCaptureState(courseGroupId);
         if (cs?.captures?.length) {
-          // Reload screenshot dataUrls from IndexedDB
           const restored = [];
           for (const cap of cs.captures) {
             const dataUrl = await getScreenshot(cap.screenshotKey);
@@ -105,7 +106,7 @@ export default function UnitsList() {
           const s = await initCourse(group);
           if (cancelled) return;
           setSummative(s);
-          setPhase(COURSE_PHASES.RUBRIC_REVIEW);
+          setPhase(COURSE_PHASES.COURSE_INTRO);
         } catch (e) {
           if (!cancelled) setError(e.message || 'Failed to generate summative.');
         }
@@ -116,38 +117,86 @@ export default function UnitsList() {
     return () => { cancelled = true; };
   }, [courseGroupId]);
 
-  // Rubric review conversation
-  const handleReviewSend = useCallback(async (text) => {
-    if (!summative || !group) return;
-    setLoading('review');
+  // Reset orientation Q&A when phase changes
+  useEffect(() => { setOrientationMessages([]); }, [phase]);
+
+  // -- Orientation Q&A --------------------------------------------------------
+
+  const handleOrientationSend = useCallback(async (text) => {
+    if (!group || !summative) return;
+
+    const userMsg = { role: 'user', content: text, timestamp: Date.now() };
+    setOrientationMessages(prev => [...prev, userMsg]);
+    setLoading('orientation');
+
+    // Build phase-specific context for the Q&A
+    let phaseContext = '';
+    if (phase === COURSE_PHASES.COURSE_INTRO) {
+      phaseContext = `The learner is about to take a diagnostic assessment.\nSummative task: ${JSON.stringify(summative.task)}\nRubric: ${JSON.stringify(summative.rubric)}\nExemplar: ${summative.exemplar}`;
+    } else if (phase === COURSE_PHASES.BASELINE_RESULTS) {
+      const latest = attempts[attempts.length - 1];
+      phaseContext = `The learner just completed their diagnostic.\nScores: ${JSON.stringify(latest?.criteriaScores)}\nFeedback: ${latest?.feedback}`;
+    } else if (phase === COURSE_PHASES.JOURNEY_OVERVIEW) {
+      const units = journey?.plan?.units || [];
+      phaseContext = `The learner is reviewing their learning path.\nJourney: ${units.map(u => `${u.unitId} (${u.activities?.length} activities)`).join(', ')}`;
+    } else if (phase === COURSE_PHASES.RETAKE_READY) {
+      const latest = attempts[attempts.length - 1];
+      phaseContext = `The learner is about to retake the summative assessment.\nLatest scores: ${JSON.stringify(latest?.criteriaScores)}\nRubric: ${JSON.stringify(summative.rubric)}`;
+    }
+
     try {
-      const { result, summative: newSummative, messages } = await sendRubricReviewMessage(
-        courseGroupId, text, summative, reviewMessages, group
-      );
-      setReviewMessages(messages);
-      if (newSummative) setSummative(newSummative);
-      if (result.done) {
-        await confirmRubric(courseGroupId);
-        setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
-        setCurrentStep(0);
-        setCaptures([]);
-      }
+      const response = await askAboutCourse(group, text, orientationMessages, phaseContext);
+      setOrientationMessages(prev => [...prev, { role: 'assistant', content: response, timestamp: Date.now() }]);
     } catch (e) {
-      setError(e.message || 'Failed to send message.');
+      setOrientationMessages(prev => [...prev, { role: 'assistant', content: `Something went wrong: ${e.message}`, timestamp: Date.now() }]);
     }
     setLoading('');
-  }, [courseGroupId, summative, reviewMessages, group]);
+  }, [group, summative, phase, attempts, journey, orientationMessages]);
 
-  const handleSkipReview = useCallback(async () => {
-    await confirmRubric(courseGroupId);
+  // -- Phase transitions ------------------------------------------------------
+
+  const handleStartDiagnostic = useCallback(async () => {
+    await advancePhase(courseGroupId, COURSE_PHASES.BASELINE_ATTEMPT);
     await clearSummativeCaptureState(courseGroupId);
-    setCurrentStep(0);
     setCaptures([]);
     setTextResponses([]);
+    setCurrentStep(0);
     setPhase(COURSE_PHASES.BASELINE_ATTEMPT);
   }, [courseGroupId]);
 
-  // Check if all steps are done and submit if so
+  const handleBuildJourney = useCallback(async () => {
+    setLoading('journey');
+    try {
+      const { journey: j } = await generateGapAndJourney(courseGroupId, group);
+      setJourney({ plan: j, phase: COURSE_PHASES.JOURNEY_OVERVIEW });
+      setPhase(COURSE_PHASES.JOURNEY_OVERVIEW);
+    } catch (e) {
+      setError(e.message || 'Failed to build learning path.');
+    }
+    setLoading('');
+  }, [courseGroupId, group]);
+
+  const handleStartLearning = useCallback(async () => {
+    await advancePhase(courseGroupId, COURSE_PHASES.FORMATIVE_LEARNING);
+    setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
+  }, [courseGroupId]);
+
+  const handleRetakeOrientation = useCallback(async () => {
+    await requestSummativeRetake(courseGroupId);
+    setPhase(COURSE_PHASES.RETAKE_READY);
+  }, [courseGroupId]);
+
+  const handleStartRetake = useCallback(async () => {
+    await advancePhase(courseGroupId, COURSE_PHASES.SUMMATIVE_RETAKE);
+    await clearSummativeCaptureState(courseGroupId);
+    setCaptures([]);
+    setTextResponses([]);
+    setCurrentStep(0);
+    setPhase(COURSE_PHASES.SUMMATIVE_RETAKE);
+  }, [courseGroupId]);
+
+  // -- Summative capture/submit -----------------------------------------------
+
   const checkAndSubmitAttempt = useCallback(async (newCaptures, newTextResponses) => {
     const totalSteps = summative?.task?.steps?.length || 0;
     const completedCount = newCaptures.length + newTextResponses.length;
@@ -165,73 +214,55 @@ export default function UnitsList() {
         setPhase(COURSE_PHASES.COMPLETED);
         updateProfileOnMasteryInBackground(group, attempt, []);
       } else if (attempt.isBaseline) {
-        setLoading('journey');
-        const { journey: j } = await generateGapAndJourney(courseGroupId, group);
-        setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
-        setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
+        // Stop at baseline results — learner sees orientation before journey builds
+        setPhase(COURSE_PHASES.BASELINE_RESULTS);
       } else {
+        // Failed retake — generate remediation, then show journey overview
         setLoading('journey');
         const weakCriteria = (attempt.criteriaScores || [])
           .filter(cs => cs.score < 0.51)
           .map(cs => cs.criterion);
         const { journey: j } = await generateRemediationActivities(courseGroupId, group, weakCriteria);
-        setJourney({ plan: j, phase: COURSE_PHASES.FORMATIVE_LEARNING });
-        setPhase(COURSE_PHASES.FORMATIVE_LEARNING);
+        setJourney({ plan: j, phase: COURSE_PHASES.JOURNEY_OVERVIEW });
+        setPhase(COURSE_PHASES.JOURNEY_OVERVIEW);
       }
       return true;
     }
     return false;
   }, [courseGroupId, summative, group]);
 
-  // Capture current summative step (screenshot), then advance to next
   const handleStepCapture = useCallback(async () => {
     setLoading('capturing');
     try {
       const capture = await recordSummativeCapture(courseGroupId, currentStep);
       const newCaptures = [...captures, capture];
       setCaptures(newCaptures);
-
-      // Persist captures so they survive panel reload
       await saveSummativeCaptureState(courseGroupId, {
         captures: newCaptures.map(c => ({ screenshotKey: c.screenshotKey, stepIndex: c.stepIndex, url: c.url })),
       });
-
       const done = await checkAndSubmitAttempt(newCaptures, textResponses);
-      if (!done) {
-        setCurrentStep(prev => prev + 1);
-      }
+      if (!done) setCurrentStep(prev => prev + 1);
     } catch (e) {
       setError(e.message || 'Capture failed.');
     }
     setLoading('');
   }, [courseGroupId, currentStep, captures, textResponses, checkAndSubmitAttempt]);
 
-  // Submit text for current summative step, then advance to next
   const handleStepTextSubmit = useCallback(async (text) => {
     if (!text?.trim()) return;
     setLoading('capturing');
     try {
       const newTextResponses = [...textResponses, { text, stepIndex: currentStep }];
       setTextResponses(newTextResponses);
-
       const done = await checkAndSubmitAttempt(captures, newTextResponses);
-      if (!done) {
-        setCurrentStep(prev => prev + 1);
-      }
+      if (!done) setCurrentStep(prev => prev + 1);
     } catch (e) {
       setError(e.message || 'Submission failed.');
     }
     setLoading('');
   }, [currentStep, captures, textResponses, checkAndSubmitAttempt]);
 
-  const handleRetake = useCallback(async () => {
-    await requestSummativeRetake(courseGroupId);
-    await clearSummativeCaptureState(courseGroupId);
-    setCaptures([]);
-    setTextResponses([]);
-    setCurrentStep(0);
-    setPhase(COURSE_PHASES.SUMMATIVE_RETAKE);
-  }, [courseGroupId]);
+  // -- Render -----------------------------------------------------------------
 
   if (!group) return <p>Course not found.</p>;
 
@@ -244,9 +275,8 @@ export default function UnitsList() {
   const latestAttempt = attempts[attempts.length - 1];
   const journeyUnits = journey?.plan?.units || [];
   const steps = summative?.task?.steps || [];
-  const isBaseline = phase === COURSE_PHASES.BASELINE_ATTEMPT;
-  const isRetake = phase === COURSE_PHASES.SUMMATIVE_RETAKE;
-  const isSummativeActive = isBaseline || isRetake;
+  const isOrientation = ORIENTATION_PHASES.includes(phase);
+  const isSummativeActive = phase === COURSE_PHASES.BASELINE_ATTEMPT || phase === COURSE_PHASES.SUMMATIVE_RETAKE;
 
   return (
     <div className="course-layout">
@@ -258,42 +288,43 @@ export default function UnitsList() {
         {phase && <button className="reset-btn" onClick={handleResetCourse} aria-label="Reset course" title="Reset course">&#8635;</button>}
       </div>
 
-      {/* Setup phase */}
+      {/* Setup — generating summative */}
       {(phase === COURSE_PHASES.SUMMATIVE_SETUP || loading === 'summative') && (
-        <ChatArea>
-          <ThinkingSpinner />
-        </ChatArea>
+        <ChatArea><ThinkingSpinner /></ChatArea>
       )}
 
-      {/* Rubric review phase */}
-      {phase === COURSE_PHASES.RUBRIC_REVIEW && summative && (
+      {/* ── COURSE INTRO ── */}
+      {phase === COURSE_PHASES.COURSE_INTRO && summative && (
         <ChatArea>
           <div className="msg msg-response" style={{ fontSize: '0.85rem' }}>
-            {summative.courseIntro || 'Take this assessment. We\'ll use it to build your learning path.'}
+            {summative.courseIntro || `Welcome to ${group.name}.`}
           </div>
           <div className="chat-section-heading" role="separator">Assessment Overview</div>
           <SummativeCard summative={summative} />
-          {reviewMessages.map((m, i) => (
+          <div className="msg msg-response" style={{ fontSize: '0.85rem', background: 'var(--color-surface)' }}>
+            This assessment is a diagnostic baseline — not a grade. It helps us understand where you are so we can personalize your learning. Don't worry about getting everything right.
+          </div>
+          {orientationMessages.map((m, i) => (
             m.role === 'user'
               ? <UserMessage key={i} content={m.content} />
               : <AssistantMessage key={i} content={m.content} />
           ))}
-          {loading === 'review' && <ThinkingSpinner />}
+          {loading === 'orientation' && <ThinkingSpinner />}
           {!loading && (
             <div style={{ textAlign: 'center', margin: '8px 0' }}>
-              <button className="primary-btn" onClick={handleSkipReview}>
-                Start Assessment
+              <button className="primary-btn" onClick={handleStartDiagnostic}>
+                Start Diagnostic Assessment
               </button>
             </div>
           )}
         </ChatArea>
       )}
 
-      {/* Summative attempt — step by step */}
+      {/* ── SUMMATIVE ATTEMPT (baseline or retake) ── */}
       {isSummativeActive && summative && (
         <ChatArea>
           <div className="chat-section-heading" role="separator">
-            {isBaseline ? 'Diagnostic Assessment' : 'Summative Assessment'}
+            {phase === COURSE_PHASES.BASELINE_ATTEMPT ? 'Diagnostic Assessment' : 'Summative Assessment'}
           </div>
 
           {/* Completed screenshot steps */}
@@ -318,7 +349,7 @@ export default function UnitsList() {
             );
           })}
 
-          {/* Current step — capture + text always available */}
+          {/* Current step */}
           {currentStep < steps.length && !loading && (
             <>
               <InstructionMessage text={`Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep].instruction}`} />
@@ -332,23 +363,94 @@ export default function UnitsList() {
             </>
           )}
 
-          {loading === 'capturing' && <ThinkingSpinner text={steps[currentStep]?.format === 'text' ? 'Submitting...' : 'Capturing...'} />}
+          {loading === 'capturing' && <ThinkingSpinner text="Capturing..." />}
           {loading === 'assessing' && <ThinkingSpinner text="Evaluating your work..." />}
-          {loading === 'journey' && <ThinkingSpinner text="Building your learning journey..." />}
+          {loading === 'journey' && <ThinkingSpinner text="Building your learning path..." />}
+        </ChatArea>
+      )}
+
+      {/* ── BASELINE RESULTS ── */}
+      {phase === COURSE_PHASES.BASELINE_RESULTS && (
+        <ChatArea>
+          <div className="chat-section-heading" role="separator">Diagnostic Results</div>
+          {latestAttempt && <RubricFeedback attempt={latestAttempt} />}
+          <div className="msg msg-response" style={{ fontSize: '0.85rem', background: 'var(--color-surface)' }}>
+            This diagnostic shows your starting point — not your final grade. We'll use these results to build a learning path focused on the areas where you have the most room to grow.
+          </div>
+          {orientationMessages.map((m, i) => (
+            m.role === 'user'
+              ? <UserMessage key={i} content={m.content} />
+              : <AssistantMessage key={i} content={m.content} />
+          ))}
+          {loading === 'orientation' && <ThinkingSpinner />}
+          {loading === 'journey' && <ThinkingSpinner text="Building your learning path..." />}
+          {!loading && (
+            <div style={{ textAlign: 'center', margin: '8px 0' }}>
+              <button className="primary-btn" onClick={handleBuildJourney}>
+                Build My Learning Path
+              </button>
+            </div>
+          )}
         </ChatArea>
       )}
 
       {(phase === COURSE_PHASES.GAP_ANALYSIS || phase === COURSE_PHASES.JOURNEY_GENERATION) && (
-        <ChatArea>
-          <ThinkingSpinner text="Building your learning journey..." />
-        </ChatArea>
+        <ChatArea><ThinkingSpinner text="Building your learning path..." /></ChatArea>
       )}
 
-      {/* Formative learning — show unit cards */}
+      {/* ── JOURNEY OVERVIEW ── */}
+      {phase === COURSE_PHASES.JOURNEY_OVERVIEW && (
+        <>
+          <ChatArea>
+            <div className="chat-section-heading" role="separator">Your Learning Path</div>
+            {latestAttempt && (
+              <div style={{ marginBottom: 'var(--space)' }}>
+                <RubricFeedback attempt={latestAttempt} />
+              </div>
+            )}
+            <div className="msg msg-response" style={{ fontSize: '0.85rem', background: 'var(--color-surface)' }}>
+              Here's your personalized learning path. Each unit targets specific skills from the rubric. Work through them at your own pace — when you're ready, you'll retake the assessment to demonstrate mastery.
+            </div>
+          </ChatArea>
+          <div className="course-list" role="list">
+            {journeyUnits.map((ju, i) => {
+              const unitDef = group.units?.find(u => u.unitId === ju.unitId);
+              const actCount = ju.activities?.length || 0;
+              return (
+                <div key={ju.unitId} className="course-card stagger-item" style={{ animationDelay: `${i * 40}ms` }} role="listitem">
+                  <span className="course-status" aria-hidden="true">{'\u25CB'}</span>
+                  <div className="course-info">
+                    <strong>{unitDef?.name || ju.unitId}</strong>
+                    {unitDef?.description && <p>{unitDef.description}</p>}
+                    <small>{actCount} activit{actCount !== 1 ? 'ies' : 'y'}</small>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <ChatArea>
+            {orientationMessages.map((m, i) => (
+              m.role === 'user'
+                ? <UserMessage key={i} content={m.content} />
+                : <AssistantMessage key={i} content={m.content} />
+            ))}
+            {loading === 'orientation' && <ThinkingSpinner />}
+            {!loading && (
+              <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                <button className="primary-btn" onClick={handleStartLearning}>
+                  Start Learning
+                </button>
+              </div>
+            )}
+          </ChatArea>
+        </>
+      )}
+
+      {/* ── FORMATIVE LEARNING ── */}
       {phase === COURSE_PHASES.FORMATIVE_LEARNING && (
         <>
           <div className="msg msg-response" style={{ fontSize: '0.85rem', margin: 'var(--space)' }}>
-            Here's your learning path. Retake the assessment when you're ready.
+            Work through the units below. Retake the assessment when you're ready.
           </div>
           {latestAttempt && (
             <div style={{ padding: '0 var(--space)' }}>
@@ -399,14 +501,38 @@ export default function UnitsList() {
           </div>
 
           <div style={{ padding: '0 var(--space)', marginTop: 'var(--space)' }}>
-            <button className="primary-btn" onClick={handleRetake} style={{ width: '100%' }}>
-              Retake Summative Assessment
+            <button className="primary-btn" onClick={handleRetakeOrientation} style={{ width: '100%' }}>
+              Retake Assessment
             </button>
           </div>
         </>
       )}
 
-      {/* Completed */}
+      {/* ── RETAKE READY ── */}
+      {phase === COURSE_PHASES.RETAKE_READY && (
+        <ChatArea>
+          <div className="chat-section-heading" role="separator">Ready to Demonstrate Mastery</div>
+          {latestAttempt && <RubricFeedback attempt={latestAttempt} />}
+          <div className="msg msg-response" style={{ fontSize: '0.85rem', background: 'var(--color-surface)' }}>
+            You've completed your learning activities. This is your chance to show what you've learned. Your scores can only go up — show what you know.
+          </div>
+          {orientationMessages.map((m, i) => (
+            m.role === 'user'
+              ? <UserMessage key={i} content={m.content} />
+              : <AssistantMessage key={i} content={m.content} />
+          ))}
+          {loading === 'orientation' && <ThinkingSpinner />}
+          {!loading && (
+            <div style={{ textAlign: 'center', margin: '8px 0' }}>
+              <button className="primary-btn" onClick={handleStartRetake}>
+                Start Assessment
+              </button>
+            </div>
+          )}
+        </ChatArea>
+      )}
+
+      {/* ── COMPLETED ── */}
       {phase === COURSE_PHASES.COMPLETED && (
         <ChatArea>
           <div className="chat-section-heading" role="separator">Summative Assessment</div>
@@ -426,15 +552,14 @@ export default function UnitsList() {
 
       {error && <div style={{ padding: '8px var(--space)', color: 'var(--color-warning)' }} role="alert">{error}</div>}
 
-      {/* Compose bar for rubric review */}
-      {phase === COURSE_PHASES.RUBRIC_REVIEW && !loading && (
+      {/* Compose bar for orientation Q&A */}
+      {isOrientation && !loading && (
         <ComposeBar
-          placeholder="Questions or feedback on the rubric..."
-          onSend={handleReviewSend}
+          placeholder="Ask a question..."
+          onSend={handleOrientationSend}
           disabled={!!loading}
         />
       )}
     </div>
   );
 }
-

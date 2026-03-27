@@ -1,14 +1,14 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners build their professional portfolio through AI-guided courses. Eleven AI agents powered by the Claude API drive an assessment-backward learning experience. A summative assessment is generated first from course learning objectives (with rubric, exemplar, and multi-step capture task). The learner takes it as a diagnostic baseline, a gap analysis drives personalized formative activities, and the learner retakes the summative to demonstrate mastery. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (screenshots) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners build their professional portfolio through AI-guided courses. Ten AI agents powered by the Claude API drive an assessment-backward learning experience. A summative assessment is generated first from course learning objectives (with rubric, exemplar, and multi-step capture task). The learner takes it as a diagnostic baseline, a gap analysis drives personalized formative activities, and the learner retakes the summative to demonstrate mastery. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (screenshots) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
 Eleven agents drive the learning experience:
 - **Onboarding Conversation Agent** (`MODEL_LIGHT`) -- multi-turn chat that gets to know the learner and builds their initial profile
 - **Onboarding Profile Agent** (`MODEL_LIGHT`) -- creates an initial learner profile (fallback when conversation is skipped)
 - **Summative Generation Agent** (`MODEL_LIGHT`) -- generates the summative assessment (multi-step task + rubric + exemplar + learner-facing `courseIntro` and `summaryForLearner`) from all course learning objectives and unit exemplars/formats
-- **Summative Rubric Review Agent** (`MODEL_LIGHT`) -- multi-turn conversation about the rubric/exemplar; the rubric is FIXED and cannot be changed by the learner (discussion only, no regeneration)
+- *(Rubric review agent removed — rubric is fixed; orientation Q&A uses `chatWithContext` instead)*
 - **Summative Assessment Agent** (`MODEL_HEAVY` for screenshots, `MODEL_LIGHT` for text) -- scores submissions (screenshots and/or text responses) against rubric criteria; produces a `summaryForLearner` (concise plain-language read) plus detailed per-criterion scores; enforces ratchet rule (scores only go up)
 - **Gap Analysis Agent** (`MODEL_LIGHT`) -- analyzes baseline summative attempt to identify per-criterion gaps and priorities
 - **Journey Generation Agent** (`MODEL_LIGHT`) -- selects, orders, and sizes predefined units with formative activities mapped to rubric criteria
@@ -17,7 +17,7 @@ Eleven agents drive the learning experience:
 - **Activity Q&A Agent** (`MODEL_LIGHT`) -- answers learner questions about activities and assessments inline; uses enriched context including summative exemplar, rubric criteria, and latest assessment scores
 - **Learner Profile Agent** (`MODEL_LIGHT`) -- incrementally updates the learner profile after summative attempts, formative assessments, and learner feedback
 
-Agent prompts live in `prompts/*.md` and can be edited independently of code. The `orchestrator.converse()` function supports multi-turn conversations; `orchestrator.chatWithContext()` supports one-off Q&A with inline system prompts.
+Agent prompts live in `prompts/*.md` and can be edited independently of code. The `orchestrator.converse()` function supports multi-turn conversations; `orchestrator.chatWithContext()` supports one-off Q&A with inline system prompts (used for orientation checkpoint Q&A and activity Q&A).
 
 ### Output validation
 All agent outputs pass through deterministic validators in `js/validators.js` (imported by `js/orchestrator.js`) before reaching the user. Activities are validated based on their format: screenshot-format activities must end with "Capture", text-format activities must end with "Submit". Both are checked for: max 4 steps, no platform-specific shortcuts, no multi-site instructions, no non-browser apps, and content safety. The `validateActivity` function accepts an optional `{ format }` parameter. Summatives are validated for: task with steps array, rubric with criteria (each having 4 mastery levels), exemplar, `courseIntro`, and `summaryForLearner`. Summative assessments are validated for: criteriaScores, overallScore, mastery, feedback, and `summaryForLearner`; they also enforce the ratchet rule (no criterion score lower than prior attempt). Gap analyses are validated for criterion/level/priority structure. Journeys are validated for: valid unit IDs, activities with types/goals/rubricCriteria. Formative assessments are checked for valid score/recommendation/fields and safety. On failure, the agent call is retried once automatically.
@@ -27,12 +27,15 @@ On first run, a full-screen onboarding wizard (with animated geometric backgroun
 
 ### Assessment-backward design
 The entire learning journey is designed backward from a summative assessment. The flow per course is:
-1. **Summative setup**: The Summative Generation Agent creates a multi-step task, rubric (one criterion per objective group, each with 4 mastery levels), exemplar, and learner-facing messages from all course learning objectives and unit exemplars/formats. Each step specifies its format ("screenshot" or "text").
-2. **Rubric review**: The learner sees the `courseIntro` and `summaryForLearner`, then can discuss the rubric/exemplar with the Summative Rubric Review Agent. The rubric is FIXED — the learner can ask questions but cannot change it. They can skip this step.
-3. **Baseline attempt**: The learner attempts the summative — each step requires either a screenshot capture or a text response, as specified by the step's `format`. The Summative Assessment Agent scores all submissions against the rubric, producing per-criterion scores and a `summaryForLearner`. The detailed breakdown is available through Q&A.
-4. **Gap analysis + journey**: The Gap Analysis Agent identifies per-criterion gaps. The Journey Generation Agent selects, orders, and sizes predefined units with formative activities mapped to rubric criteria.
-5. **Formative learning**: The learner works through formative activities in each unit. Screenshot-format units use capture; text-format units accept typed responses submitted via the compose bar. Each formative targets specific rubric criteria and is guided by the unit's exemplar.
-6. **Summative retake**: The learner retakes the summative. Scores can only go up (ratchet rule). If mastery is achieved, the course is complete. If not, remediation formative activities are generated for weak criteria, and the cycle repeats.
+Between every major step, the learner sees an orientation screen explaining where they are, what's coming next, and offering Q&A (powered by `chatWithContext`, not a dedicated agent). The rubric is FIXED once generated — it cannot be changed.
+
+1. **Course intro** (`course_intro`): The learner sees `courseIntro`, `summaryForLearner`, the rubric/exemplar, and guidance that the diagnostic is a baseline, not a grade. They can ask questions. "Start Diagnostic Assessment" proceeds.
+2. **Baseline attempt** (`baseline_attempt`): The learner attempts the summative — each step requires either a screenshot capture or a text response. The Summative Assessment Agent scores all submissions.
+3. **Baseline results** (`baseline_results`): The learner sees per-criterion scores and an explanation that results will drive their learning path. They can ask questions. "Build My Learning Path" triggers gap analysis + journey generation.
+4. **Journey overview** (`journey_overview`): The learner sees their personalized learning path (units + activity counts). They can ask questions. "Start Learning" proceeds.
+5. **Formative learning** (`formative_learning`): The learner works through units. Screenshot-format units use capture; text-format units accept typed responses. Each formative targets specific rubric criteria.
+6. **Retake ready** (`retake_ready`): The learner sees progress and the ratchet rule reminder. They can ask questions. "Start Assessment" proceeds to the retake.
+7. **Summative retake** (`summative_retake`): Same as baseline attempt. If mastery is achieved → completed. If not → remediation activities generated → back to journey overview.
 
 The UnitsList page (`src/pages/UnitsList.jsx`) serves as the course hub, managing all summative phases. The UnitChat page handles formative activities within units.
 
@@ -70,7 +73,7 @@ Courses → Summative Assessment → Units → Formative Activities. `data/cours
 - Screenshot-format activities end with "Hit Capture to capture your screen." Text-format activities end with "Hit Submit to submit your response."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
 - URLs in activity instructions are automatically linkified.
-- Views: `onboarding`, `courses`, `units` (course hub: summative phases + unit cards), `unit` (formative activities chat), `work` (course-level portfolio cards), `work-detail` (summative + formative timeline), `settings`.
+- Views: `onboarding`, `courses`, `units` (course hub: orientation checkpoints + summative phases + unit cards), `unit` (formative activities chat), `work` (course-level portfolio cards), `work-detail` (summative + formative timeline), `settings`.
 - Activity types map to user labels: `explore`→Research, `apply`→Practice, `create`→Draft, `final`→Deliver.
 - Work section shows portfolio cards with segmented progress bars; tapping opens a Build Detail view with full draft timeline and on-demand screenshot loading from IndexedDB.
 - Completion summary card shows stats (steps, captures, elapsed time) when a course finishes. Time is displayed as minutes, hours, or days depending on duration.

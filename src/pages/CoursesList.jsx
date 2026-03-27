@@ -6,13 +6,18 @@ import { COURSE_PHASES } from '../lib/constants.js';
 
 const PHASE_LABELS = {
   [COURSE_PHASES.SUMMATIVE_SETUP]: 'Setting up...',
-  [COURSE_PHASES.RUBRIC_REVIEW]: 'Review rubric',
-  [COURSE_PHASES.BASELINE_ATTEMPT]: 'Baseline assessment',
+  [COURSE_PHASES.COURSE_INTRO]: 'Getting started',
+  [COURSE_PHASES.BASELINE_ATTEMPT]: 'Diagnostic assessment',
+  [COURSE_PHASES.BASELINE_RESULTS]: 'Diagnostic results',
   [COURSE_PHASES.GAP_ANALYSIS]: 'Analyzing...',
   [COURSE_PHASES.JOURNEY_GENERATION]: 'Building journey...',
+  [COURSE_PHASES.JOURNEY_OVERVIEW]: 'Journey preview',
   [COURSE_PHASES.FORMATIVE_LEARNING]: 'In progress',
+  [COURSE_PHASES.RETAKE_READY]: 'Ready to retake',
   [COURSE_PHASES.SUMMATIVE_RETAKE]: 'Retaking assessment',
   [COURSE_PHASES.COMPLETED]: 'Mastery achieved',
+  // Legacy
+  'rubric_review': 'Getting started',
 };
 
 export default function CoursesList() {

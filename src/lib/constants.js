@@ -24,14 +24,25 @@ export const VIEW_DEPTH = {
 
 export const COURSE_PHASES = {
   SUMMATIVE_SETUP: 'summative_setup',
-  RUBRIC_REVIEW: 'rubric_review',
+  COURSE_INTRO: 'course_intro',
   BASELINE_ATTEMPT: 'baseline_attempt',
+  BASELINE_RESULTS: 'baseline_results',
   GAP_ANALYSIS: 'gap_analysis',
   JOURNEY_GENERATION: 'journey_generation',
+  JOURNEY_OVERVIEW: 'journey_overview',
   FORMATIVE_LEARNING: 'formative_learning',
+  RETAKE_READY: 'retake_ready',
   SUMMATIVE_RETAKE: 'summative_retake',
   COMPLETED: 'completed',
 };
+
+/** Phases that are orientation/checkpoint screens with Q&A. */
+export const ORIENTATION_PHASES = [
+  COURSE_PHASES.COURSE_INTRO,
+  COURSE_PHASES.BASELINE_RESULTS,
+  COURSE_PHASES.JOURNEY_OVERVIEW,
+  COURSE_PHASES.RETAKE_READY,
+];
 
 export const MASTERY_LEVELS = {
   BEGINNING: 'beginning',

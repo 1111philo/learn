@@ -507,25 +507,7 @@ export async function getCoursePhase(courseId) {
   return null;
 }
 
-// -- Conversation state (rubric review + onboarding) --------------------------
-
-export async function getRubricReviewState(courseId) {
-  const key = `rubric-review:${courseId}`;
-  const row = query('SELECT state_json FROM pending_state WHERE key = ?', [key]);
-  return row ? JSON.parse(row.state_json) : null;
-}
-
-export async function saveRubricReviewState(courseId, state) {
-  const key = `rubric-review:${courseId}`;
-  run(
-    'INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
-    [key, JSON.stringify(state), Date.now()]
-  );
-}
-
-export async function clearRubricReviewState(courseId) {
-  run('DELETE FROM pending_state WHERE key = ?', [`rubric-review:${courseId}`]);
-}
+// -- Conversation state (onboarding) ------------------------------------------
 
 // -- Summative capture state (survives panel reload) --------------------------
 

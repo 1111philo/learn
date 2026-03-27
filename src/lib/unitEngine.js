@@ -9,7 +9,6 @@ import {
   getSummative, saveSummative, getSummativeAttempts, saveSummativeAttempt,
   getGapAnalysis, saveGapAnalysis,
   getJourney, saveJourney, updateJourneyPhase,
-  saveRubricReviewState, clearRubricReviewState,
 } from '../../js/storage.js';
 import * as orchestrator from '../../js/orchestrator.js';
 import { syncInBackground } from './syncDebounce.js';
@@ -46,50 +45,38 @@ export async function initCourse(courseGroup) {
     createdAt: Date.now(),
   };
   await saveSummative(courseGroup.courseId, summativeData);
-  await saveJourney(courseGroup.courseId, { plan: {}, phase: 'rubric_review' });
+  await saveJourney(courseGroup.courseId, { plan: {}, phase: 'course_intro' });
   syncInBackground(`summative:${courseGroup.courseId}`);
 
   return summativeData;
 }
 
-/** Send a message in the rubric review conversation. */
-export async function sendRubricReviewMessage(courseId, text, summative, messages, courseGroup) {
+/** Advance past an orientation screen to the next phase. */
+export async function advancePhase(courseId, nextPhase) {
+  await updateJourneyPhase(courseId, nextPhase);
+  syncInBackground(`journey:${courseId}`);
+}
+
+/** Ask a Q&A question at any orientation checkpoint. */
+export async function askAboutCourse(courseGroup, text, messages, phaseContext) {
   const profileSummary = await getLearnerProfileSummary();
   const allObjectives = collectObjectives(courseGroup);
 
-  const context = JSON.stringify({
-    summative: { task: summative.task, rubric: summative.rubric, exemplar: summative.exemplar },
-    courseName: courseGroup.name,
-    learningObjectives: allObjectives,
-    learnerProfile: profileSummary,
-  });
+  const systemPrompt = `You are a learning assistant for 1111 Learn. The learner has a question about their course.
 
-  // Context goes first as a user message; insert an assistant ack to maintain
-  // the alternating user/assistant turn order the API requires.
-  const fullMessages = [
-    { role: 'user', content: context },
-    { role: 'assistant', content: 'Ready.' },
-    ...messages,
-    { role: 'user', content: text },
-  ];
+Course: ${courseGroup.name}
+Learning objectives: ${allObjectives.join('; ')}
+Learner profile: ${profileSummary || 'No profile yet'}
 
-  const result = await orchestrator.converse('summative-conversation', fullMessages, 1024);
+${phaseContext || ''}
 
-  // Persist conversation state
-  const updatedMessages = [...messages,
-    { role: 'user', content: text, timestamp: Date.now() },
-    { role: 'assistant', content: result.message, timestamp: Date.now() + 1 },
-  ];
-  await saveRubricReviewState(courseId, { messages: updatedMessages });
+Answer concisely (2-3 sentences). Be direct and helpful. The rubric is fixed and cannot be changed. Respond in plain text (not JSON).`;
 
-  return { result, summative: null, messages: updatedMessages };
-}
+  const history = (messages || []).map(m => ({ role: m.role, content: m.content }));
+  history.push({ role: 'user', content: text });
 
-/** Confirm rubric review is done, transition to baseline attempt. */
-export async function confirmRubric(courseId) {
-  await updateJourneyPhase(courseId, 'baseline_attempt');
-  await clearRubricReviewState(courseId);
-  syncInBackground(`journey:${courseId}`);
+  const response = await orchestrator.chatWithContext(systemPrompt, history);
+  return response;
 }
 
 /** Capture a screenshot for one step of the multi-step summative. */
@@ -179,7 +166,7 @@ export async function generateGapAndJourney(courseId, courseGroup) {
 
   await saveJourney(courseId, {
     plan: journeyResult,
-    phase: 'formative_learning',
+    phase: 'journey_overview',
   });
   syncInBackground(`journey:${courseId}`);
 
@@ -199,9 +186,9 @@ export async function generateGapAndJourney(courseId, courseGroup) {
   return { gapAnalysis: gapResult, journey: journeyResult };
 }
 
-/** Request a summative retake after formative learning. */
+/** Transition to retake orientation (learner sees progress before retaking). */
 export async function requestSummativeRetake(courseId) {
-  await updateJourneyPhase(courseId, 'summative_retake');
+  await updateJourneyPhase(courseId, 'retake_ready');
   syncInBackground(`journey:${courseId}`);
 }
 

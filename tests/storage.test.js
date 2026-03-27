@@ -452,12 +452,12 @@ describe('auth (singleton)', () => {
 });
 
 describe('pending state', () => {
-  it('stores and retrieves rubric review state', () => {
-    const state = { messages: [{ role: 'user', content: 'Can the rubric include X?' }] };
+  it('stores and retrieves pending state', () => {
+    const state = { captures: [{ screenshotKey: 'test-key', stepIndex: 0 }] };
     run('INSERT OR REPLACE INTO pending_state (key, state_json, updated_at) VALUES (?, ?, ?)',
-      ['rubric-review:foundations', JSON.stringify(state), Date.now()]);
+      ['summative-capture:foundations', JSON.stringify(state), Date.now()]);
 
-    const row = query("SELECT state_json FROM pending_state WHERE key = 'rubric-review:foundations'");
+    const row = query("SELECT state_json FROM pending_state WHERE key = 'summative-capture:foundations'");
     assert.deepEqual(JSON.parse(row.state_json), state);
   });
 
