@@ -174,29 +174,24 @@ export default function CourseChat() {
 
   const totalSummativeSteps = summative?.task?.steps?.length || 0;
 
-  // Track which actions have been triggered (by index in messages array)
+  // Track triggered action timestamps — these won't render
   const [triggeredActions, setTriggeredActions] = useState(new Set());
-
-  // The only clickable action is the last one that hasn't been triggered
-  const lastActionIndex = (() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].msgType === MSG_TYPES.ACTION && !triggeredActions.has(i)) return i;
-    }
-    return -1;
-  })();
 
   // -- Actions ----------------------------------------------------------------
 
   const handleAction = useCallback(async (action) => {
     setError('');
 
-    // Mark this action as triggered so its button disables immediately
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].msgType === MSG_TYPES.ACTION && messages[i].metadata?.action === action) {
-        setTriggeredActions(prev => new Set(prev).add(i));
-        break;
-      }
-    }
+    // Mark all action messages with this action type as triggered (won't render)
+    setTriggeredActions(prev => {
+      const next = new Set(prev);
+      messages.forEach(m => {
+        if (m.msgType === MSG_TYPES.ACTION && m.metadata?.action === action) {
+          next.add(m.timestamp || m.id || m.content);
+        }
+      });
+      return next;
+    });
 
     if (action === 'back_to_courses') {
       navigate('/courses');
@@ -289,7 +284,7 @@ export default function CourseChat() {
       setStreamingText(null);
       setLoading('');
     }
-  }, [courseGroupId, group, phase, lastActionIndex, messages, handleAction]);
+  }, [courseGroupId, group, phase, messages, handleAction]);
 
   // -- Submit Work: handles { text, screenshot } from ResponseModal -----------
 
@@ -441,8 +436,6 @@ export default function CourseChat() {
     // Collapse messages from old phases
     if (msg.phase && collapsedPhases.has(msg.phase)) return null;
 
-    const isLastAction = idx === lastActionIndex;
-
     switch (msg.msgType) {
       case MSG_TYPES.GUIDE:
         return <AssistantMessage key={idx} content={msg.content} />;
@@ -456,8 +449,12 @@ export default function CourseChat() {
         return <FeedbackCard key={idx} draft={msg.metadata || {}} isLatest={false} isPassed={msg.metadata?.recommendation === 'advance'} />;
       case MSG_TYPES.RUBRIC_RESULT:
         return <RubricFeedback key={idx} attempt={msg.metadata || {}} />;
-      case MSG_TYPES.ACTION:
-        return <ActionButton key={idx} label={msg.metadata?.label || msg.content} onClick={() => handleAction(msg.metadata?.action)} disabled={!isLastAction || !!loading} />;
+      case MSG_TYPES.ACTION: {
+        // Triggered actions disappear from the chat
+        const key = msg.timestamp || msg.id || msg.content;
+        if (triggeredActions.has(key)) return null;
+        return <ActionButton key={idx} label={msg.metadata?.label || msg.content} onClick={() => handleAction(msg.metadata?.action)} disabled={!!loading} />;
+      }
       case MSG_TYPES.SECTION:
         return <div key={idx} className="chat-section-heading" role="separator">{msg.content}</div>;
       default:
