@@ -6,9 +6,8 @@
 import { callClaude, streamClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
-import { validateSafety, validateActivity, validateAssessment, validateCourseKB } from './validators.js';
+import { validateCourseKB } from './validators.js';
 
-// Prompt cache (loaded once per session)
 const promptCache = {};
 let knowledgeBase = null;
 
@@ -33,23 +32,15 @@ async function loadKnowledgeBase() {
   return knowledgeBase;
 }
 
-/** Agents that get the knowledge base injected into their system prompt. */
-const KB_AGENTS = ['guide', 'course-creator'];
+const KB_AGENTS = ['coach', 'course-creator'];
 
 function parseJSON(text) {
   const trimmed = text.trim();
   try { return JSON.parse(trimmed); } catch { /* continue */ }
-
   const fenced = trimmed.replace(/^```(?:json)?\s*/gm, '').replace(/```\s*$/gm, '').trim();
   try { return JSON.parse(fenced); } catch { /* continue */ }
-
   const match = trimmed.match(/\{[\s\S]*\}/);
-  if (match) {
-    try { return JSON.parse(match[0]); } catch { /* fall through */ }
-  }
-
-  const preview = trimmed.length > 200 ? trimmed.slice(0, 200) + '...' : trimmed;
-  console.error('[1111] Unparseable agent response:', preview);
+  if (match) { try { return JSON.parse(match[0]); } catch { /* fall through */ } }
   throw new ApiError('parse', 'Failed to parse agent JSON response.');
 }
 
@@ -58,7 +49,6 @@ async function callWithValidation(agentFn, validator) {
   const error = validator(parsed);
   if (!error) return parsed;
   console.error(`[1111] Validation failed (retrying): ${error}`);
-
   const retry = await agentFn();
   const retryError = validator(retry);
   if (retryError) {
@@ -78,27 +68,19 @@ async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
       });
       return parseResponse(resp);
     }
-
     const apiKey = await getApiKey();
-    if (apiKey) {
-      return callClaude({ apiKey, model, systemPrompt, messages, maxTokens });
-    }
-
+    if (apiKey) return callClaude({ apiKey, model, systemPrompt, messages, maxTokens });
     throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
   };
 
   const RETRIES = 2;
   const DELAYS = [3000, 6000];
-
   let lastError;
   for (let i = 0; i <= RETRIES; i++) {
-    try {
-      return await attempt();
-    } catch (e) {
+    try { return await attempt(); } catch (e) {
       lastError = e;
       const isRetryable = e.type === 'overloaded' || (e.type === 'api' && e.status === 500);
       if (!isRetryable || i === RETRIES) throw e;
-      console.error(`[1111] API ${e.status} -- retry ${i + 1}/${RETRIES} in ${DELAYS[i] / 1000}s...`);
       await new Promise(r => setTimeout(r, DELAYS[i]));
     }
   }
@@ -107,11 +89,10 @@ async function callApi({ model, systemPrompt, messages, maxTokens = 1024 }) {
 
 export async function isReady() {
   if (await isLoggedIn()) return true;
-  const key = await getApiKey();
-  return !!key;
+  return !!(await getApiKey());
 }
 
-// -- Guide (streaming) --------------------------------------------------------
+// -- Streaming conversations --------------------------------------------------
 
 export async function converseStream(promptName, messages, onChunk, maxTokens = 512) {
   let systemPrompt = await loadPrompt(promptName);
@@ -123,27 +104,12 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
   const apiKey = await getApiKey();
   if (apiKey) {
     let full = '';
-    const stream = await streamClaude({
-      apiKey,
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages,
-      maxTokens
-    });
-    for await (const chunk of stream) {
-      full += chunk;
-      onChunk(full);
-    }
+    const stream = await streamClaude({ apiKey, model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
+    for await (const chunk of stream) { full += chunk; onChunk(full); }
     return full;
   }
 
-  // Fallback: non-streaming
-  const { content } = await callApi({
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages,
-    maxTokens
-  });
+  const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
   onChunk(content);
   return content;
 }
@@ -152,208 +118,66 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
 
 export async function initializeCourseKB(course, profileSummary) {
   const systemPrompt = await loadPrompt('course-owner');
-
   const userContent = JSON.stringify({
-    courseId: course.courseId,
-    courseName: course.name,
-    courseDescription: course.description,
-    exemplar: course.exemplar,
+    courseId: course.courseId, courseName: course.name,
+    courseDescription: course.description, exemplar: course.exemplar,
     learningObjectives: course.learningObjectives,
     learnerProfile: profileSummary || 'New learner, no profile yet.',
   });
-
   const callAgent = async () => {
     const { content } = await callApi({
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-      maxTokens: 1536
+      model: MODEL_LIGHT, systemPrompt,
+      messages: [{ role: 'user', content: userContent }], maxTokens: 1536,
     });
     return parseJSON(content);
   };
-
   return callWithValidation(callAgent, validateCourseKB);
-}
-
-// -- Activity Creator ---------------------------------------------------------
-
-export async function createActivity(courseKB, profileSummary, activityNumber, priorActivitiesSummary) {
-  const systemPrompt = await loadPrompt('activity-creation');
-
-  const priorLines = (priorActivitiesSummary || 'None').split('\n');
-  const cappedPrior = priorLines.length > 5
-    ? `[${priorLines.length - 5} earlier activities omitted]\n${priorLines.slice(-5).join('\n')}`
-    : priorActivitiesSummary || 'None';
-
-  const userContent = JSON.stringify({
-    courseKB: {
-      exemplar: courseKB.exemplar,
-      objectives: courseKB.objectives,
-      insights: courseKB.insights,
-      learnerPosition: courseKB.learnerPosition,
-      activitiesCompleted: courseKB.activitiesCompleted,
-    },
-    learnerProfile: profileSummary || 'No profile yet',
-    activityNumber,
-    priorActivities: cappedPrior,
-  });
-
-  const callAgent = async () => {
-    const { content } = await callApi({
-      model: MODEL_LIGHT,
-      systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  return callWithValidation(callAgent, validateActivity);
-}
-
-// -- Activity Assessor --------------------------------------------------------
-
-export async function assessSubmission(courseKB, activityInstruction, priorAttempts, profileSummary, screenshotDataUrl, textResponse) {
-  const systemPrompt = await loadPrompt('activity-assessment');
-
-  const contentParts = [];
-
-  contentParts.push({
-    type: 'text',
-    text: JSON.stringify({
-      courseKB: {
-        exemplar: courseKB.exemplar,
-        objectives: courseKB.objectives,
-        insights: courseKB.insights,
-        learnerPosition: courseKB.learnerPosition,
-        activitiesCompleted: courseKB.activitiesCompleted,
-        totalObjectives: courseKB.objectives?.length || 0,
-      },
-      activityInstruction,
-      priorAttempts: priorAttempts.map(a => ({
-        demonstrates: a.demonstrates,
-        strengths: a.strengths,
-        moved: a.moved,
-        needed: a.needed,
-      })),
-      learnerProfile: profileSummary || 'No profile yet',
-    })
-  });
-
-  if (screenshotDataUrl) {
-    const match = screenshotDataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (match) {
-      contentParts.push({
-        type: 'image',
-        source: { type: 'base64', media_type: match[1], data: match[2] }
-      });
-    }
-  }
-
-  if (textResponse) {
-    contentParts.push({
-      type: 'text',
-      text: `Learner's text response:\n\n${textResponse}`
-    });
-  }
-
-  const model = screenshotDataUrl ? MODEL_HEAVY : MODEL_LIGHT;
-
-  const callAgent = async () => {
-    const { content } = await callApi({
-      model,
-      systemPrompt,
-      messages: [{ role: 'user', content: contentParts }],
-      maxTokens: 1024
-    });
-    return parseJSON(content);
-  };
-
-  return callWithValidation(callAgent, validateAssessment);
 }
 
 // -- Learner Profile Owner (LLM — deep update on course completion) -----------
 
 export async function updateProfileOnCompletion(fullProfile, courseKB, courseName, courseId, activitiesCompleted) {
   const systemPrompt = await loadPrompt('learner-profile-owner');
-
-  const userContent = JSON.stringify({
-    currentProfile: fullProfile,
-    courseKB,
-    activitiesCompleted,
-    courseName,
-    courseId,
-  });
-
+  const userContent = JSON.stringify({ currentProfile: fullProfile, courseKB, activitiesCompleted, courseName, courseId });
   const { content } = await callApi({
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages: [{ role: 'user', content: userContent }],
-    maxTokens: 1024
+    model: MODEL_LIGHT, systemPrompt,
+    messages: [{ role: 'user', content: userContent }], maxTokens: 1024,
   });
-
   return parseJSON(content);
 }
 
-// -- Learner Profile Owner (code — incremental merge after assessment) --------
+// -- Learner Profile Owner (code — incremental merge) -------------------------
 
-export function incrementalProfileUpdate(profile, courseId, assessmentResult) {
+export function incrementalProfileUpdate(profile, courseId) {
   const updated = { ...profile };
-
   if (!updated.activeCourses) updated.activeCourses = [];
-  if (!updated.activeCourses.includes(courseId)) {
-    updated.activeCourses.push(courseId);
-  }
-
-  if (assessmentResult.strengths?.length) {
-    updated.latestStrengths = assessmentResult.strengths;
-  }
-
+  if (!updated.activeCourses.includes(courseId)) updated.activeCourses.push(courseId);
   updated.updatedAt = Date.now();
   return updated;
 }
 
-// -- Profile feedback (reuses learner-profile-update prompt) ------------------
+// -- Profile feedback (LLM) --------------------------------------------------
 
 export async function updateProfileFromFeedback(fullProfile, feedbackText, activityContext) {
   const systemPrompt = await loadPrompt('learner-profile-update');
-
   const userContent = JSON.stringify({
-    currentProfile: fullProfile,
-    learnerFeedback: feedbackText,
-    context: {
-      courseName: activityContext.courseName,
-      activityType: activityContext.activityType,
-      activityGoal: activityContext.activityGoal,
-      timestamp: Date.now()
-    }
+    currentProfile: fullProfile, learnerFeedback: feedbackText,
+    context: { courseName: activityContext.courseName, activityType: activityContext.activityType, activityGoal: activityContext.activityGoal, timestamp: Date.now() },
   });
-
   const { content } = await callApi({
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages: [{ role: 'user', content: userContent }],
-    maxTokens: 1024
+    model: MODEL_LIGHT, systemPrompt,
+    messages: [{ role: 'user', content: userContent }], maxTokens: 1024,
   });
-
   return parseJSON(content);
 }
 
 // -- Course markdown extraction (from conversation) ---------------------------
 
-/**
- * Extract structured course markdown from a creation conversation.
- * One-shot call — reads the conversation and synthesizes the course.
- */
 export async function extractCourseMarkdown(conversationText) {
   const systemPrompt = await loadPrompt('course-extractor');
-
   const { content } = await callApi({
-    model: MODEL_LIGHT,
-    systemPrompt,
-    messages: [{ role: 'user', content: conversationText }],
-    maxTokens: 1536,
+    model: MODEL_LIGHT, systemPrompt,
+    messages: [{ role: 'user', content: conversationText }], maxTokens: 1536,
   });
-
   return content.trim();
 }

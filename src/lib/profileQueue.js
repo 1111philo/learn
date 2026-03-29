@@ -92,3 +92,16 @@ export function updateProfileOnCompletionInBackground(courseKB, course) {
   });
 }
 
+/**
+ * Profile update from a coach observation (LLM call).
+ */
+export function updateProfileFromObservation(courseKB, observation) {
+  queueProfileUpdate(async () => {
+    const profile = await ensureProfileExists();
+    const result = await orchestrator.updateProfileFromFeedback(profile, observation, {
+      courseName: courseKB.name || 'Course', activityType: 'coaching', activityGoal: 'Coach observation',
+    });
+    await saveProfileResult(profile, result);
+  });
+}
+

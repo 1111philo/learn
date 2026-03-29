@@ -1,26 +1,22 @@
 /**
- * Progress bar showing activity-based progress toward the exemplar.
- * Fills proportionally based on activities completed vs estimated total.
+ * Course progress meter — red-to-green gradient driven by coach's progress score.
  */
 export default function ProgressBar({ courseKB }) {
   if (!courseKB) return null;
 
-  const completed = courseKB.activitiesCompleted || 0;
+  const progress = courseKB.progress ?? 0;
   const isComplete = courseKB.status === 'completed';
-
-  // Estimate total: ~2x the number of objectives is a reasonable course length.
-  // The bar fills proportionally so the learner always sees progress.
-  const totalObjectives = courseKB.objectives?.length || 10;
-  const estimated = totalObjectives * 2;
-  const pct = isComplete ? 100 : Math.min(Math.round((completed / estimated) * 100), 95);
+  const pct = isComplete ? 100 : progress * 10;
 
   return (
-    <div className="progress-bar" role="progressbar" aria-label="Course progress"
-      aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-      <div
-        className={`progress-fill ${isComplete ? 'progress-complete' : ''}`}
-        style={{ width: `${pct}%` }}
-      />
+    <div className="creation-meter" style={{ marginTop: '6px' }}>
+      <div className="creation-meter-labels">
+        <span>Starting</span>
+        <span>Exemplar</span>
+      </div>
+      <div className="creation-meter-track">
+        <div className={`creation-meter-overlay${isComplete ? ' meter-complete' : ''}`} style={{ width: `${100 - pct}%` }} />
+      </div>
     </div>
   );
 }

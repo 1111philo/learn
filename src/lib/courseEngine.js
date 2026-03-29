@@ -1,40 +1,230 @@
 /**
- * Course engine — the exemplar-driven learning loop.
+ * Course engine — conversational coaching toward the exemplar.
  *
- * 0. Course starts: Course Owner generates KB, Guide welcomes
- * 1. Learner clicks "Start Activity" → Activity Creator generates activity
- * 2. Learner submits work
- * 3. Assessor evaluates, writes insights back to course KB
- * 4. Learner clicks "Next Activity" → Activity Creator generates next activity
- * 5. Repeat until exemplar achieved
- * 6. Guide celebrates, profile deep update
+ * 1. Course starts: Course Owner generates KB, Coach opens conversation
+ * 2. Learner responds (text or image)
+ * 3. Coach evaluates, coaches forward, updates KB + progress
+ * 4. Repeat until exemplar achieved
  */
 
 import {
   getLearnerProfileSummary,
   getCourseKB, saveCourseKB,
-  getActivityKB, saveActivityKB,
-  getActivities, saveActivity,
-  getDrafts, getDraftsForActivity, saveDraft,
   saveScreenshot,
   saveCourseMessages, getCourseMessages,
 } from '../../js/storage.js';
 import * as orchestrator from '../../js/orchestrator.js';
-import { updateCourseKBFromAssessment } from '../../js/courseOwner.js';
 import { syncInBackground } from './syncDebounce.js';
-import { ensureProfileExists, updateProfileInBackground, updateProfileOnCompletionInBackground } from './profileQueue.js';
+import { ensureProfileExists, updateProfileInBackground, updateProfileOnCompletionInBackground, updateProfileFromObservation } from './profileQueue.js';
 import { COURSE_PHASES, MSG_TYPES } from './constants.js';
 
 function ts() { return Date.now(); }
 
-const MAX_ACTIVITIES = 20;
+const MAX_EXCHANGES = 40;
 
-// -- Guide helpers ------------------------------------------------------------
+// -- Tag parsing --------------------------------------------------------------
 
-async function buildGuideMessages(course, courseKB, checkpoint, conversationTail, extraContext) {
+const PROGRESS_REGEX = /\[PROGRESS:\s*(\d+)\]\s*/g;
+const KB_UPDATE_REGEX = /\[KB_UPDATE:\s*(\{[\s\S]*?\})\]\s*/g;
+const PROFILE_UPDATE_REGEX = /\[PROFILE_UPDATE:\s*(\{[\s\S]*?\})\]\s*/g;
+
+function parseCoachResponse(raw) {
+  let progress = null;
+  let kbUpdate = null;
+  let profileUpdate = null;
+
+  // Extract progress
+  const progressMatch = raw.match(/\[PROGRESS:\s*(\d+)\]/);
+  if (progressMatch) progress = parseInt(progressMatch[1], 10);
+
+  // Extract KB update
+  const kbMatch = raw.match(/\[KB_UPDATE:\s*(\{[\s\S]*?\})\]/);
+  if (kbMatch) {
+    try { kbUpdate = JSON.parse(kbMatch[1]); } catch { /* ignore */ }
+  }
+
+  // Extract profile update
+  const profileMatch = raw.match(/\[PROFILE_UPDATE:\s*(\{[\s\S]*?\})\]/);
+  if (profileMatch) {
+    try { profileUpdate = JSON.parse(profileMatch[1]); } catch { /* ignore */ }
+  }
+
+  // Strip all tags from display text
+  const text = raw
+    .replace(PROGRESS_REGEX, '')
+    .replace(KB_UPDATE_REGEX, '')
+    .replace(PROFILE_UPDATE_REGEX, '')
+    .trim();
+
+  return { text, progress, kbUpdate, profileUpdate };
+}
+
+/** Wrap a stream callback to strip tags from partial text. */
+function cleanStream(onStream) {
+  if (!onStream) return () => {};
+  return (partial) => {
+    const cleaned = partial
+      .replace(PROGRESS_REGEX, '')
+      .replace(KB_UPDATE_REGEX, '')
+      .replace(PROFILE_UPDATE_REGEX, '')
+      .trim();
+    onStream(cleaned);
+  };
+}
+
+// -- Course lifecycle ---------------------------------------------------------
+
+/**
+ * Start a new course: Course Owner generates KB, Coach opens conversation.
+ */
+export async function startCourse(courseId, course, onStream) {
+  await ensureProfileExists();
   const profileSummary = await getLearnerProfileSummary();
-  const context = JSON.stringify({
-    checkpoint,
+
+  // Course Owner generates the KB
+  const courseKB = await orchestrator.initializeCourseKB(course, profileSummary);
+  courseKB.courseId = courseId;
+  courseKB.name = course.name;
+  courseKB.progress = 0;
+  await saveCourseKB(courseId, courseKB);
+  syncInBackground(`courseKB:${courseId}`);
+
+  // Coach opens the conversation
+  const context = buildContext(course, courseKB, profileSummary);
+  const coachMsg = await orchestrator.converseStream(
+    'coach',
+    [{ role: 'user', content: context }, { role: 'assistant', content: 'Ready.' }, { role: 'user', content: 'Start the course.' }],
+    cleanStream(onStream),
+    512
+  );
+
+  const { text, progress, kbUpdate } = parseCoachResponse(coachMsg);
+
+  if (progress != null) {
+    courseKB.progress = progress;
+    await saveCourseKB(courseId, courseKB);
+  }
+
+  const messages = [
+    { role: 'assistant', content: text, msgType: MSG_TYPES.GUIDE, phase: COURSE_PHASES.LEARNING, timestamp: ts() },
+  ];
+
+  await saveCourseMessages(courseId, messages);
+  syncInBackground(`courseKB:${courseId}`, `messages:${courseId}`);
+  return { messages, courseKB, phase: COURSE_PHASES.LEARNING };
+}
+
+/**
+ * Send a message in the course conversation.
+ */
+export async function sendMessage(courseId, course, text, imageDataUrl, onStream) {
+  let courseKB = await getCourseKB(courseId);
+  const profileSummary = await getLearnerProfileSummary();
+
+  // Save image if provided
+  let imageKey = null;
+  if (imageDataUrl) {
+    imageKey = `course-${courseId}-${ts()}`;
+    await saveScreenshot(imageKey, imageDataUrl);
+  }
+
+  // Build conversation tail
+  const allMsgs = await getCourseMessages(courseId);
+  const tail = allMsgs.slice(-15).map(m => ({ role: m.role, content: m.content }));
+
+  // Build user message content
+  const userParts = [];
+  if (text) userParts.push({ type: 'text', text });
+  if (imageDataUrl) {
+    const match = imageDataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (match) {
+      userParts.push({ type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } });
+    }
+  }
+
+  // Add context as first message if tail is short (ensures coach has course info)
+  const contextMsg = buildContext(course, courseKB, profileSummary);
+  const messages = tail.length < 3
+    ? [{ role: 'user', content: contextMsg }, { role: 'assistant', content: 'Ready.' }, ...tail]
+    : tail;
+  messages.push({ role: 'user', content: userParts.length === 1 && !imageDataUrl ? text : userParts });
+
+  // Call coach (use heavy model if image attached)
+  const model = imageDataUrl ? 'heavy' : undefined;
+  const coachMsg = await orchestrator.converseStream(
+    'coach',
+    messages,
+    cleanStream(onStream),
+    512
+  );
+
+  const parsed = parseCoachResponse(coachMsg);
+
+  // Update course KB
+  if (parsed.kbUpdate) {
+    if (parsed.kbUpdate.insights?.length) {
+      courseKB.insights = [...(courseKB.insights || []), ...parsed.kbUpdate.insights];
+      // Prune old insights (keep last 10)
+      if (courseKB.insights.length > 10) {
+        const older = courseKB.insights.slice(0, courseKB.insights.length - 10);
+        courseKB.insights = [`[Earlier: ${older.join('; ')}]`, ...courseKB.insights.slice(-10)];
+      }
+    }
+    if (parsed.kbUpdate.learnerPosition) {
+      courseKB.learnerPosition = parsed.kbUpdate.learnerPosition;
+    }
+  }
+  if (parsed.progress != null) {
+    courseKB.progress = parsed.progress;
+  }
+  courseKB.activitiesCompleted = (courseKB.activitiesCompleted || 0) + 1;
+
+  // Check completion
+  const achieved = parsed.progress >= 10 || courseKB.activitiesCompleted >= MAX_EXCHANGES;
+  if (achieved) {
+    courseKB.status = 'completed';
+  }
+
+  await saveCourseKB(courseId, courseKB);
+  syncInBackground(`courseKB:${courseId}`);
+
+  // Profile updates
+  if (parsed.profileUpdate?.observation) {
+    updateProfileFromObservation(courseKB, parsed.profileUpdate.observation);
+  }
+  if (achieved) {
+    updateProfileOnCompletionInBackground(courseKB, course);
+  }
+
+  // Save messages
+  const newMessages = [
+    { role: 'user', content: text || '', msgType: MSG_TYPES.USER, phase: COURSE_PHASES.LEARNING,
+      metadata: imageKey ? { imageKey } : null, timestamp: ts() },
+    { role: 'assistant', content: parsed.text, msgType: MSG_TYPES.GUIDE,
+      phase: achieved ? COURSE_PHASES.COMPLETED : COURSE_PHASES.LEARNING, timestamp: ts() },
+  ];
+
+  await saveCourseMessages(courseId, newMessages);
+  syncInBackground(`messages:${courseId}`);
+
+  return { messages: newMessages, progress: parsed.progress, achieved, phase: achieved ? COURSE_PHASES.COMPLETED : COURSE_PHASES.LEARNING };
+}
+
+/**
+ * Resume an existing course. Loads messages and KB.
+ */
+export async function resumeCourse(courseId) {
+  const messages = await getCourseMessages(courseId);
+  const courseKB = await getCourseKB(courseId);
+  const progress = courseKB?.progress ?? 0;
+  const phase = courseKB?.status === 'completed' ? COURSE_PHASES.COMPLETED : COURSE_PHASES.LEARNING;
+  return { messages, courseKB, progress, phase };
+}
+
+// -- Helpers ------------------------------------------------------------------
+
+function buildContext(course, courseKB, profileSummary) {
+  return JSON.stringify({
     courseName: course.name,
     courseDescription: course.description,
     exemplar: course.exemplar,
@@ -42,311 +232,7 @@ async function buildGuideMessages(course, courseKB, checkpoint, conversationTail
     insights: courseKB?.insights || [],
     learnerProfile: profileSummary || 'No profile yet',
     learnerPosition: courseKB?.learnerPosition || 'New learner',
+    progress: courseKB?.progress ?? 0,
     activitiesCompleted: courseKB?.activitiesCompleted || 0,
-    ...extraContext,
   });
-  const fullMessages = [
-    { role: 'user', content: context },
-    { role: 'assistant', content: 'Ready.' },
-    ...conversationTail,
-  ];
-  if (conversationTail.length === 0) {
-    const prompt = checkpoint === 'course_complete' ? 'Celebrate my achievement.'
-      : checkpoint === 'post_assessment' ? 'Comment on my assessment.'
-      : 'Orient me.';
-    fullMessages.push({ role: 'user', content: prompt });
-  }
-  return fullMessages;
-}
-
-async function callGuide(course, courseKB, checkpoint, conversationTail, extraContext, onChunk) {
-  const messages = await buildGuideMessages(course, courseKB, checkpoint, conversationTail, extraContext);
-  try {
-    return await orchestrator.converseStream('guide', messages, onChunk || (() => {}), 512);
-  } catch (err) {
-    console.error('[guide] first attempt failed:', err.message || err);
-    // Retry once
-    try {
-      return await orchestrator.converseStream('guide', messages, onChunk || (() => {}), 512);
-    } catch (retryErr) {
-      console.error('[guide] retry failed:', retryErr.message || retryErr);
-      return null;
-    }
-  }
-}
-
-// -- Build activity summary for the Activity Creator --------------------------
-
-function buildPriorActivitiesSummary(activities, drafts) {
-  if (!activities.length) return 'None';
-  return activities.map(a => {
-    const actDrafts = drafts.filter(d => d.activityId === a.id);
-    const demonstrates = actDrafts.map(d => d.demonstrates).filter(Boolean).join('; ');
-    return `Activity ${a.activityNumber}: ${a.instruction?.split('\n')[0] || 'completed'} — ${demonstrates || 'no submission yet'}`;
-  }).join('\n');
-}
-
-// -- Course lifecycle ---------------------------------------------------------
-
-/**
- * Start a new course: Course Owner generates KB, Guide welcomes.
- * Does NOT generate the first activity — learner clicks "Start First Activity" for that.
- */
-export async function startCourse(courseId, course, onGuideStream) {
-  await ensureProfileExists();
-  const profileSummary = await getLearnerProfileSummary();
-
-  // Course Owner generates the course KB
-  const courseKB = await orchestrator.initializeCourseKB(course, profileSummary);
-  courseKB.courseId = courseId;
-  courseKB.name = course.name;
-  await saveCourseKB(courseId, courseKB);
-  syncInBackground(`courseKB:${courseId}`);
-
-  // Guide welcomes
-  const guideMsg = await callGuide(course, courseKB, 'course_start', [], {}, onGuideStream);
-
-  const messages = [];
-  if (guideMsg) {
-    messages.push({
-      role: 'assistant', content: guideMsg, msgType: MSG_TYPES.GUIDE,
-      phase: COURSE_PHASES.COURSE_INTRO, timestamp: ts(),
-    });
-  }
-  messages.push({
-    role: 'assistant', content: 'Start First Activity', msgType: MSG_TYPES.ACTION,
-    phase: COURSE_PHASES.COURSE_INTRO,
-    metadata: { action: 'start_activity', label: 'Start First Activity' },
-    timestamp: ts(),
-  });
-
-  await saveCourseMessages(courseId, messages);
-  syncInBackground(`messages:${courseId}`);
-  return { messages, courseKB, phase: COURSE_PHASES.COURSE_INTRO };
-}
-
-/**
- * Generate and display the next activity. Called when learner clicks an action button.
- */
-export async function generateNextActivity(courseId, course) {
-  const courseKB = await getCourseKB(courseId);
-  const profileSummary = await getLearnerProfileSummary();
-  const allActivities = await getActivities(courseId);
-  const allDrafts = await getDrafts(courseId);
-  const nextNum = allActivities.length + 1;
-  const priorSummary = buildPriorActivitiesSummary(allActivities, allDrafts);
-
-  const generated = await orchestrator.createActivity(courseKB, profileSummary, nextNum, priorSummary);
-  const activityId = `${courseId}-act-${nextNum}`;
-  const activity = {
-    id: activityId, courseId, activityNumber: nextNum,
-    instruction: generated.instruction, tips: generated.tips, createdAt: ts(),
-  };
-  await saveActivity(activity);
-  await saveActivityKB(activityId, courseId, {
-    courseId, activityNumber: nextNum,
-    instruction: generated.instruction, tips: generated.tips, attempts: [],
-  });
-  syncInBackground(`activities:${courseId}`, `activityKBs:${courseId}`);
-
-  const messages = [
-    {
-      role: 'assistant', content: `Activity ${nextNum}`,
-      msgType: MSG_TYPES.SECTION, phase: COURSE_PHASES.LEARNING, timestamp: ts(),
-    },
-    {
-      role: 'assistant', content: generated.instruction, msgType: MSG_TYPES.INSTRUCTION,
-      phase: COURSE_PHASES.LEARNING,
-      metadata: { activityId, activityNumber: nextNum, tips: generated.tips },
-      timestamp: ts(),
-    },
-    {
-      role: 'assistant', content: 'Complete Activity', msgType: MSG_TYPES.ACTION,
-      phase: COURSE_PHASES.LEARNING,
-      metadata: { action: 'complete_activity', label: 'Complete Activity' },
-      timestamp: ts(),
-    },
-  ];
-
-  await saveCourseMessages(courseId, messages);
-  syncInBackground(`messages:${courseId}`);
-  return { messages, activity, phase: COURSE_PHASES.LEARNING };
-}
-
-/**
- * Handle a submission (screenshot or text). Assess → enrich KB → show feedback + action.
- */
-export async function handleSubmission(courseId, course, activityId, screenshot, textResponse) {
-  const courseKB = await getCourseKB(courseId);
-  const activities = await getActivities(courseId);
-  const currentActivity = activities.find(a => a.id === activityId);
-  if (!currentActivity) throw new Error('Activity not found.');
-
-  const profileSummary = await getLearnerProfileSummary();
-  const priorDrafts = await getDraftsForActivity(activityId);
-
-  // Save screenshot if provided
-  let screenshotKey = null;
-  let screenshotDataUrl = null;
-  if (screenshot?.dataUrl) {
-    screenshotKey = `activity-${activityId}-${ts()}`;
-    await saveScreenshot(screenshotKey, screenshot.dataUrl);
-    screenshotDataUrl = screenshot.dataUrl;
-  }
-
-  // Assess
-  const result = await orchestrator.assessSubmission(
-    courseKB,
-    currentActivity.instruction,
-    priorDrafts,
-    profileSummary,
-    screenshotDataUrl,
-    textResponse
-  );
-
-  // Save draft
-  const draft = {
-    id: `draft-${ts()}`,
-    activityId,
-    courseId,
-    screenshotKey,
-    textResponse: textResponse || null,
-    url: screenshot?.url || null,
-    achieved: result.achieved,
-    demonstrates: result.demonstrates,
-    moved: result.moved || null,
-    needed: result.needed,
-    strengths: result.strengths,
-    attempt: priorDrafts.length + 1,
-    timestamp: ts(),
-  };
-  await saveDraft(draft);
-  syncInBackground(`drafts:${courseId}`);
-
-  // Update activity KB (stores attempt history for assessor context)
-  const actKB = await getActivityKB(activityId) || {
-    courseId, activityNumber: currentActivity.activityNumber,
-    instruction: currentActivity.instruction, tips: currentActivity.tips, attempts: [],
-  };
-  actKB.attempts.push({
-    attempt: draft.attempt, achieved: result.achieved,
-    demonstrates: result.demonstrates, strengths: result.strengths,
-    moved: result.moved, needed: result.needed,
-  });
-  await saveActivityKB(activityId, courseId, actKB);
-  syncInBackground(`activityKBs:${courseId}`);
-
-  // Enrich course KB
-  const enrichedKB = updateCourseKBFromAssessment(courseKB, result);
-  await saveCourseKB(courseId, enrichedKB);
-  syncInBackground(`courseKB:${courseId}`);
-
-  // Incremental profile update (code, no LLM call)
-  updateProfileInBackground(courseId, result);
-
-  // Build messages
-  const messages = [];
-  messages.push({
-    role: 'user', content: textResponse || '', msgType: MSG_TYPES.SUBMISSION,
-    phase: COURSE_PHASES.LEARNING,
-    metadata: { screenshotKey, url: screenshot?.url, textResponse, timestamp: draft.timestamp },
-    timestamp: draft.timestamp,
-  });
-  messages.push({
-    role: 'assistant', content: '', msgType: MSG_TYPES.FEEDBACK,
-    phase: COURSE_PHASES.LEARNING,
-    metadata: draft,
-    timestamp: ts(),
-  });
-
-  // Check completion: assessor says achieved, or hit activity cap
-  const achieved = result.achieved || enrichedKB.activitiesCompleted >= MAX_ACTIVITIES;
-
-  if (achieved) {
-    if (enrichedKB.status !== 'completed') {
-      enrichedKB.status = 'completed';
-      await saveCourseKB(courseId, enrichedKB);
-      syncInBackground(`courseKB:${courseId}`);
-    }
-    const guideMsg = await callGuide(course, enrichedKB, 'course_complete', [], {
-      demonstrates: result.demonstrates,
-      strengths: result.strengths,
-      moved: result.moved,
-      activitiesCompleted: enrichedKB.activitiesCompleted,
-    });
-    if (guideMsg) {
-      messages.push({
-        role: 'assistant', content: guideMsg, msgType: MSG_TYPES.GUIDE,
-        phase: COURSE_PHASES.COMPLETED, timestamp: ts(),
-      });
-    }
-    messages.push({
-      role: 'assistant', content: 'Next Course', msgType: MSG_TYPES.ACTION,
-      phase: COURSE_PHASES.COMPLETED,
-      metadata: { action: 'back_to_courses', label: 'Next Course' },
-      timestamp: ts(),
-    });
-
-    updateProfileOnCompletionInBackground(enrichedKB, course);
-
-    await saveCourseMessages(courseId, messages);
-    syncInBackground(`messages:${courseId}`);
-    return { messages, draft, phase: COURSE_PHASES.COMPLETED, achieved: true };
-  }
-
-  // Guide gives brief advice after assessment
-  const guideAdvice = await callGuide(course, enrichedKB, 'post_assessment', [], {
-    demonstrates: result.demonstrates,
-    strengths: result.strengths,
-    needed: result.needed,
-    moved: result.moved,
-    activityNumber: currentActivity.activityNumber,
-  });
-  if (guideAdvice) {
-    messages.push({
-      role: 'assistant', content: guideAdvice, msgType: MSG_TYPES.GUIDE,
-      phase: COURSE_PHASES.LEARNING, timestamp: ts(),
-    });
-  }
-
-  // Not achieved → "Next Activity" button
-  messages.push({
-    role: 'assistant', content: 'Load Next Activity', msgType: MSG_TYPES.ACTION,
-    phase: COURSE_PHASES.LEARNING,
-    metadata: { action: 'next_activity', label: 'Load Next Activity' },
-    timestamp: ts(),
-  });
-
-  await saveCourseMessages(courseId, messages);
-  syncInBackground(`messages:${courseId}`);
-  return { messages, draft, phase: COURSE_PHASES.LEARNING, achieved: false };
-}
-
-/**
- * Ask the guide a question. Streams the response.
- */
-export async function askGuide(courseId, course, text, currentActivity, onStream) {
-  const courseKB = await getCourseKB(courseId);
-
-  const allMsgs = await getCourseMessages(courseId);
-  const recentMsgs = allMsgs.slice(-10).map(m => ({ role: m.role, content: m.content }));
-  const conversationTail = [...recentMsgs, { role: 'user', content: text }];
-
-  const extraContext = {};
-  if (currentActivity) {
-    extraContext.currentActivity = {
-      instruction: currentActivity.instruction,
-      tips: currentActivity.tips,
-    };
-  }
-
-  const guideMsg = await callGuide(course, courseKB, 'followup', conversationTail, extraContext, onStream);
-
-  const messages = [
-    { role: 'user', content: text, msgType: MSG_TYPES.USER, phase: COURSE_PHASES.LEARNING, timestamp: ts() },
-    { role: 'assistant', content: guideMsg || 'Sorry, I wasn\'t able to respond. Please try again.', msgType: MSG_TYPES.GUIDE, phase: COURSE_PHASES.LEARNING, timestamp: ts() },
-  ];
-  await saveCourseMessages(courseId, messages);
-  syncInBackground(`messages:${courseId}`);
-  return { messages };
 }

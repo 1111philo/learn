@@ -6,8 +6,7 @@ import { useStreamedText } from '../hooks/useStreamedText.js';
 import { COURSE_PHASES, MSG_TYPES } from '../lib/constants.js';
 import { launchConfetti } from '../lib/confetti.js';
 import {
-  getCourseKB, getActivities,
-  getCourseMessages, deleteCourseProgress,
+  getCourseKB, deleteCourseProgress,
   getUserCourseMarkdown, deleteUserCourse,
 } from '../../js/storage.js';
 import { invalidateCoursesCache, loadCourses } from '../../js/courseOwner.js';
@@ -17,13 +16,9 @@ import ChatArea from '../components/chat/ChatArea.jsx';
 import ThinkingSpinner from '../components/chat/ThinkingSpinner.jsx';
 import UserMessage from '../components/chat/UserMessage.jsx';
 import AssistantMessage from '../components/chat/AssistantMessage.jsx';
-import InstructionMessage from '../components/chat/InstructionMessage.jsx';
-import DraftMessage from '../components/chat/DraftMessage.jsx';
-import FeedbackCard from '../components/chat/FeedbackCard.jsx';
 import ProgressBar from '../components/chat/ProgressBar.jsx';
 import ComposeBar from '../components/chat/ComposeBar.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
-import ResponseModal from '../components/modals/ResponseModal.jsx';
 
 export default function CourseChat() {
   const { courseGroupId } = useParams();
@@ -36,12 +31,9 @@ export default function CourseChat() {
   const [phase, setPhase] = useState(null);
   const [messages, setMessages] = useState([]);
   const [courseKB, setCourseKB] = useState(null);
-  const [currentActivity, setCurrentActivity] = useState(null);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
-  const [takenActions, setTakenActions] = useState(new Set());
 
-  // Streaming
   const [streamingText, setStreamingText] = useState(null);
   const displayText = useStreamedText(streamingText);
   const pendingAfterStreamRef = useRef(null);
@@ -63,30 +55,12 @@ export default function CourseChat() {
     let cancelled = false;
 
     (async () => {
-      const existingKB = await getCourseKB(courseGroupId);
-      const existingMsgs = await getCourseMessages(courseGroupId);
+      const existing = await engine.resumeCourse(courseGroupId);
 
-      if (existingKB || existingMsgs.length > 0) {
-        setCourseKB(existingKB);
-        setMessages(existingMsgs);
-
-        const currentPhase = existingKB?.status === 'completed'
-          ? COURSE_PHASES.COMPLETED
-          : existingMsgs.length > 0 ? COURSE_PHASES.LEARNING : COURSE_PHASES.COURSE_INTRO;
-        setPhase(currentPhase);
-
-        if (currentPhase === COURSE_PHASES.LEARNING) {
-          const activities = await getActivities(courseGroupId);
-          if (activities.length) setCurrentActivity(activities[activities.length - 1]);
-        }
-
-        // Mark all actions except the last as taken
-        const actionIndices = existingMsgs
-          .map((m, i) => m.msgType === MSG_TYPES.ACTION ? i : -1)
-          .filter(i => i >= 0);
-        if (actionIndices.length > 1) {
-          setTakenActions(new Set(actionIndices.slice(0, -1)));
-        }
+      if (existing.messages.length > 0) {
+        setMessages(existing.messages);
+        setCourseKB(existing.courseKB);
+        setPhase(existing.phase);
       } else {
         setLoading('starting');
         setStreamingText('');
@@ -108,72 +82,41 @@ export default function CourseChat() {
     return () => { cancelled = true; };
   }, [courseGroupId]);
 
-  const appendMessages = (newMsgs) => setMessages(prev => [...prev, ...newMsgs]);
+  // -- Send message -----------------------------------------------------------
 
-  // -- Mark an action as taken by its message index --
-  const markActionTaken = (idx) => setTakenActions(prev => new Set([...prev, idx]));
-
-  // -- Actions ----------------------------------------------------------------
-
-  const handleAction = useCallback(async (action, msgIdx) => {
-    setError('');
-    markActionTaken(msgIdx);
-
-    if (action === 'back_to_courses') { navigate('/courses'); return; }
-
-    if (action === 'start_activity' || action === 'next_activity') {
-      setLoading(action);
-      try {
-        const result = await engine.generateNextActivity(courseGroupId, course);
-        appendMessages(result.messages);
-        setCurrentActivity(result.activity);
-        setPhase(result.phase);
-        setCourseKB(await getCourseKB(courseGroupId));
-      } catch (e) {
-        setError(e.message || 'Failed to create activity.');
-      }
-      setLoading('');
-    }
-  }, [courseGroupId, course, navigate]);
-
-  const handleSend = useCallback(async (text) => {
-    if (!text?.trim()) return;
+  const handleSend = useCallback(async ({ text, imageDataUrl }) => {
+    if (!text && !imageDataUrl) return;
     setError('');
     setLoading('qa');
     setStreamingText('');
-    appendMessages([{ role: 'user', content: text, msgType: MSG_TYPES.USER, phase, timestamp: Date.now() }]);
+
+    // Show user message immediately
+    setMessages(prev => [...prev, {
+      role: 'user', content: text || '', msgType: MSG_TYPES.USER,
+      phase: COURSE_PHASES.LEARNING, metadata: imageDataUrl ? { hasImage: true } : null, timestamp: Date.now(),
+    }]);
+
     try {
-      const result = await engine.askGuide(courseGroupId, course, text, currentActivity,
-        (partial) => setStreamingText(partial));
+      const result = await engine.sendMessage(
+        courseGroupId, course, text, imageDataUrl,
+        (partial) => setStreamingText(partial)
+      );
       const assistantMsg = result.messages.find(m => m.role === 'assistant');
-      pendingAfterStreamRef.current = { msgs: assistantMsg ? [assistantMsg] : [] };
+      pendingAfterStreamRef.current = { msgs: assistantMsg ? [assistantMsg] : [], p: result.phase };
       setStreamingText(null);
+
+      if (result.achieved) launchConfetti();
+
+      const freshKB = await getCourseKB(courseGroupId);
+      setCourseKB(freshKB);
     } catch (e) {
-      setError(e.message || 'Failed to send message.');
+      setError(e.message || 'Failed to send.');
       setStreamingText(null);
       setLoading('');
     }
-  }, [courseGroupId, course, phase, currentActivity]);
+  }, [courseGroupId, course]);
 
-  const handleSubmitWork = useCallback(async ({ text, screenshot }, msgIdx) => {
-    if (!text && !screenshot) return;
-    if (!currentActivity) return;
-    setError('');
-    markActionTaken(msgIdx);
-    setLoading('assessing');
-    try {
-      const result = await engine.handleSubmission(
-        courseGroupId, course, currentActivity.id, screenshot, text || null
-      );
-      appendMessages(result.messages);
-      setPhase(result.phase);
-      if (result.achieved) launchConfetti();
-      setCourseKB(await getCourseKB(courseGroupId));
-    } catch (e) {
-      setError(e.message || 'Submission failed.');
-    }
-    setLoading('');
-  }, [courseGroupId, course, currentActivity]);
+  // -- Export / Reset / Delete ------------------------------------------------
 
   const isCustomCourse = courseGroupId?.startsWith('custom-');
 
@@ -193,7 +136,7 @@ export default function CourseChat() {
     showModal(
       <ConfirmModal
         title="Reset Course?"
-        message="This will delete all progress for this course. You'll start from scratch."
+        message="This will delete all progress. You'll start from scratch."
         confirmLabel="Reset Course"
         onConfirm={async () => { await deleteCourseProgress(courseGroupId); navigate('/courses'); }}
       />
@@ -210,8 +153,7 @@ export default function CourseChat() {
           await deleteCourseProgress(courseGroupId);
           await deleteUserCourse(courseGroupId);
           invalidateCoursesCache();
-          const refreshed = await loadCourses();
-          dispatch({ type: 'REFRESH_COURSES', courses: refreshed });
+          dispatch({ type: 'REFRESH_COURSES', courses: await loadCourses() });
           navigate('/courses');
         }}
       />
@@ -223,108 +165,12 @@ export default function CourseChat() {
   if (!course) return <p>Course not found.</p>;
   const busy = !!loading;
 
-  const TAKEN_LABELS = {
-    'Start First Activity': 'Started First Activity',
-    'Load Next Activity': 'Loaded Next Activity',
-    'Complete Activity': 'Completed Activity',
-    'Next Course': 'Returned to Courses',
-  };
-
-  // Build a set of message indices that are grouped INTO an action card
-  // (the INSTRUCTION or FEEDBACK right before an active ACTION)
-  const groupedIntoCard = new Set();
-  messages.forEach((msg, idx) => {
-    if (msg.msgType !== MSG_TYPES.ACTION) return;
-    if (takenActions.has(idx)) return;
-    // Find the nearest preceding INSTRUCTION or FEEDBACK (skipping sections)
-    for (let i = idx - 1; i >= 0; i--) {
-      const prev = messages[i];
-      if (prev.msgType === MSG_TYPES.INSTRUCTION || prev.msgType === MSG_TYPES.FEEDBACK) {
-        groupedIntoCard.add(i);
-        break;
-      }
-      if (prev.msgType !== MSG_TYPES.SECTION) break;
-    }
-  });
-
   const renderMessage = (msg, idx) => {
-    // Skip messages that are grouped into an action card
-    if (groupedIntoCard.has(idx)) return null;
-
     switch (msg.msgType) {
       case MSG_TYPES.GUIDE:
         return <AssistantMessage key={idx} content={msg.content} />;
       case MSG_TYPES.USER:
         return <UserMessage key={idx} content={msg.content} />;
-      case MSG_TYPES.INSTRUCTION:
-        return <InstructionMessage key={idx} text={msg.content} tips={msg.metadata?.tips} activityNumber={msg.metadata?.activityNumber} />;
-      case MSG_TYPES.SUBMISSION:
-        return <DraftMessage key={idx} draft={msg.metadata || {}} />;
-      case MSG_TYPES.FEEDBACK:
-        return <FeedbackCard key={idx} draft={msg.metadata || {}} />;
-      case MSG_TYPES.ACTION: {
-        const action = msg.metadata?.action;
-        const label = msg.metadata?.label || msg.content;
-        const taken = takenActions.has(idx);
-        const isSubmit = action === 'complete_activity';
-
-        if (taken) {
-          return (
-            <div key={idx} style={{ textAlign: 'center', margin: '6px 0' }}>
-              <span className="action-taken-label">{TAKEN_LABELS[label] || label}</span>
-            </div>
-          );
-        }
-
-        // Find the grouped content to render inside the card
-        let groupedContent = null;
-        for (let i = idx - 1; i >= 0; i--) {
-          const prev = messages[i];
-          if (prev.msgType === MSG_TYPES.INSTRUCTION) {
-            groupedContent = (
-              <>
-                <div className="action-card-header">Activity {prev.metadata?.activityNumber}</div>
-                <InstructionMessage text={prev.content} tips={prev.metadata?.tips} />
-              </>
-            );
-            break;
-          }
-          if (prev.msgType === MSG_TYPES.FEEDBACK) {
-            groupedContent = (
-              <>
-                <div className="action-card-header">Assessment</div>
-                <FeedbackCard draft={prev.metadata || {}} />
-              </>
-            );
-            break;
-          }
-          if (prev.msgType !== MSG_TYPES.SECTION) break;
-        }
-
-        return (
-          <div key={idx} className="action-card">
-            {groupedContent}
-            <button
-              className={`primary-btn action-icon-btn full-width${isSubmit ? ' btn-success' : ''}`}
-              onClick={() => isSubmit
-                ? showModal(<ResponseModal onSubmit={({ text, screenshot }) => handleSubmitWork({ text, screenshot }, idx)} />)
-                : handleAction(action, idx)}
-              disabled={busy}
-            >
-              {isSubmit ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-              ) : action === 'back_to_courses' ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-              )}
-              {label}
-            </button>
-          </div>
-        );
-      }
-      case MSG_TYPES.SECTION:
-        return <div key={idx} className="chat-section-heading" role="separator">{msg.content}</div>;
       default:
         return <AssistantMessage key={idx} content={msg.content} />;
     }
@@ -357,9 +203,6 @@ export default function CourseChat() {
           <AssistantMessage content={displayText} />
         )}
         {loading === 'starting' && !displayText && <ThinkingSpinner text="Setting up your course..." />}
-        {loading === 'start_activity' && <ThinkingSpinner text="Creating your first activity..." />}
-        {loading === 'next_activity' && <ThinkingSpinner text="Creating your next activity..." />}
-        {loading === 'assessing' && <ThinkingSpinner text="Evaluating your work..." />}
         {loading === 'qa' && !displayText && <ThinkingSpinner />}
         {error && <div className="msg msg-response" role="alert" style={{ color: 'var(--color-warning)' }}>{error}</div>}
       </ChatArea>
@@ -367,9 +210,10 @@ export default function CourseChat() {
       {phase && phase !== COURSE_PHASES.COMPLETED && (
         <div className="course-bottom-bar">
           <ComposeBar
-            placeholder="Ask the guide a question..."
+            placeholder="Chat with your coach..."
             onSend={handleSend}
             disabled={busy}
+            allowImages
           />
         </div>
       )}

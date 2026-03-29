@@ -792,10 +792,56 @@ hr {
   outline: none;
 }
 
+.compose-image-preview {
+  position: relative;
+  padding: 8px 8px 0;
+}
+
+.compose-image-preview img {
+  max-height: 80px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+
+.compose-image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .compose-actions {
   display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 4px 8px 8px;
 }
+
+.compose-attach-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.compose-attach-btn:hover { color: var(--color-text); }
 
 .compose-send-btn {
   width: 32px;
