@@ -1,45 +1,47 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
+import { useModal } from '../contexts/ModalContext.jsx';
 import { getCourseKB, getDraftCourseId, saveUserCourse } from '../../js/storage.js';
 import { parseCoursePrompt, invalidateCoursesCache, loadCourses } from '../../js/courseOwner.js';
-
-const STATUS_LABELS = {
-  active: 'In progress',
-  completed: 'Completed',
-};
 
 export default function CoursesList() {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
+  const { show: showModal } = useModal();
   const { courses } = state;
-  const [statuses, setStatuses] = useState({});
+  const [courseData, setCourseData] = useState({});
   const [hasDraft, setHasDraft] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
     (async () => {
-      const s = {};
+      const data = {};
       for (const c of courses) {
         const kb = await getCourseKB(c.courseId);
-        if (kb) s[c.courseId] = kb.status || 'active';
+        data[c.courseId] = {
+          status: kb?.status || null,
+          progress: kb?.progress ?? null,
+        };
       }
-      setStatuses(s);
+      setCourseData(data);
       setHasDraft(!!(await getDraftCourseId()));
     })();
   }, [courses]);
 
   function statusIcon(courseId) {
-    const status = statuses[courseId];
-    if (status === 'completed') return '\u2713';
-    if (status) return '\u25B6';
+    const d = courseData[courseId];
+    if (d?.status === 'completed') return '\u2713';
+    if (d?.status) return '\u25B6';
     return '\u25CB';
   }
 
   function progressLabel(course) {
-    const status = statuses[course.courseId];
-    if (status) return STATUS_LABELS[status] || status;
-    return `${course.learningObjectives.length} objectives`;
+    const d = courseData[course.courseId];
+    if (d?.status === 'completed') return 'Completed';
+    if (d?.progress != null) return `${d.progress * 10}% toward exemplar`;
+    if (d?.status) return 'In progress';
+    return null;
   }
 
   const handleImport = async (e) => {
@@ -58,9 +60,14 @@ export default function CoursesList() {
     invalidateCoursesCache();
     const refreshed = await loadCourses();
     dispatch({ type: 'REFRESH_COURSES', courses: refreshed });
-
-    // Reset file input so the same file can be re-imported
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const showCourseDetails = (course, e) => {
+    e.stopPropagation();
+    showModal(
+      <CourseDetailModal course={course} progress={courseData[course.courseId]} />
+    );
   };
 
   return (
@@ -69,6 +76,7 @@ export default function CoursesList() {
       <div className="course-list" role="list">
         {courses.map((c, i) => {
           const icon = statusIcon(c.courseId);
+          const pLabel = progressLabel(c);
           return (
             <button
               key={c.courseId}
@@ -81,7 +89,18 @@ export default function CoursesList() {
               <div className="course-info">
                 <strong>{c.name}</strong>
                 {c.description && <p>{c.description}</p>}
-                <small>{progressLabel(c)}</small>
+                <div className="course-meta">
+                  {pLabel && <small>{pLabel}</small>}
+                  <small
+                    className="course-objectives-link"
+                    onClick={(e) => showCourseDetails(c, e)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter') showCourseDetails(c, e); }}
+                  >
+                    {c.learningObjectives.length} objectives
+                  </small>
+                </div>
               </div>
             </button>
           );
@@ -122,6 +141,43 @@ export default function CoursesList() {
             <p>Load a course from a .md file</p>
           </div>
         </button>
+      </div>
+    </>
+  );
+}
+
+function CourseDetailModal({ course, progress }) {
+  const { hide } = useModal();
+
+  return (
+    <>
+      <h2>{course.name}</h2>
+      {course.description && <p style={{ color: 'var(--color-text-secondary)', marginBottom: '12px' }}>{course.description}</p>}
+
+      {progress?.progress != null && (
+        <div style={{ marginBottom: '12px' }}>
+          <div className="creation-meter-labels" style={{ marginBottom: '4px' }}>
+            <span>Starting</span>
+            <span>{progress.status === 'completed' ? 'Completed' : `${progress.progress * 10}%`}</span>
+          </div>
+          <div className="creation-meter-track">
+            <div className="creation-meter-overlay" style={{ width: `${100 - (progress.status === 'completed' ? 100 : progress.progress * 10)}%` }} />
+          </div>
+        </div>
+      )}
+
+      <h3 style={{ fontSize: '0.85rem', marginBottom: '6px' }}>Exemplar</h3>
+      <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '12px', lineHeight: 1.5 }}>{course.exemplar}</p>
+
+      <h3 style={{ fontSize: '0.85rem', marginBottom: '6px' }}>Learning Objectives</h3>
+      <ul style={{ fontSize: '0.85rem', paddingLeft: '1.2em', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+        {course.learningObjectives.map((obj, i) => (
+          <li key={i} style={{ marginBottom: '4px' }}>{obj}</li>
+        ))}
+      </ul>
+
+      <div className="action-bar" style={{ marginTop: '12px' }}>
+        <button className="secondary-btn" onClick={hide}>Close</button>
       </div>
     </>
   );

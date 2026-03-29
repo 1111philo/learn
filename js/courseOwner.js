@@ -17,15 +17,24 @@ let coursesCache = null;
 export async function loadCourses() {
   if (coursesCache) return coursesCache;
 
-  // Built-in courses from files
-  const courseFiles = ['foundations'];
+  // Built-in courses from files (discovered via build-time manifest)
   const courses = [];
-  for (const id of courseFiles) {
-    const url = chrome.runtime.getURL(`data/courses/${id}.md`);
-    const resp = await fetch(url);
-    const text = await resp.text();
-    courses.push(parseCoursePrompt(id, text));
-  }
+  try {
+    const manifestUrl = chrome.runtime.getURL('data/courses/index.json');
+    const manifestResp = await fetch(manifestUrl);
+    if (manifestResp.ok) {
+      const courseIds = await manifestResp.json();
+      for (const id of courseIds) {
+        try {
+          const url = chrome.runtime.getURL(`data/courses/${id}.md`);
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const text = await resp.text();
+          courses.push(parseCoursePrompt(id, text));
+        } catch { /* skip unreadable file */ }
+      }
+    }
+  } catch { /* no manifest — no built-in courses */ }
 
   // User-created courses from SQLite
   const userCourses = await getUserCourses();

@@ -1,7 +1,7 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners build their professional portfolio through AI-guided courses. Six AI agents (4 LLM + 2 hybrid) drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the system creates activities, assesses submissions, enriches a growing knowledge base, and repeats until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners develop professional skills through AI-guided courses. Six AI agents (4 LLM + 2 hybrid) drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the system creates activities, assesses submissions, enriches a growing knowledge base, and repeats until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
 Six agents drive the learning experience. The **Guide Agent** is the learner's companion throughout — it orients the learner at key moments while `courseEngine.js` orchestrates all other agent calls behind the scenes.
@@ -52,7 +52,7 @@ The profile updates incrementally after every assessment (code-level, no LLM cal
 ### Storage (SQLite)
 All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted to `chrome.storage.local` under `_sqliteDb` (debounced, plus on `visibilitychange`). `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Uploaded images remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the `text_response` column of the `drafts` table.
 
-**Tables:** `settings`, `preferences`, `profile`, `profile_summary`, `courses` (user-created), `course_kbs`, `activity_kbs`, `activities`, `drafts`, `work_products`, `auth`, `pending_state`, `course_messages`.
+**Tables:** `settings`, `preferences`, `profile`, `profile_summary`, `courses` (user-created), `course_kbs`, `activity_kbs`, `activities`, `drafts`, `auth`, `pending_state`, `course_messages`.
 
 The `course_messages` table stores the unified conversation per course (role, content, msg_type, phase, metadata JSON, timestamp). The `course_kbs` table stores the evolving course knowledge base keyed by course_id. The `activity_kbs` table stores per-activity knowledge (instruction, tips, attempt history) keyed by activity_id. Activities are identified as `{courseId}-act-{number}`. Drafts store assessment results inline: `achieved`, `demonstrates`, `moved`, `needed`, `strengths`.
 
@@ -86,8 +86,7 @@ The Course Owner agent transforms the course prompt into a structured course KB 
 - Activities end with "Upload an image of your work." or "Hit Submit to submit your response."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
 - URLs in activity instructions are automatically linkified.
-- Views: `onboarding`, `courses`, `courses/create` (course creation chat), `course` (single continuous chat), `work` (course-level portfolio cards), `work-detail` (activity timeline), `settings`.
-- Work section shows portfolio cards; tapping opens a detail view with the full activity and draft timeline.
+- Views: `onboarding`, `courses`, `courses/create` (course creation chat), `course` (single continuous chat), `settings`.
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
 
 ## CI/CD
@@ -180,8 +179,6 @@ src/                     React app
     CoursesList.jsx       Course cards with phase status
     CourseChat.jsx        Unified course chat (guide + activities + feedback)
     CourseCreate.jsx      Course creation chat with AI coaching
-    Portfolio.jsx         Course-level portfolio cards
-    PortfolioDetail.jsx   Course portfolio: activity timeline
     Settings.jsx          API key, name, profile feedback
     onboarding/
       OnboardingFlow.jsx  3-step wizard with canvas backdrop

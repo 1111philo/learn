@@ -287,29 +287,6 @@ export async function getDraftCourseId() {
   return row ? row.course_id : null;
 }
 
-// -- Work products ------------------------------------------------------------
-
-export async function getWorkProducts() {
-  const rows = queryAll('SELECT * FROM work_products ORDER BY completed_at');
-  return rows.map(r => ({
-    courseId: r.course_id,
-    courseName: r.course_name,
-    url: r.url,
-    completedAt: r.completed_at,
-  }));
-}
-
-export async function saveWorkProduct(product) {
-  run(
-    'INSERT INTO work_products (course_id, course_name, url, completed_at) VALUES (?, ?, ?, ?)',
-    [product.courseId, product.courseName, product.url, product.completedAt]
-  );
-}
-
-export async function deleteWorkProducts() {
-  run('DELETE FROM work_products');
-}
-
 // -- Auth tokens (cloud sync) -------------------------------------------------
 
 export async function getAuthTokens() {

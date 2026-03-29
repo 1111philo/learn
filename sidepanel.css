@@ -333,7 +333,7 @@ nav button:focus-visible {
   min-height: 0;
   overflow-y: auto;
   padding: var(--space);
-  background: #fafaf8;
+  background: #f7f7f5;
   font-size: 16px;
 }
 
@@ -413,6 +413,23 @@ nav button:focus-visible {
 }
 
 /* ── Create course ─────────────────────────────────────────────────────── */
+.course-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.course-meta small { color: var(--color-text-secondary); }
+
+.course-objectives-link {
+  color: var(--color-accent) !important;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.course-objectives-link:hover { opacity: 0.8; }
+
 .course-card-create {
   border-style: dashed;
   color: var(--color-text-secondary);
@@ -561,9 +578,11 @@ nav button:focus-visible {
 
 /* -- User messages: right-aligned, subtle bubble --------------------------- */
 .msg-user {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  background: #f0f0ee;
+  border: none;
   align-self: flex-end;
+  width: fit-content;
+  margin-left: auto;
 }
 
 /* -- Instruction messages: activity card with accent border ---------------- */
@@ -632,24 +651,6 @@ nav button:focus-visible {
   color: var(--color-accent);
   word-break: break-all;
 }
-
-/* ── Work list ──────────────────────────────────────────────────────────── */
-.work-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.work-item {
-  padding: var(--space);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-}
-
-.work-item strong { display: block; margin-bottom: 4px; }
-.work-item a { display: block; font-size: 0.85rem; word-break: break-all; color: var(--color-accent); margin-bottom: 4px; }
-.work-item small { color: var(--color-text-secondary); }
 
 /* ── Settings ───────────────────────────────────────────────────────────── */
 .settings-form {
@@ -1468,18 +1469,17 @@ hr {
 }
 
 /* Staggered list item entry */
-.course-list > li,
-.work-list > li {
+.course-list > li {
   animation: fadeUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.course-list > li:nth-child(1), .work-list > li:nth-child(1) { animation-delay: 0.04s; }
-.course-list > li:nth-child(2), .work-list > li:nth-child(2) { animation-delay: 0.08s; }
-.course-list > li:nth-child(3), .work-list > li:nth-child(3) { animation-delay: 0.12s; }
-.course-list > li:nth-child(4), .work-list > li:nth-child(4) { animation-delay: 0.16s; }
-.course-list > li:nth-child(5), .work-list > li:nth-child(5) { animation-delay: 0.20s; }
-.course-list > li:nth-child(6), .work-list > li:nth-child(6) { animation-delay: 0.24s; }
-.course-list > li:nth-child(7), .work-list > li:nth-child(7) { animation-delay: 0.28s; }
+.course-list > li:nth-child(1) { animation-delay: 0.04s; }
+.course-list > li:nth-child(2) { animation-delay: 0.08s; }
+.course-list > li:nth-child(3) { animation-delay: 0.12s; }
+.course-list > li:nth-child(4) { animation-delay: 0.16s; }
+.course-list > li:nth-child(5) { animation-delay: 0.20s; }
+.course-list > li:nth-child(6) { animation-delay: 0.24s; }
+.course-list > li:nth-child(7) { animation-delay: 0.28s; }
 
 /* Chat messages enter with a subtle scale */
 .chat > .msg {
@@ -1585,113 +1585,6 @@ hr {
   justify-content: center;
 }
 
-.completion-portfolio-btn {
-  padding: 10px 16px;
-  font-size: 0.9rem;
-}
-
-.completion-next-btn {
-  padding: 10px 16px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  font: inherit;
-  border: none;
-  border-radius: var(--radius);
-  background: var(--color-success);
-  color: #fff;
-  cursor: pointer;
-}
-
-.completion-next-btn:hover { opacity: 0.9; }
-
-.completion-next-btn:focus-visible {
-  outline: 2px solid var(--color-success);
-  outline-offset: 2px;
-}
-
-/* ── Work cards (Portfolio) ────────────────────────────────────────────── */
-.work-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  padding: var(--space);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.work-card:hover { border-color: var(--color-primary); }
-.work-card:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-
-.work-card-title { font-size: 0.95rem; display: block; }
-.work-card-status { margin: 2px 0; }
-.work-card-position { font-size: 0.8rem; color: var(--color-text-secondary); margin: 0; line-height: 1.3; }
-.work-card-stats { display: flex; gap: 10px; font-size: 0.75rem; color: var(--color-text-secondary); }
-
-.work-badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 8px; background: var(--color-surface-alt, #f0f0f0); }
-.work-badge-complete { background: var(--color-success, #16a34a); color: #fff; }
-
-/* ── Portfolio detail ────────────────────────────────────────────────── */
-.portfolio-summary { padding: 0 var(--space, 12px); margin-bottom: var(--space); }
-.portfolio-position { font-size: 0.85rem; color: var(--color-text-secondary); line-height: 1.4; }
-.portfolio-stats { font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px; display: flex; align-items: center; }
-
-.portfolio-items { display: flex; flex-direction: column; gap: 8px; padding: 0 var(--space, 12px); }
-
-.work-item {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 10px;
-  background: var(--color-bg);
-}
-
-.work-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.work-item-number { font-size: 0.7rem; font-weight: 700; width: 20px; height: 20px; border-radius: 50%; background: var(--color-accent, #2563eb); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.work-item-meta { display: flex; align-items: center; gap: 6px; flex: 1; }
-.work-item-time { font-size: 0.7rem; color: var(--color-text-secondary); }
-
-.work-item-demonstrates { font-size: 0.85rem; margin: 0 0 4px; }
-.work-item-strengths { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
-.work-item-strength { font-size: 0.7rem; padding: 1px 6px; border-radius: 8px; background: var(--color-surface-alt, #f0f0f0); }
-
-.work-item-text-detail { font-size: 0.8rem; margin-top: 4px; }
-.work-item-text-detail summary { cursor: pointer; font-weight: 500; }
-.work-item-text { white-space: pre-wrap; margin: 4px 0 0; color: var(--color-text-secondary); }
-
-.work-item-screenshot { width: 100%; border-radius: var(--radius); margin-top: 4px; }
-.work-item-moved { font-size: 0.75rem; color: var(--color-success, #16a34a); margin-top: 4px; font-style: italic; }
-
-.timeline-screenshot-btn {
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-bg);
-  font: inherit;
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-}
-
-.timeline-screenshot-btn:hover {
-  background: var(--color-surface);
-}
-
-
-.timeline-history summary {
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  padding: 4px 0;
-}
-
-.work-detail-course {
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-}
 
 /* ── Onboarding ─────────────────────────────────────────────────────────── */
 /* ── Onboarding backdrop + animated background ─────────────────────────── */
@@ -1895,7 +1788,7 @@ hr {
 }
 
 @media (forced-colors: active) {
-  .course-card, .msg, fieldset, .work-card, .timeline-step {
+  .course-card, .msg, fieldset {
     border: 1px solid CanvasText;
   }
 }

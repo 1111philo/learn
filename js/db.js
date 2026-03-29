@@ -85,14 +85,6 @@ CREATE TABLE IF NOT EXISTS courses (
   created_at INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS work_products (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  course_id TEXT NOT NULL,
-  course_name TEXT,
-  url TEXT,
-  completed_at INTEGER
-);
-
 CREATE TABLE IF NOT EXISTS auth (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   access_token TEXT,

@@ -9,6 +9,7 @@ import {
 } from '../../js/storage.js';
 import { converseStream, extractCourseMarkdown } from '../../js/orchestrator.js';
 import { parseCoursePrompt, invalidateCoursesCache } from '../../js/courseOwner.js';
+import { syncInBackground } from './syncDebounce.js';
 import { MSG_TYPES } from './constants.js';
 
 function ts() { return Date.now(); }
@@ -56,6 +57,7 @@ export async function startCreation(onStream) {
   ];
 
   await saveCourseMessages(draftId, messages);
+  syncInBackground(`messages:${draftId}`);
   return { messages, draftId, readiness: readiness ?? 1 };
 }
 
@@ -85,6 +87,7 @@ export async function sendMessage(draftId, userText, onStream) {
   ];
 
   await saveCourseMessages(draftId, newMessages);
+  syncInBackground(`messages:${draftId}`);
   return { messages: newMessages, readiness: readiness ?? null };
 }
 
@@ -113,6 +116,7 @@ export async function createCourse(draftId) {
 
   await saveUserCourse(courseId, markdown);
   invalidateCoursesCache();
+  syncInBackground(`courses:${courseId}`);
 
   return { courseId, course };
 }

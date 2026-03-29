@@ -8,7 +8,7 @@
  */
 
 import {
-  getLearnerProfileSummary,
+  getLearnerProfileSummary, getPreferences,
   getCourseKB, saveCourseKB,
   saveScreenshot,
   saveCourseMessages, getCourseMessages,
@@ -90,7 +90,8 @@ export async function startCourse(courseId, course, onStream) {
   syncInBackground(`courseKB:${courseId}`);
 
   // Coach opens the conversation
-  const context = buildContext(course, courseKB, profileSummary);
+  const prefs = await getPreferences();
+  const context = buildContext(course, courseKB, profileSummary, prefs.name);
   const coachMsg = await orchestrator.converseStream(
     'coach',
     [{ role: 'user', content: context }, { role: 'assistant', content: 'Ready.' }, { role: 'user', content: 'Start the course.' }],
@@ -142,11 +143,10 @@ export async function sendMessage(courseId, course, text, imageDataUrl, onStream
     }
   }
 
-  // Add context as first message if tail is short (ensures coach has course info)
-  const contextMsg = buildContext(course, courseKB, profileSummary);
-  const messages = tail.length < 3
-    ? [{ role: 'user', content: contextMsg }, { role: 'assistant', content: 'Ready.' }, ...tail]
-    : tail;
+  // Always include context as first message so coach has course + profile info
+  const prefs = await getPreferences();
+  const contextMsg = buildContext(course, courseKB, profileSummary, prefs.name);
+  const messages = [{ role: 'user', content: contextMsg }, { role: 'assistant', content: 'Ready.' }, ...tail];
   messages.push({ role: 'user', content: userParts.length === 1 && !imageDataUrl ? text : userParts });
 
   // Call coach (use heavy model if image attached)
@@ -223,8 +223,9 @@ export async function resumeCourse(courseId) {
 
 // -- Helpers ------------------------------------------------------------------
 
-function buildContext(course, courseKB, profileSummary) {
+function buildContext(course, courseKB, profileSummary, learnerName) {
   return JSON.stringify({
+    learnerName: learnerName || '',
     courseName: course.name,
     courseDescription: course.description,
     exemplar: course.exemplar,

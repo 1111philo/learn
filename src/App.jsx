@@ -7,8 +7,6 @@ import OnboardingFlow from './pages/onboarding/OnboardingFlow.jsx';
 import CoursesList from './pages/CoursesList.jsx';
 import CourseChat from './pages/CourseChat.jsx';
 import CourseCreate from './pages/CourseCreate.jsx';
-import Portfolio from './pages/Portfolio.jsx';
-import PortfolioDetail from './pages/PortfolioDetail.jsx';
 import Settings from './pages/Settings.jsx';
 import ScreenReaderAnnounce from './components/ScreenReaderAnnounce.jsx';
 import { getOnboardingComplete, saveOnboardingComplete, getLearnerProfile } from '../js/storage.js';
@@ -50,8 +48,6 @@ export default function App() {
         <Route path="/courses" element={<CoursesList />} />
         <Route path="/courses/create" element={<CourseCreate />} />
         <Route path="/courses/:courseGroupId" element={<CourseChat />} />
-        <Route path="/work" element={<Portfolio />} />
-        <Route path="/work/:courseId" element={<PortfolioDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/" element={<Navigate to="/courses" replace />} />
         <Route path="*" element={<Navigate to="/courses" replace />} />

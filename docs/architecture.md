@@ -110,7 +110,7 @@ All structured data lives in an in-memory SQLite database powered by [sql.js](ht
 - [`js/db.js`](../js/db.js) -- database lifecycle: init, schema creation, persistence, column migrations
 - [`js/storage.js`](../js/storage.js) -- query API: getters/setters for all data types
 
-Tables: `settings`, `preferences`, `profile`, `profile_summary`, `course_kbs`, `activity_kbs`, `activities`, `drafts`, `work_products`, `auth`, `pending_state`, `course_messages`.
+Tables: `settings`, `preferences`, `profile`, `profile_summary`, `course_kbs`, `activity_kbs`, `activities`, `drafts`, `auth`, `pending_state`, `course_messages`.
 
 The `course_messages` table stores the unified conversation per course (role, content, msg_type, phase, metadata JSON, timestamp). Activity IDs follow the pattern `{courseId}-act-{number}`. Drafts store assessment results inline (`achieved`, `demonstrates`, `moved`, `needed`, `strengths`).
 
@@ -172,7 +172,7 @@ src/                     React app
   hooks/                 useViewTransition, useAutoResize
   lib/                   courseEngine, courseCreationEngine, profileQueue, syncDebounce, helpers, constants
   components/            AppShell, chat/*, modals/*
-  pages/                 CoursesList, CourseChat, CourseCreate, Portfolio, Settings, onboarding/*
+  pages/                 CoursesList, CourseChat, CourseCreate, Settings, onboarding/*
 prompts/                 Agent system prompts (markdown)
 data/courses/            Course prompt files (markdown)
 data/knowledge-base.md   Program knowledge base

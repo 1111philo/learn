@@ -40,10 +40,11 @@ export default function CourseChat() {
 
   useEffect(() => {
     if (displayText === null && pendingAfterStreamRef.current) {
-      const { msgs, p } = pendingAfterStreamRef.current;
+      const { msgs, p, confetti } = pendingAfterStreamRef.current;
       pendingAfterStreamRef.current = null;
       if (msgs) setMessages(prev => [...prev, ...msgs]);
       if (p) setPhase(p);
+      if (confetti) launchConfetti();
       setLoading('');
     }
   }, [displayText]);
@@ -90,10 +91,12 @@ export default function CourseChat() {
     setLoading('qa');
     setStreamingText('');
 
-    // Show user message immediately
+    // Show user message immediately (with image preview if attached)
     setMessages(prev => [...prev, {
       role: 'user', content: text || '', msgType: MSG_TYPES.USER,
-      phase: COURSE_PHASES.LEARNING, metadata: imageDataUrl ? { hasImage: true } : null, timestamp: Date.now(),
+      phase: COURSE_PHASES.LEARNING,
+      metadata: imageDataUrl ? { imageDataUrl } : null,
+      timestamp: Date.now(),
     }]);
 
     try {
@@ -102,10 +105,8 @@ export default function CourseChat() {
         (partial) => setStreamingText(partial)
       );
       const assistantMsg = result.messages.find(m => m.role === 'assistant');
-      pendingAfterStreamRef.current = { msgs: assistantMsg ? [assistantMsg] : [], p: result.phase };
+      pendingAfterStreamRef.current = { msgs: assistantMsg ? [assistantMsg] : [], p: result.phase, confetti: result.achieved };
       setStreamingText(null);
-
-      if (result.achieved) launchConfetti();
 
       const freshKB = await getCourseKB(courseGroupId);
       setCourseKB(freshKB);
@@ -170,7 +171,16 @@ export default function CourseChat() {
       case MSG_TYPES.GUIDE:
         return <AssistantMessage key={idx} content={msg.content} />;
       case MSG_TYPES.USER:
-        return <UserMessage key={idx} content={msg.content} />;
+        return (
+          <div key={idx}>
+            {msg.content && <UserMessage content={msg.content} />}
+            {msg.metadata?.imageDataUrl && (
+              <div className="msg msg-user" style={{ padding: '6px', marginTop: msg.content ? '4px' : 0 }}>
+                <img src={msg.metadata.imageDataUrl} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
+              </div>
+            )}
+          </div>
+        );
       default:
         return <AssistantMessage key={idx} content={msg.content} />;
     }
@@ -207,10 +217,10 @@ export default function CourseChat() {
         {error && <div className="msg msg-response" role="alert" style={{ color: 'var(--color-warning)' }}>{error}</div>}
       </ChatArea>
 
-      {phase && phase !== COURSE_PHASES.COMPLETED && (
+      {phase && (
         <div className="course-bottom-bar">
           <ComposeBar
-            placeholder="Chat with your coach..."
+            placeholder={phase === COURSE_PHASES.COMPLETED ? "Continue chatting..." : "Chat with your coach..."}
             onSend={handleSend}
             disabled={busy}
             allowImages

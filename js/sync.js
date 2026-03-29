@@ -10,7 +10,6 @@ import {
   getLearnerProfileSummary, saveLearnerProfileSummary,
   getPreferences, savePreferences,
   getOnboardingComplete, saveOnboardingComplete,
-  getWorkProducts, saveWorkProduct, deleteWorkProducts,
   getCourseKB, saveCourseKB, deleteCourseKB,
   getActivities, saveActivity, deleteActivitiesForCourse,
   getActivityKBsForCourse, saveActivityKB, deleteActivityKBsForCourse,
@@ -25,7 +24,7 @@ const _versions = {};
 // Keys the server currently accepts. New keys (activities, activityKBs, messages,
 // courseKB, onboardingComplete) are stored locally and will sync once learn-service
 // is updated. Until then, skip them to avoid 400 console noise.
-const SERVER_KNOWN_PREFIXES = ['profile', 'profileSummary', 'preferences', 'work', 'summative', 'gap', 'journey', 'progress'];
+const SERVER_KNOWN_PREFIXES = ['profile', 'profileSummary', 'preferences', 'summative', 'gap', 'journey', 'progress'];
 
 function serverAcceptsKey(syncKey) {
   return SERVER_KNOWN_PREFIXES.some(p => syncKey === p || syncKey.startsWith(p + ':'));
@@ -88,7 +87,7 @@ export async function loadAll() {
   }
 
   // Remove local data the server doesn't have
-  for (const key of ['profile', 'profileSummary', 'work']) {
+  for (const key of ['profile', 'profileSummary']) {
     if (!serverKeys.has(key)) {
       const d = await getLocalData(key);
       if (d !== null && d !== undefined) await removeLocalData(key);
@@ -109,7 +108,6 @@ async function getLocalData(syncKey) {
   if (syncKey === 'profileSummary') return getLearnerProfileSummary().then(s => s || null);
   if (syncKey === 'preferences') return getPreferences();
   if (syncKey === 'onboardingComplete') return getOnboardingComplete();
-  if (syncKey === 'work') return getWorkProducts();
   if (syncKey.startsWith('courseKB:')) return getCourseKB(syncKey.slice('courseKB:'.length));
   if (syncKey.startsWith('activities:')) return getActivities(syncKey.slice('activities:'.length));
   if (syncKey.startsWith('activityKBs:')) return getActivityKBsForCourse(syncKey.slice('activityKBs:'.length));
@@ -133,11 +131,6 @@ async function saveLocalData(syncKey, data) {
   if (syncKey === 'profileSummary') return saveLearnerProfileSummary(data);
   if (syncKey === 'preferences') return savePreferences(data);
   if (syncKey === 'onboardingComplete' && data) return saveOnboardingComplete();
-  if (syncKey === 'work') {
-    await deleteWorkProducts();
-    for (const product of data) await saveWorkProduct(product);
-    return;
-  }
   if (syncKey.startsWith('courseKB:')) return saveCourseKB(syncKey.slice('courseKB:'.length), data);
   if (syncKey.startsWith('activities:')) {
     const courseId = syncKey.slice('activities:'.length);
@@ -180,5 +173,4 @@ function removeLocalData(syncKey) {
   if (syncKey === 'profile') return deleteProfile();
   if (syncKey === 'profileSummary') return deleteProfileSummary();
   if (syncKey === 'preferences') return deletePreferences();
-  if (syncKey === 'work') return deleteWorkProducts();
 }

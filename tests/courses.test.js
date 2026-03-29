@@ -61,8 +61,12 @@ const courses = courseFiles.map(f => {
 });
 
 describe('course prompt files', () => {
-  it('has at least one course', () => {
-    assert.ok(courses.length > 0, 'No course prompt files found in data/courses/');
+  it('parses any course files that exist', () => {
+    // Built-in course files are optional — courses can be user-created via SQLite
+    // This test validates the format of any .md files present
+    for (const course of courses) {
+      assert.ok(course.courseId, 'Parsed course has a courseId');
+    }
   });
 
   it('every course has required fields', () => {

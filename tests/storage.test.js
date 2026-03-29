@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS activities (id TEXT PRIMARY KEY, course_id TEXT NOT N
 CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL REFERENCES activities(id), course_id TEXT NOT NULL, screenshot_key TEXT, text_response TEXT, url TEXT, achieved INTEGER DEFAULT 0, demonstrates TEXT, moved TEXT, needed TEXT, strengths TEXT, attempt INTEGER DEFAULT 1, timestamp INTEGER);
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
 CREATE INDEX IF NOT EXISTS idx_drafts_course ON drafts(course_id);
-CREATE TABLE IF NOT EXISTS work_products (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT NOT NULL, course_name TEXT, url TEXT, completed_at INTEGER);
 CREATE TABLE IF NOT EXISTS auth (id INTEGER PRIMARY KEY CHECK (id = 1), access_token TEXT, refresh_token TEXT, user_json TEXT);
 CREATE TABLE IF NOT EXISTS pending_state (key TEXT PRIMARY KEY, state_json TEXT, updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS courses (course_id TEXT PRIMARY KEY, markdown TEXT NOT NULL, created_at INTEGER);
@@ -69,7 +68,6 @@ describe('SQLite schema', () => {
     assert.ok(names.includes('activities'));
     assert.ok(names.includes('drafts'));
     assert.ok(names.includes('profile'));
-    assert.ok(names.includes('work_products'));
     assert.ok(names.includes('course_messages'));
   });
 });
@@ -266,14 +264,3 @@ describe('user-created courses', () => {
   });
 });
 
-describe('work products', () => {
-  it('inserts and retrieves work products', () => {
-    run('INSERT INTO work_products (course_id, course_name, url, completed_at) VALUES (?, ?, ?, ?)',
-      ['foundations', 'Foundations', 'https://example.com', 1000]);
-
-    const rows = queryAll('SELECT * FROM work_products ORDER BY completed_at');
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].course_id, 'foundations');
-    assert.equal(rows[0].course_name, 'Foundations');
-  });
-});
