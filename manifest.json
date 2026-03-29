@@ -6,9 +6,7 @@
   "permissions": [
     "sidePanel",
     "storage",
-    "unlimitedStorage",
-    "activeTab",
-    "tabs"
+    "unlimitedStorage"
   ],
   "icons": {
     "16": "assets/icon-16.png",
@@ -22,9 +20,6 @@
   "host_permissions": [
     "https://api.anthropic.com/*",
     "https://learn.philosophers.group/*"
-  ],
-  "optional_host_permissions": [
-    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
