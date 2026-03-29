@@ -78,7 +78,7 @@ export default function OnboardingFlow() {
       content = <NameStep data={data} updateData={updateData} goTo={setStep} />;
       break;
     case 'apikey':
-      content = <ApiKeyStep data={data} updateData={updateData} onComplete={complete} />;
+      content = <ApiKeyStep data={data} updateData={updateData} goTo={setStep} onComplete={complete} />;
       break;
     default:
       content = <WelcomeStep data={data} updateData={updateData} goTo={setStep} />;
