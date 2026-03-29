@@ -4,19 +4,19 @@
 
 # 1111 Learn
 
-An agentic learning app that runs entirely in the Chrome side panel. Five AI agents guide learners through an exemplar-driven learning loop -- activities are generated, assessed, and tuned based on a growing knowledge base until the learner achieves the course exemplar.
+An agentic learning app that runs entirely in the Chrome side panel. Seven AI agents drive an exemplar-driven learning loop -- a Coach converses with the learner, coaching and assessing inline while enriching a growing knowledge base until the learner achieves the course exemplar.
 
 Built by [11:11 Philosopher's Group](https://github.com/1111philo) in collaboration with [UIC Tech Solutions](https://it.uic.edu/), [UIC TS Open Source Fund](https://osf.it.uic.edu/), [Louisiana Tech](https://www.latech.edu/), and the [ULL Louisiana Educate Program](https://louisiana.edu/educate).
 
 ## How it works
 
 1. **Start a course** -- the Course Owner builds a knowledge base from the course exemplar and your profile
-2. **Do activities** -- the Activity Creator generates tasks tuned to where you are right now
-3. **Get assessed** -- the Assessor evaluates your work and feeds insights back into the knowledge base
-4. **Repeat** -- each activity gets more precisely tuned as the KB grows with insights about your strengths and gaps
+2. **Learn with the Coach** -- the Coach converses with you, creating activities tuned to where you are and assessing your submissions inline
+3. **Knowledge base grows** -- every Coach response enriches the KB with new insights about your strengths and gaps
+4. **Repeat** -- each coaching turn is more precisely tuned as the KB grows
 5. **Achieve the exemplar** -- when your work demonstrates mastery, the course is complete
 
-A Guide Agent orients you at the start and celebrates at the end. Everything happens in the browser. Screenshots and text responses are assessed by AI and stored locally. No data leaves your device unless you opt into cloud sync.
+Everything happens in the browser. Images and text responses are assessed by the Coach and stored locally. No data leaves your device unless you opt into cloud sync.
 
 ## Quick start
 

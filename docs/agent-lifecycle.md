@@ -8,7 +8,7 @@ For the agent table and architecture overview, see [Architecture](architecture.m
 
 ## Phase 1: Course Start
 
-When a learner starts a course, three agents fire in sequence: Course Owner, Guide, and Activity Creator.
+When a learner starts a course, two things happen: the Course Owner initializes the knowledge base, then the Coach begins the conversation.
 
 ### 1. Course Owner Agent
 
@@ -42,163 +42,70 @@ When a learner starts a course, three agents fire in sequence: Course Owner, Gui
 
 The course KB is saved to the `course_kbs` table and synced as `courseKB:{courseId}`.
 
-### 2. Guide Agent (course start)
+### 2. Coach (course start)
 
 | | |
 |---|---|
-| Prompt | [`guide.md`](../prompts/guide.md) |
+| Prompt | [`coach.md`](../prompts/coach.md) |
 | Model | `MODEL_LIGHT` |
 | Trigger | Fires immediately after Course Owner |
-| Function | `courseEngine.callGuide()` → `orchestrator.converseStream('guide', messages)` |
+| Function | `orchestrator.converseStream('coach', messages)` |
 
-**Input:** `{ checkpoint: "course_start", courseName, courseDescription, exemplar, learnerProfile, learnerPosition, activitiesCompleted }`
-
-**Output:** Plain text (streamed token by token). The guide's system prompt includes the program knowledge base (`data/knowledge-base.md`).
-
-The learner sees the guide's welcome message streamed in real time.
-
-### 3. Activity Creator Agent
-
-| | |
-|---|---|
-| Prompt | [`activity-creation.md`](../prompts/activity-creation.md) |
-| Model | `MODEL_LIGHT` |
-| Trigger | Fires immediately after Guide |
-| Function | `orchestrator.createActivity()` |
-| Validation | `validateActivity()` in [`validators.js`](../js/validators.js) |
-
-**Input:**
-- `courseKB` -- exemplar, objectives, insights, learnerPosition, activitiesCompleted
-- `learnerProfile` -- summary string
-- `activityNumber` -- 1 (first activity)
-- `priorActivities` -- "None" (no prior activities yet)
-
-**Output:**
-```json
-{
-  "instruction": "1. Go to wordpress.org/playground...\n2. Create a new page...\n3. Write your professional identity statement...\n4. Upload an image of your work.",
-  "tips": ["Focus on authentic voice rather than formal language", "Include specific examples from your experience"]
-}
-```
-
-The activity is saved to the `activities` table and an activity KB is created in `activity_kbs`. The instruction appears as an `InstructionMessage` in the chat.
+The Coach welcomes the learner and begins the learning conversation. Its system prompt includes the program knowledge base (`data/knowledge-base.md`) and the full course KB context (exemplar, objectives, learner position). The response is streamed token by token.
 
 ---
 
-## Phase 2: Learning Loop
+## Phase 2: Learning Conversation
 
-The core loop repeats: learner submits → assessor evaluates → KB enriches → next activity (or complete).
+The core of the experience is a continuous conversation with the Coach. The Coach handles everything in a single turn: coaching, creating activities, and assessing submissions. There is no separate activity-creation or assessment step -- it all happens inline.
 
-### 4. Activity Assessor Agent (repeated per submission)
-
-| | |
-|---|---|
-| Prompt | [`activity-assessment.md`](../prompts/activity-assessment.md) |
-| Model | `MODEL_HEAVY` (images) / `MODEL_LIGHT` (text) |
-| Trigger | Learner submits work ([`courseEngine.handleSubmission`](../src/lib/courseEngine.js)) |
-| Function | `orchestrator.assessSubmission()` |
-| Validation | `validateAssessment()` in [`validators.js`](../js/validators.js) |
-
-**Input:**
-- `courseKB` -- exemplar, objectives, insights, learnerPosition, activitiesCompleted
-- `activityInstruction` -- the current activity's instruction text
-- `priorAttempts[]` -- previous attempts on this activity (demonstrates, strengths, moved, needed)
-- `learnerProfile` -- summary string
-- Uploaded image (base64) and/or text response
-
-**Output:**
-```json
-{
-  "achieved": false,
-  "demonstrates": "The learner has created a WordPress page with a professional identity statement that includes personal values and career goals.",
-  "strengths": ["Clear articulation of values", "Authentic personal voice"],
-  "moved": "From no professional statement to a draft that captures key identity elements",
-  "needed": "The statement needs to connect interests to specific professional goals and include technology perspective",
-  "courseKBUpdate": {
-    "insights": ["Learner writes authentically but needs prompting to connect personal to professional", "Strong self-awareness of values"],
-    "learnerPosition": "Has drafted an identity statement; needs to deepen professional connections and add technology perspective"
-  }
-}
-```
-
-**After assessment, three things happen:**
-
-1. **Draft saved** -- the assessment result is stored in the `drafts` table with `achieved`, `demonstrates`, `moved`, `needed`, `strengths`
-2. **Activity KB updated** -- the attempt is appended to the activity KB's `attempts[]` array
-3. **Course KB enriched** -- `updateCourseKBFromAssessment()` in [`courseOwner.js`](../js/courseOwner.js) merges `courseKBUpdate.insights` and `courseKBUpdate.learnerPosition` into the course KB, increments `activitiesCompleted`
-
-### 5. Learner Profile Owner -- Incremental Update (code, no LLM)
+### 3. Coach (every response)
 
 | | |
 |---|---|
-| Model | None (code only) |
-| Trigger | Fires automatically after every assessment |
-| Function | `orchestrator.incrementalProfileUpdate()` via `profileQueue.updateProfileInBackground()` |
+| Prompt | [`coach.md`](../prompts/coach.md) |
+| Model | `MODEL_LIGHT` |
+| Trigger | Learner sends a message, submits work, or uploads an image |
+| Function | `orchestrator.converseStream('coach', messages)` |
 
-**Input:** `profile`, `courseId`, `assessmentResult`
+**Input:** The full conversation history plus course KB context (exemplar, objectives, learner position, insights, activities completed).
 
-**Output:** Updated profile with `activeCourses` tracked and `latestStrengths` updated.
+**Output:** Plain text response (streamed), potentially containing structured signals:
 
-This is a lightweight code-level update -- no LLM call. It runs through the sequential profile queue to prevent race conditions.
+- **`[PROGRESS: N]`** (0-10) -- tracks how close the learner is to achieving the exemplar
+- **`[KB_UPDATE]`** -- JSON payload with new insights and updated learner position, merged into the course KB
+- **`[PROFILE_UPDATE]`** -- JSON payload with profile updates (strengths, observations)
 
-### 6. Activity Creator Agent (repeated)
+These signals are stripped from the displayed response and processed by `courseEngine.js`:
 
-Same as [Agent #3](#3-activity-creator-agent), but now with enriched context:
+1. **`[KB_UPDATE]`** -- insights are appended to the course KB, learner position is updated, activity count is incremented via `updateCourseKBFromAssessment()` in [`courseOwner.js`](../js/courseOwner.js)
+2. **`[PROFILE_UPDATE]`** -- profile is updated via the profile queue in [`profileQueue.js`](../src/lib/profileQueue.js)
+3. **`[PROGRESS: 10]`** -- when progress reaches 10, the learner has achieved the exemplar and the course moves to completion
 
-- `courseKB` -- contains accumulated `insights[]` and updated `learnerPosition` from all prior assessments
-- `activityNumber` -- incremented
-- `priorActivities` -- summary of all completed activities with their assessment results
-
-Because the course KB grows with each assessment, each successive activity is more precisely tuned to the learner's demonstrated abilities and gaps.
-
-**If `achieved: true`** in the assessment, the loop exits and moves to Phase 3 (Completion).
+Because the Coach reads the enriched KB on every turn, its coaching and activities become more precisely tuned as the conversation progresses.
 
 ---
 
 ## Phase 3: Course Completion
 
-When the Assessor returns `achieved: true`, the learner has demonstrated the exemplar.
+When the Coach signals `[PROGRESS: 10]`, the learner has demonstrated the exemplar.
 
-### 7. Guide Agent (course complete)
+### 4. Coach (course complete)
 
-| | |
-|---|---|
-| Prompt | [`guide.md`](../prompts/guide.md) |
-| Model | `MODEL_LIGHT` |
-| Trigger | Assessment returns `achieved: true` |
-| Function | `courseEngine.callGuide()` with checkpoint `"course_complete"` |
+The Coach's final response celebrates the learner's achievement. The course status is set to `"completed"` in the course KB.
 
-**Output:** Plain text celebration message, streamed to the learner.
-
-### 8. Learner Profile Owner -- Deep Update (LLM)
+### 5. Learner Profile Owner -- Deep Update (LLM)
 
 | | |
 |---|---|
 | Prompt | [`learner-profile-owner.md`](../prompts/learner-profile-owner.md) |
 | Model | `MODEL_LIGHT` |
-| Trigger | Course completed (`achieved: true`) |
+| Trigger | Course completed (progress reaches 10) |
 | Function | `orchestrator.updateProfileOnCompletion()` via `profileQueue.updateProfileOnCompletionInBackground()` |
 
 **Input:** `currentProfile`, `courseKB` (full enriched KB), `courseName`, `courseId`, `activitiesCompleted`
 
 **Output:** `{ profile, summary }` -- comprehensive profile update reflecting all skills demonstrated throughout the course. Adds courseId to `masteredCourses`, updates strengths/weaknesses based on the full course KB.
-
-The course KB status is set to `"completed"`.
-
----
-
-## Ad-hoc: Guide Q&A
-
-| | |
-|---|---|
-| Prompt | [`guide.md`](../prompts/guide.md) |
-| Model | `MODEL_LIGHT` |
-| Trigger | Learner sends a message via the compose bar ([`courseEngine.askGuide`](../src/lib/courseEngine.js)) |
-| Function | `orchestrator.converseStream('guide', messages)` |
-
-**Input:** Recent conversation tail (last 10 messages) + the learner's question, with course KB context (exemplar, learner position, activities completed).
-
-**Output:** Plain text response (streamed).
 
 ---
 
@@ -224,23 +131,21 @@ Course Prompt (.md)
        │
   Course Owner ──→ Course KB (initialized)
        │                 │
-     Guide        Activity Creator ←── reads enriched KB
+     Coach ←─────────────┤ (reads enriched KB)
        │                 │
-  Welcome msg      Activity instruction
-                         │
-                   Learner submits
-                         │
-                   Activity Assessor
-                    │           │
-              courseKBUpdate   Draft saved
-                    │           │
-              KB enriched    Profile incremental update (code)
-                    │
-              ┌─────┴─────┐
-              │            │
-        not achieved    achieved
-              │            │
-        Next activity   Guide celebrates
-        (enriched KB)   Profile deep update (LLM)
-                        Course complete
+  Coaches, creates       │
+  activities, assesses   │
+  — all in one turn      │
+       │                 │
+  [KB_UPDATE] ───────────┤ (writes insights back)
+  [PROFILE_UPDATE]       │
+  [PROGRESS: 0-10]       │
+       │                 │
+  ┌────┴─────┐           │
+  │          │           │
+ < 10       = 10         │
+  │          │           │
+ Next turn  Coach celebrates
+ (enriched  Profile deep update (LLM)
+  KB)       Course complete
 ```

@@ -18,7 +18,7 @@ Generate a course knowledge base with:
 - `exemplar`: echo back the exemplar verbatim
 - `objectives`: each learning objective paired with an evidence definition — a concrete, observable description of what the learner would produce or demonstrate to show they've met that objective. Evidence should be specific enough for an assessor to evaluate.
 - `learnerPosition`: a running summary of where the learner stands relative to the exemplar. For a new course, this is based on the learner profile. Be specific about what's known and what's unknown.
-- `insights`: empty array (will be populated by the Activity Assessor as the learner works)
+- `insights`: empty array (will be populated by the Coach as the learner works)
 - `activitiesCompleted`: 0
 - `status`: "active"
 

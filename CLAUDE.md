@@ -1,19 +1,19 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners develop professional skills through AI-guided courses. Six AI agents (4 LLM + 2 hybrid) drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the system creates activities, assesses submissions, enriches a growing knowledge base, and repeats until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners develop professional skills through AI-guided courses. Seven AI agents drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the Coach converses with the learner -- coaching, creating activities, and assessing submissions inline -- while enriching a growing knowledge base, repeating until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
-Six agents drive the learning experience. The **Guide Agent** is the learner's companion throughout — it orients the learner at key moments while `courseEngine.js` orchestrates all other agent calls behind the scenes.
+Seven agents drive the learning experience. The **Coach** is the learner's companion, teacher, and assessor in one continuous conversation — it coaches toward the exemplar, evaluates responses, tracks progress, and updates the knowledge base inline.
 
-- **Guide Agent** (`MODEL_LIGHT`) -- the learner's companion throughout the course; appears at course start and course completion to orient and celebrate; handles follow-up Q&A via streaming; uses `orchestrator.converseStream('guide', ...)` for real-time streaming; returns plain text (not JSON); system prompt includes the program knowledge base (`data/knowledge-base.md`)
+- **Coach** (`MODEL_LIGHT`) -- the learner's companion, teacher, and assessor in one conversation; coaches toward the exemplar, evaluates responses, tracks progress via `[PROGRESS: 0-10]`, updates the course KB via `[KB_UPDATE]`, and updates the learner profile via `[PROFILE_UPDATE]`; replaces the old Guide, Activity Creator, and Activity Assessor agents; prompt in `prompts/coach.md`; uses `orchestrator.converseStream('coach', ...)` for real-time streaming; system prompt includes the program knowledge base (`data/knowledge-base.md`)
 - **Course Owner Agent** (`MODEL_LIGHT`) -- initializes the course knowledge base from the course prompt (exemplar + learning objectives + learner profile); produces structured objectives with evidence descriptors, initial learner position, and empty insights; validated by `validateCourseKB()`
-- **Activity Creator Agent** (`MODEL_LIGHT`) -- generates one activity at a time from the enriched course KB + learner profile + prior activity summaries; returns `{ instruction, tips[] }`; validated by `validateActivity()`
-- **Activity Assessor Agent** (`MODEL_HEAVY` for images, `MODEL_LIGHT` for text) -- evaluates submissions (uploaded images and/or text responses) against the course exemplar and objectives; returns `{ achieved, demonstrates, strengths[], moved, needed, courseKBUpdate }` where `courseKBUpdate` feeds insights and learner position back into the course KB; validated by `validateAssessment()`
 - **Course Creator Agent** (`MODEL_LIGHT`) -- coaches users through designing custom courses via a conversational chat; guides them to define an exemplar and learning objectives; each response includes a `[READINESS: 0-10]` signal that controls the "Create Course" button; prompt in `prompts/course-creator.md`; engine in `src/lib/courseCreationEngine.js`
-- **Learner Profile Owner** -- a hybrid agent: incremental code-level updates after every assessment (`orchestrator.incrementalProfileUpdate()`), plus a full LLM-powered deep update on course completion (`orchestrator.updateProfileOnCompletion()` using `learner-profile-owner.md`); profile feedback also uses the LLM via `learner-profile-update.md`
+- **Course Extractor Agent** (`MODEL_LIGHT`) -- extracts course markdown from a creation conversation; prompt in `prompts/course-extractor.md`
+- **Learner Profile Owner** (`MODEL_LIGHT`) -- deep profile update on course completion (`orchestrator.updateProfileOnCompletion()` using `learner-profile-owner.md`)
+- **Learner Profile Update** (`MODEL_LIGHT`) -- profile update from feedback/observations using `learner-profile-update.md`
 
-Agent prompts live in `prompts/*.md` and can be edited independently of code. `orchestrator.converseStream()` streams guide responses token by token. `src/lib/courseEngine.js` is the state machine that orchestrates all agent calls and appends messages to the course conversation. A program knowledge base (`data/knowledge-base.md`) is automatically injected into the guide agent system prompt so it can answer questions about the AI Leaders program.
+Agent prompts live in `prompts/*.md` and can be edited independently of code. `orchestrator.converseStream()` streams coach responses token by token. `src/lib/courseEngine.js` is the state machine that orchestrates all agent calls and appends messages to the course conversation. A program knowledge base (`data/knowledge-base.md`) is automatically injected into the coach system prompt so it can answer questions about the AI Leaders program.
 
 ### Knowledge bases
 Three knowledge bases drive personalization:
@@ -37,9 +37,9 @@ On first run, a full-screen onboarding wizard (with animated geometric backgroun
 ### Exemplar-driven learning loop
 The entire learning experience takes place in a **single continuous chat per course** with three phases:
 
-1. **Course intro** (`course_intro`): The Course Owner generates the course KB from the course prompt. The Guide welcomes the learner. The Activity Creator generates the first activity. "Start" begins learning.
-2. **Learning** (`learning`): Activities flow inline in the chat. The learner submits work (uploaded image or text). The Assessor evaluates against the exemplar and enriches the course KB with new insights and an updated learner position. If the exemplar is not yet achieved, the Activity Creator generates the next activity from the enriched KB -- each successive activity is more precisely tuned to the learner. This loop repeats until the learner achieves the exemplar.
-3. **Completed** (`completed`): The Guide celebrates. A deep LLM profile update captures everything the learner demonstrated. A "Next Course" action returns to the courses list.
+1. **Course intro** (`course_intro`): The Course Owner generates the course KB from the course prompt. The Coach welcomes the learner and begins the conversation. "Start" begins learning.
+2. **Learning** (`learning`): The Coach drives the entire learning loop in a single continuous conversation. It coaches the learner, creates activities inline, evaluates submissions (uploaded images or text) against the exemplar, and enriches the course KB with new insights via `[KB_UPDATE]`. Progress is tracked via `[PROGRESS: 0-10]`. The conversation continues until the learner achieves the exemplar.
+3. **Completed** (`completed`): The Coach celebrates. A deep LLM profile update captures everything the learner demonstrated. A "Next Course" action returns to the courses list.
 
 `src/pages/CourseChat.jsx` renders the entire course experience. `src/lib/courseEngine.js` manages all phase transitions and agent calls.
 
@@ -47,7 +47,7 @@ The entire learning experience takes place in a **single continuous chat per cou
 Everything in a course happens in one continuous chat. The course header has a **progress bar** showing the learner's position. All loading states appear as in-chat thinking indicators. The compose bar is fixed at the bottom with: Upload button (left), text area (center), Submit and Send buttons (right). Image upload and text submission are always available. **Action buttons** appear inline in the chat, labeled with the next step. All messages are persisted in the `course_messages` table so the conversation survives panel reloads.
 
 ### Learner profile updates
-The profile updates incrementally after every assessment (code-level, no LLM call) and deeply on course completion (LLM call). Profile feedback from settings also triggers an LLM update. All updates run through a sequential queue in `src/lib/profileQueue.js` to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. `mergeProfile()` in `src/lib/profileQueue.js` unions array fields (`activeCourses`, `masteredCourses`), merges preferences so agent responses can never accidentally lose accumulated data.
+The profile updates via `[PROFILE_UPDATE]` signals from the Coach and deeply on course completion (LLM call via Learner Profile Owner). Profile feedback from settings also triggers an LLM update via Learner Profile Update. All updates run through a sequential queue in `src/lib/profileQueue.js` to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. `mergeProfile()` in `src/lib/profileQueue.js` unions array fields (`activeCourses`, `masteredCourses`), merges preferences so agent responses can never accidentally lose accumulated data.
 
 ### Storage (SQLite)
 All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted to `chrome.storage.local` under `_sqliteDb` (debounced, plus on `visibilitychange`). `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Uploaded images remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the `text_response` column of the `drafts` table.
@@ -186,13 +186,12 @@ src/                     React app
       NameStep.jsx        Name input
       ApiKeyStep.jsx      API key input
 prompts/                 Agent system prompts (markdown)
-  guide.md               Guide agent prompt
-  course-creator.md      Course Creator agent prompt
+  coach.md               Coach agent prompt (coaching, activity creation, assessment)
   course-owner.md        Course Owner agent prompt
-  activity-creation.md   Activity Creator agent prompt
-  activity-assessment.md Activity Assessor agent prompt
+  course-creator.md      Course Creator agent prompt
+  course-extractor.md    Course Extractor agent prompt
   learner-profile-owner.md  Deep profile update prompt (course completion)
-  learner-profile-update.md Profile feedback update prompt
+  learner-profile-update.md Profile feedback/observation update prompt
 data/
   courses/               Course prompt files (markdown)
     foundations.md        Foundations course

@@ -4,16 +4,16 @@
 
 ## Agents
 
-Six agents (4 LLM + 2 hybrid) drive the learning experience. Each LLM agent loads a system prompt from `prompts/*.md` and returns structured JSON validated by `js/validators.js`.
+Seven agents drive the learning experience. Each agent loads a system prompt from `prompts/*.md`.
 
 | Agent | Prompt | Model | Purpose |
 |-------|--------|-------|---------|
-| Guide | [`guide.md`](../prompts/guide.md) | Light | Orients the learner at course start and completion; handles follow-up Q&A; streams responses token by token |
+| Coach | [`coach.md`](../prompts/coach.md) | Light | The learner's companion, teacher, and assessor in one conversation; coaches toward the exemplar, evaluates responses, tracks progress via `[PROGRESS: 0-10]`, updates KB via `[KB_UPDATE]`, updates profile via `[PROFILE_UPDATE]` |
 | Course Owner | [`course-owner.md`](../prompts/course-owner.md) | Light | Initializes the course KB from course prompt + learner profile; produces structured objectives, evidence descriptors, initial learner position |
-| Activity Creator | [`activity-creation.md`](../prompts/activity-creation.md) | Light | Generates one activity at a time from the enriched course KB; returns `{ instruction, tips[] }` |
-| Activity Assessor | [`activity-assessment.md`](../prompts/activity-assessment.md) | Heavy (images) / Light (text) | Evaluates submissions (uploaded images and/or text) against exemplar/objectives; returns assessment + `courseKBUpdate` that feeds insights back into the KB |
 | Course Creator | [`course-creator.md`](../prompts/course-creator.md) | Light | Coaches users through designing custom courses; guides exemplar and objective definition; emits `[READINESS: 0-10]` signal |
-| Learner Profile Owner | [`learner-profile-owner.md`](../prompts/learner-profile-owner.md) + code | Light (completion) / none (incremental) | Hybrid: code-level incremental updates after each assessment; LLM deep update on course completion |
+| Course Extractor | [`course-extractor.md`](../prompts/course-extractor.md) | Light | Extracts course markdown from a creation conversation |
+| Learner Profile Owner | [`learner-profile-owner.md`](../prompts/learner-profile-owner.md) | Light | Deep profile update on course completion |
+| Learner Profile Update | [`learner-profile-update.md`](../prompts/learner-profile-update.md) | Light | Profile update from feedback/observations |
 
 `MODEL_LIGHT` = `claude-haiku-4-5`. `MODEL_HEAVY` = `claude-sonnet-4-6`. See [`js/api.js`](../js/api.js) for model constants.
 
@@ -23,21 +23,18 @@ For the full invocation sequence with inputs and outputs, see [Agent Lifecycle](
 
 [`js/orchestrator.js`](../js/orchestrator.js) is the central layer between agents and the app:
 
-- **`converseStream(promptName, messages, onChunk)`** -- streaming conversations (guide). Yields text tokens via callback as they arrive. Falls back to non-streaming if no local API key.
+- **`converseStream(promptName, messages, onChunk)`** -- streaming conversations (coach). Yields text tokens via callback as they arrive. Falls back to non-streaming if no local API key.
 - **`initializeCourseKB(course, profileSummary)`** -- Course Owner: generates the initial course KB.
-- **`createActivity(courseKB, profileSummary, activityNumber, priorSummary)`** -- Activity Creator: generates the next activity.
-- **`assessSubmission(courseKB, instruction, priorAttempts, profileSummary, image, text)`** -- Activity Assessor: evaluates a submission.
-- **`updateProfileOnCompletion(...)`** -- Learner Profile Owner (LLM): deep profile update on course mastery.
-- **`incrementalProfileUpdate(profile, courseId, result)`** -- Learner Profile Owner (code): lightweight stat update after each assessment.
-- **`updateProfileFromFeedback(...)`** -- Profile update from user feedback in Settings.
+- **`updateProfileOnCompletion(...)`** -- Learner Profile Owner: deep profile update on course mastery.
+- **`updateProfileFromFeedback(...)`** -- Learner Profile Update: profile update from user feedback in Settings.
 - **Routing** -- if logged in, calls go to the learn-service Bedrock proxy; otherwise, they use the user's Anthropic API key directly.
 - **Retry** -- validation failures retry once automatically. Transient API errors (503, 529, 500) retry up to twice with backoff (3s, 6s).
 
-[`src/lib/courseEngine.js`](../src/lib/courseEngine.js) is the state machine that sits above the orchestrator. It manages the exemplar-driven learning loop: course start, submission handling, KB enrichment, activity generation, and completion detection. `CourseChat.jsx` calls courseEngine functions in response to user actions.
+[`src/lib/courseEngine.js`](../src/lib/courseEngine.js) is the state machine that sits above the orchestrator. It manages the exemplar-driven learning loop: course start, the Coach conversation (coaching + assessment in every response), KB enrichment, and completion detection. `CourseChat.jsx` calls courseEngine functions in response to user actions.
 
 [`js/courseOwner.js`](../js/courseOwner.js) loads course prompt files from `data/courses/*.md`, parses them into structured data (`{ courseId, name, description, exemplar, learningObjectives }`), and provides `updateCourseKBFromAssessment()` to merge assessment insights into the course KB.
 
-A program knowledge base ([`data/knowledge-base.md`](../data/knowledge-base.md)) is automatically loaded and appended to the system prompt for the Guide agent. This gives it context about the AI Leaders program so it can answer program-related questions. The KB is cached after first load.
+A program knowledge base ([`data/knowledge-base.md`](../data/knowledge-base.md)) is automatically loaded and appended to the system prompt for the Coach. This gives it context about the AI Leaders program so it can answer program-related questions. The KB is cached after first load.
 
 ## Knowledge bases
 
@@ -52,7 +49,7 @@ Initialized by the Course Owner from the course prompt + learner profile. Contai
 - `activitiesCompleted` -- count of activities completed
 - `status` -- `"active"` or `"completed"`
 
-After every assessment, the Assessor's `courseKBUpdate` is merged in via `updateCourseKBFromAssessment()`: new insights are appended, learner position is replaced, and activity count is incremented.
+After every Coach response containing a `[KB_UPDATE]`, the update is merged in via `updateCourseKBFromAssessment()`: new insights are appended, learner position is replaced, and activity count is incremented.
 
 ### Activity KB (`activity_kbs` table)
 Per-activity record containing:
@@ -67,8 +64,8 @@ Persistent across courses:
 - `masteredCourses[]`, `activeCourses[]`
 - `strengths[]`, `weaknesses[]`
 - `preferences{}`
-- Updated incrementally by code after each assessment
-- Updated deeply by LLM on course completion
+- Updated via `[PROFILE_UPDATE]` signals from the Coach
+- Updated deeply by Learner Profile Owner LLM on course completion
 
 ## Output validation
 
@@ -77,7 +74,6 @@ All agent outputs pass through deterministic validators in [`js/validators.js`](
 | Validator | Checks |
 |-----------|--------|
 | `validateActivity` | Instruction present, tips array, ends with "Upload" or "Submit", max 5 steps (4 + final), browser-only, no platform shortcuts, no multi-site, no DevTools, produces visible work, content safety |
-| `validateAssessment` | `achieved` boolean, `demonstrates` string, `strengths` array, `needed` string, `courseKBUpdate` with `insights[]` and `learnerPosition`, content safety |
 | `validateCourseKB` | Exemplar, objectives array (each with objective + evidence), learnerPosition, insights array, activitiesCompleted number, status, content safety |
 
 ## Content hierarchy
@@ -86,9 +82,9 @@ All agent outputs pass through deterministic validators in [`js/validators.js`](
 Course prompt (data/courses/*.md)
   ├── Exemplar (mastery-level outcome description)
   ├── Learning Objectives (bullet list)
-  └── Course KB (generated by Course Owner, enriched by Assessor)
-        └── Activities (generated dynamically by Activity Creator)
-              └── Drafts (uploaded images or text responses with AI assessment)
+  └── Course KB (generated by Course Owner, enriched by Coach via [KB_UPDATE])
+        └── Activities (created inline by Coach during conversation)
+              └── Drafts (uploaded images or text responses assessed by Coach)
 ```
 
 Courses are defined as markdown files in `data/courses/`. Each file has:
@@ -123,29 +119,31 @@ Uploaded images are stored in IndexedDB (`1111-blobs` store), referenced by `scr
 ```
 Course Prompt (.md) ─── Course Owner ─── Course KB (initialized)
                                               │
-                          Activity Creator ←──┤ (reads enriched KB)
+                              Coach ←─────────┤ (reads enriched KB)
                                 │             │
-                          Activity ───────────┤
+                          Coaches, creates    │
+                          activities, and     │
+                          assesses inline     │
                                 │             │
-                          Learner submits     │
-                                │             │
-                          Activity Assessor ──┤ (writes courseKBUpdate back)
+                          [KB_UPDATE] ────────┤ (writes insights back)
+                          [PROFILE_UPDATE]    │
+                          [PROGRESS: 0-10]    │
                                 │             │
                    ┌────────────┴──────┐      │
                    │                   │      │
-              achieved: false    achieved: true
+              not achieved       achieved
                    │                   │
-              Next activity      Guide celebrates
-              (from enriched KB) Profile deep update
-                                 Course complete
+              Conversation       Coach celebrates
+              continues          Profile deep update (LLM)
+              (enriched KB)      Course complete
 
 Learner Profile ──── threads through every agent call as context
 ```
 
-- The **course KB** is the central data structure: initialized once, then enriched after every assessment with new insights and updated learner position.
-- The **Activity Creator** reads the enriched KB, so each activity is more precisely tuned to the learner.
-- The **Activity Assessor** writes back to the KB via `courseKBUpdate`, closing the learning loop.
-- The **learner profile** is passed as context to every agent call but updated separately (incrementally by code, deeply by LLM on completion).
+- The **course KB** is the central data structure: initialized once, then enriched after every Coach response via `[KB_UPDATE]` with new insights and updated learner position.
+- The **Coach** reads the enriched KB, so each coaching response and activity is more precisely tuned to the learner.
+- The **Coach** writes back to the KB via `[KB_UPDATE]`, closing the learning loop.
+- The **learner profile** is passed as context to every agent call but updated separately (via `[PROFILE_UPDATE]` from the Coach, and deeply by Learner Profile Owner LLM on completion).
 
 ## File structure
 
