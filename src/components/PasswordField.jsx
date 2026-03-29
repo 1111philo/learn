@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function PasswordField({ id, name, value, onChange, onKeyDown, placeholder, autoComplete, inputRef, required }) {
+export default function PasswordField({ id, name, value, onChange, onKeyDown, placeholder, autoComplete, inputRef, required, disabled }) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -16,6 +16,7 @@ export default function PasswordField({ id, name, value, onChange, onKeyDown, pl
         autoComplete={autoComplete || 'off'}
         ref={inputRef}
         required={required}
+        disabled={disabled}
       />
       <button
         type="button"

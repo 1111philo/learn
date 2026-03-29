@@ -1,21 +1,54 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, forwardRef } from 'react';
 
-export default function ChatArea({ children }) {
-  const ref = useRef(null);
-  const prevChildCount = useRef(0);
+const NEAR_BOTTOM_PX = 80;
+
+const ChatArea = forwardRef(function ChatArea({ children }, ref) {
+  const localRef = useRef(null);
+  const scrollRef = ref || localRef;
+  const programmaticScroll = useRef(false);
+  const nearBottomRef = useRef(true);
 
   useEffect(() => {
-    // Scroll to bottom when content changes
-    if (ref.current) {
-      requestAnimationFrame(() => {
-        if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-      });
+    const el = typeof scrollRef === 'function' ? null : scrollRef.current;
+    if (!el) return;
+
+    function isNearBottom() {
+      return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
     }
-  });
+
+    function scrollToBottom() {
+      programmaticScroll.current = true;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function handleScroll() {
+      // Ignore scroll events we triggered ourselves
+      if (programmaticScroll.current) {
+        programmaticScroll.current = false;
+        return;
+      }
+      nearBottomRef.current = isNearBottom();
+    }
+
+    // Watch for ANY DOM change inside the container (new nodes, text growth, etc.)
+    const observer = new MutationObserver(() => {
+      if (nearBottomRef.current) scrollToBottom();
+    });
+
+    observer.observe(el, { childList: true, subtree: true, characterData: true });
+    el.addEventListener('scroll', handleScroll);
+
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', handleScroll);
+    };
+  }, [scrollRef]);
 
   return (
-    <div className="chat" role="log" aria-label="Course conversation" ref={ref}>
+    <div className="chat" role="log" aria-label="Course conversation" ref={scrollRef}>
       {children}
     </div>
   );
-}
+});
+
+export default ChatArea;

@@ -20,35 +20,26 @@ export function queueProfileUpdate(fn) {
 function defaultProfile() {
   return {
     name: '', goal: '',
-    completedUnits: [], activeUnits: [],
+    masteredCourses: [], activeCourses: [],
     strengths: [], weaknesses: [],
-    revisionPatterns: '', pacing: '',
     preferences: {},
-    accessibilityNeeds: [], recurringSupport: [],
     createdAt: Date.now(), updatedAt: Date.now(),
   };
 }
 
 export function mergeProfile(existing, returned) {
   const merged = { ...existing };
-  for (const key of ['name', 'goal', 'revisionPatterns', 'pacing']) {
+  for (const key of ['name', 'goal']) {
     if (returned[key]) merged[key] = returned[key];
   }
-  for (const key of ['completedUnits', 'activeUnits', 'masteredCourses']) {
+  for (const key of ['masteredCourses', 'activeCourses']) {
     const combined = [...(existing[key] || []), ...(returned[key] || [])];
     merged[key] = [...new Set(combined)];
   }
-  for (const key of ['strengths', 'weaknesses', 'accessibilityNeeds', 'recurringSupport']) {
+  for (const key of ['strengths', 'weaknesses']) {
     merged[key] = (returned[key]?.length > 0) ? returned[key] : (existing[key] || []);
   }
   merged.preferences = { ...(existing.preferences || {}), ...(returned.preferences || {}) };
-  // Merge rubricProgress (per-course, per-criterion levels)
-  if (returned.rubricProgress) {
-    merged.rubricProgress = { ...(existing.rubricProgress || {}) };
-    for (const [courseId, criteria] of Object.entries(returned.rubricProgress)) {
-      merged.rubricProgress[courseId] = { ...(merged.rubricProgress[courseId] || {}), ...criteria };
-    }
-  }
   merged.createdAt = existing.createdAt || returned.createdAt;
   merged.updatedAt = returned.updatedAt || Date.now();
   return merged;
@@ -76,38 +67,41 @@ export async function ensureProfileExists(name = '') {
   return profile;
 }
 
-export function updateProfileInBackground(assessmentResult, unit, activity) {
+/**
+ * Incremental profile update after assessment (code, no LLM call).
+ */
+export function updateProfileInBackground(courseId, assessmentResult) {
   queueProfileUpdate(async () => {
     const profile = await ensureProfileExists();
-    const result = await orchestrator.updateLearnerProfile(profile, assessmentResult, {
-      courseName: unit.name, activityType: activity.type, activityGoal: activity.goal,
+    const updated = orchestrator.incrementalProfileUpdate(profile, courseId, assessmentResult);
+    await saveLearnerProfile(updated);
+    syncInBackground('profile');
+  });
+}
+
+/**
+ * Deep profile update on course completion (LLM call).
+ */
+export function updateProfileOnCompletionInBackground(courseKB, course) {
+  queueProfileUpdate(async () => {
+    const profile = await ensureProfileExists();
+    const result = await orchestrator.updateProfileOnCompletion(
+      profile, courseKB, course.name, course.courseId, courseKB.activitiesCompleted
+    );
+    await saveProfileResult(profile, result);
+  });
+}
+
+/**
+ * Profile update from a coach observation (LLM call).
+ */
+export function updateProfileFromObservation(courseKB, observation) {
+  queueProfileUpdate(async () => {
+    const profile = await ensureProfileExists();
+    const result = await orchestrator.updateProfileFromFeedback(profile, observation, {
+      courseName: courseKB.name || 'Course', activityType: 'coaching', activityGoal: 'Coach observation',
     });
     await saveProfileResult(profile, result);
   });
 }
 
-export function updateProfileFromFeedbackInBackground(feedbackText, unit, activity) {
-  queueProfileUpdate(async () => {
-    const profile = await ensureProfileExists();
-    const result = await orchestrator.updateProfileFromFeedback(profile, feedbackText, {
-      courseName: unit.name, activityType: activity.type, activityGoal: activity.goal,
-    });
-    await saveProfileResult(profile, result);
-  });
-}
-
-export function updateProfileOnSummativeAttemptInBackground(course, attempt) {
-  queueProfileUpdate(async () => {
-    const profile = await ensureProfileExists();
-    const result = await orchestrator.updateProfileOnSummativeAttempt(profile, course, attempt);
-    await saveProfileResult(profile, result);
-  });
-}
-
-export function updateProfileOnMasteryInBackground(course, finalResult, formativeSummaries) {
-  queueProfileUpdate(async () => {
-    const profile = await ensureProfileExists();
-    const result = await orchestrator.updateProfileOnMastery(profile, course, finalResult, formativeSummaries);
-    await saveProfileResult(profile, result);
-  });
-}

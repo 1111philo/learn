@@ -2,8 +2,8 @@ import { useModal } from '../../contexts/ModalContext.jsx';
 import { useApp } from '../../contexts/AppContext.jsx';
 import LoginModal from '../../components/modals/LoginModal.jsx';
 import ConfirmModal from '../../components/modals/ConfirmModal.jsx';
-import { getPreferences, getAllProgress } from '../../../js/storage.js';
-import { loadCourses, flattenCourses } from '../../../js/courses.js';
+import { getPreferences } from '../../../js/storage.js';
+import { loadCourses } from '../../../js/courseOwner.js';
 import * as auth from '../../../js/auth.js';
 
 export default function WelcomeStep({ data, updateData, goTo }) {
@@ -14,13 +14,11 @@ export default function WelcomeStep({ data, updateData, goTo }) {
     showModal(
       <LoginModal onSuccess={async () => {
         const prefs = await getPreferences();
-        const courseGroups = await loadCourses();
-        const units = flattenCourses(courseGroups);
-        const allProgress = await getAllProgress();
-        dispatch({ type: 'INIT_DATA', payload: { preferences: prefs, courseGroups, units, allProgress } });
+        const courses = await loadCourses();
+        dispatch({ type: 'INIT_DATA', payload: { preferences: prefs, courses } });
         const authUser = await auth.getCurrentUser();
         updateData({ name: authUser?.name || prefs?.name || '' });
-        goTo('about');
+        goTo('name');
       }} />
     );
   };

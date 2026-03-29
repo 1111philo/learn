@@ -60,8 +60,7 @@ export default function AppShell({ children }) {
 
   const navTo = (path) => navigate(path);
   const currentNav = (path) => {
-    if (path === '/courses') return location.pathname === '/courses' || location.pathname.startsWith('/unit') || location.pathname.startsWith('/courses/');
-    if (path === '/work') return location.pathname.startsWith('/work');
+    if (path === '/courses') return location.pathname === '/courses' || location.pathname.startsWith('/courses/');
     return location.pathname === path;
   };
 
@@ -104,7 +103,6 @@ export default function AppShell({ children }) {
       {!isOnboarding && (
         <nav aria-label="Main navigation">
           <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
-          <button onClick={() => navTo('/work')} aria-current={currentNav('/work') ? 'page' : 'false'}>Work</button>
           <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
         </nav>
       )}

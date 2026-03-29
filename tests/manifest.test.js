@@ -29,7 +29,7 @@ describe('manifest.json', () => {
 
   it('has required permissions', () => {
     assert.ok(Array.isArray(manifest.permissions));
-    const required = ['sidePanel', 'storage', 'activeTab'];
+    const required = ['sidePanel', 'storage'];
     for (const perm of required) {
       assert.ok(manifest.permissions.includes(perm), `Missing permission: ${perm}`);
     }

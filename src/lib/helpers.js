@@ -21,6 +21,9 @@ export function renderMd(text) {
   );
   escaped = linkify(escaped);
   escaped = escaped.replace(/\n/g, '<br>');
+  // Clean up <br> tags adjacent to block-level list elements
+  escaped = escaped.replace(/<br>(<\/?[uo]l>)/g, '$1');
+  escaped = escaped.replace(/(<\/?[uo]l>)<br>/g, '$1');
   return escaped;
 }
 
@@ -30,14 +33,4 @@ export function linkify(escaped) {
     /https?:\/\/[^\s<>"']+/g,
     (url) => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`
   );
-}
-
-/** Human-readable duration. */
-export function formatDuration(ms) {
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return `${mins} min${mins !== 1 ? 's' : ''}`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} hr${hrs !== 1 ? 's' : ''}`;
-  const days = Math.round(hrs / 24);
-  return `${days} day${days !== 1 ? 's' : ''}`;
 }

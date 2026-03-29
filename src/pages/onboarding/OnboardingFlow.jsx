@@ -6,34 +6,40 @@ import OnboardingCanvas from '../../components/OnboardingCanvas.jsx';
 import WelcomeStep from './WelcomeStep.jsx';
 import NameStep from './NameStep.jsx';
 import ApiKeyStep from './ApiKeyStep.jsx';
-import AboutYouStep from './AboutYouStep.jsx';
 import {
-  getOnboardingState, saveOnboardingState, clearOnboardingState,
   saveOnboardingComplete, savePreferences,
 } from '../../../js/storage.js';
 import { syncInBackground } from '../../lib/syncDebounce.js';
+import { ensureProfileExists } from '../../lib/profileQueue.js';
 
 export default function OnboardingFlow() {
   const navigate = useNavigate();
-  const { loggedIn } = useAuth();
+  const { loggedIn, user } = useAuth();
   const { state, dispatch } = useApp();
-  const [step, setStep] = useState(loggedIn ? 'about' : 'welcome');
-  const [data, setData] = useState({ name: state.preferences?.name || '', messages: [], profileDone: false });
+  const [step, setStep] = useState(loggedIn ? null : 'welcome');
+  const [data, setData] = useState({ name: state.preferences?.name || '' });
 
-  // Restore conversation state on mount
+  // Logged-in users skip onboarding entirely — name comes from the service
   useEffect(() => {
-    (async () => {
-      const saved = await getOnboardingState();
-      if (saved) setData(prev => ({ ...prev, ...saved }));
-    })();
-  }, []);
+    if (loggedIn) {
+      (async () => {
+        const name = user?.name || state.preferences?.name || '';
+        if (name) {
+          const prefs = { ...state.preferences, name };
+          await savePreferences(prefs);
+          dispatch({ type: 'SET_PREFERENCES', preferences: prefs });
+          syncInBackground('preferences');
+        }
+        await ensureProfileExists(name);
+        await saveOnboardingComplete();
+        syncInBackground('onboardingComplete');
+        navigate('/courses', { replace: true });
+      })();
+    }
+  }, [loggedIn]);
 
   const updateData = (updates) => {
-    setData(prev => {
-      const next = { ...prev, ...updates };
-      saveOnboardingState({ name: next.name, messages: next.messages, profileDone: next.profileDone });
-      return next;
-    });
+    setData(prev => ({ ...prev, ...updates }));
   };
 
   const complete = async () => {
@@ -41,10 +47,25 @@ export default function OnboardingFlow() {
     await savePreferences(prefs);
     dispatch({ type: 'SET_PREFERENCES', preferences: prefs });
     syncInBackground('preferences');
+    await ensureProfileExists(data.name);
     await saveOnboardingComplete();
-    await clearOnboardingState();
+    syncInBackground('onboardingComplete');
     navigate('/courses', { replace: true });
   };
+
+  // Logged-in users see nothing (redirect happens in useEffect)
+  if (loggedIn) {
+    return (
+      <div className="onboarding-backdrop">
+        <OnboardingCanvas />
+        <div className="onboarding-card">
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <span className="loading-spinner-inline" aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const showLogo = step === 'welcome';
 
@@ -57,10 +78,7 @@ export default function OnboardingFlow() {
       content = <NameStep data={data} updateData={updateData} goTo={setStep} />;
       break;
     case 'apikey':
-      content = <ApiKeyStep data={data} updateData={updateData} goTo={setStep} />;
-      break;
-    case 'about':
-      content = <AboutYouStep data={data} updateData={updateData} onComplete={complete} />;
+      content = <ApiKeyStep data={data} updateData={updateData} goTo={setStep} onComplete={complete} />;
       break;
     default:
       content = <WelcomeStep data={data} updateData={updateData} goTo={setStep} />;
