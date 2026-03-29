@@ -38,12 +38,15 @@ jobs:
           BASE_VERSION=$(echo "$CURRENT_VERSION" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
           echo "current_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Find the last non-RC release tag, or use the initial commit
+          # Find the highest non-RC release tag
           LAST_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -v '\-RC' | head -1 || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"%h %s" HEAD)
-          else
+          if [ -n "$LAST_TAG" ]; then
+            HIGHEST_VERSION=$(echo "$LAST_TAG" | sed 's/^v//')
+            echo "highest_version=$HIGHEST_VERSION" >> "$GITHUB_OUTPUT"
             COMMITS=$(git log --pretty=format:"%h %s" "${LAST_TAG}..HEAD")
+          else
+            echo "highest_version=0.0.0" >> "$GITHUB_OUTPUT"
+            COMMITS=$(git log --pretty=format:"%h %s" HEAD)
           fi
 
           # Skip if no new commits since last tag
@@ -63,11 +66,13 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CURRENT_VERSION: ${{ steps.context.outputs.current_version }}
+          HIGHEST_VERSION: ${{ steps.context.outputs.highest_version }}
         run: |
           python3 << 'PYEOF'
           import json, os, urllib.request
 
           version = os.environ["CURRENT_VERSION"]
+          highest = os.environ["HIGHEST_VERSION"]
           api_key = os.environ["ANTHROPIC_API_KEY"]
 
           with open("/tmp/commits.txt") as f:
@@ -75,13 +80,14 @@ jobs:
 
           prompt = f"""You are a release manager for a Chrome extension called "1111 Learn".
 
-          Current version: {version}
+          Current version in manifest: {version}
+          Highest published version: {highest}
           The extension uses semantic versioning (MAJOR.MINOR.PATCH):
           - PATCH: bug fixes, copy changes, small tweaks
           - MINOR: new features, significant UI changes, new agent behaviors
           - MAJOR: breaking changes, major rewrites, architecture overhauls
 
-          Chrome Web Store requires that each new version number is strictly greater than the previous one.
+          CRITICAL: The new version MUST be strictly greater than {highest}. Chrome Web Store rejects versions that are not higher than the last published version.
 
           Here are the commits since the last release:
           {commits}
@@ -129,7 +135,17 @@ jobs:
           new_version = result["version"]
           release_notes = result["release_notes"]
 
-          print(f"Claude chose version: {new_version}")
+          # Enforce: new version must be strictly greater than highest published
+          def version_tuple(v):
+              return tuple(int(x) for x in v.split('.'))
+
+          if version_tuple(new_version) <= version_tuple(highest):
+              # Auto-fix: bump patch of highest version
+              h = version_tuple(highest)
+              new_version = f"{h[0]}.{h[1]}.{h[2] + 1}"
+              print(f"Claude chose {result['version']} which is not greater than {highest}. Auto-fixed to {new_version}")
+
+          print(f"Final version: {new_version}")
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"new_version={new_version}\n")
