@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "1111 Learn",
-  "version": "1.1.0.61",
+  "version": "1.1.0",
   "description": "An agentic learning app by 11:11 Philosopher's Group.",
   "permissions": [
     "sidePanel",
     "storage",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "activeTab",
+    "tabs"
   ],
   "icons": {
     "16": "assets/icon-16.png",
@@ -21,11 +23,13 @@
     "https://api.anthropic.com/*",
     "https://learn.philosophers.group/*"
   ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
-  },
-  "version_name": "1.1.0-RC61"
+  }
 }
