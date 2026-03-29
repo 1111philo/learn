@@ -1,6 +1,6 @@
 /**
  * Thin fetch wrappers for AI model calls.
- * Supports direct Anthropic API and proxy endpoints (e.g. Bedrock via learn-service).
+ * Supports direct Anthropic API and learn-service proxy.
  */
 
 export const MODEL_LIGHT = 'claude-haiku-4-5-20251001';
@@ -8,7 +8,6 @@ export const MODEL_HEAVY = 'claude-sonnet-4-6';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const TIMEOUT_MS = 60000;
-const PROXY_TIMEOUT_MS = 90000;
 
 export class ApiError extends Error {
   constructor(type, message, status) {
@@ -20,7 +19,7 @@ export class ApiError extends Error {
 }
 
 /**
- * Parse a Messages API response (shared by callClaude and callProxy).
+ * Parse a Messages API response.
  * Expects a fetch Response object. Returns { content, usage }.
  */
 export async function parseResponse(resp) {
@@ -181,31 +180,3 @@ async function* parseSSEStream(body, onDone) {
   }
 }
 
-export async function callProxy({ url, headers = {}, model, systemPrompt, messages, maxTokens = 1024 }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
-
-  let resp;
-  try {
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages
-      }),
-      signal: controller.signal
-    });
-  } catch (e) {
-    clearTimeout(timer);
-    if (e.name === 'AbortError') {
-      throw new ApiError('network', 'Request timed out. The proxy may be slow or unreachable.');
-    }
-    throw new ApiError('network', 'Network error. Check your connection.');
-  }
-  clearTimeout(timer);
-
-  return parseResponse(resp);
-}

@@ -47,12 +47,12 @@ export default function ResponseModal({ onSubmit }) {
 
   return (
     <>
-      <h2>Submit Work</h2>
+      <h2>Complete Activity</h2>
 
       {/* Text area — on top */}
       <textarea
         ref={inputRef}
-        className="chat-input"
+        className="modal-textarea"
         rows={3}
         placeholder="Write your response..."
         value={text}
@@ -61,7 +61,6 @@ export default function ResponseModal({ onSubmit }) {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
           if (e.key === 'Escape') hide();
         }}
-        style={{ minHeight: '80px', maxHeight: '160px', marginBottom: '8px' }}
         autoFocus
       />
 

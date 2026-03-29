@@ -1,6 +1,6 @@
 import { renderMd, linkify, esc } from '../../lib/helpers.js';
 
-export default function InstructionMessage({ text, rubricCriteria }) {
+export default function InstructionMessage({ text, tips, activityNumber }) {
   if (!text) return null;
 
   // Split into intro + numbered steps
@@ -23,16 +23,9 @@ export default function InstructionMessage({ text, rubricCriteria }) {
 
   return (
     <div className="msg msg-response instruction-msg">
-      {rubricCriteria?.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
-          {rubricCriteria.map((c, i) => (
-            <span key={i} style={{
-              fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px',
-              background: 'var(--color-primary-light, #e8f0fe)', color: 'var(--color-primary, #1a73e8)',
-            }}>
-              {c}
-            </span>
-          ))}
+      {activityNumber && (
+        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>
+          Activity {activityNumber}
         </div>
       )}
       {intro.length > 0 && (
@@ -44,6 +37,12 @@ export default function InstructionMessage({ text, rubricCriteria }) {
             <li key={i} dangerouslySetInnerHTML={{ __html: linkify(esc(step)) }} />
           ))}
         </ol>
+      )}
+      {tips?.length > 0 && (
+        <details className="feedback-details" style={{ marginTop: '6px' }}>
+          <summary>Tips</summary>
+          <ul>{tips.map((tip, i) => <li key={i}>{tip}</li>)}</ul>
+        </details>
       )}
     </div>
   );

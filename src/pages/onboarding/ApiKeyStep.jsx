@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import PasswordField from '../../components/PasswordField.jsx';
 import { getApiKey, saveApiKey } from '../../../js/storage.js';
 
-export default function ApiKeyStep({ data, updateData, goTo }) {
+export default function ApiKeyStep({ data, updateData, goTo, onComplete }) {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef(null);
@@ -26,12 +26,13 @@ export default function ApiKeyStep({ data, updateData, goTo }) {
       return;
     }
     if (raw !== PLACEHOLDER) await saveApiKey(actual);
-    goTo('about');
+    if (onComplete) onComplete();
+    else goTo('name');
   };
 
   return (
     <div className="onboarding">
-      <span className="onboarding-step-label">Step 2 of 3 — Connect AI</span>
+      <span className="onboarding-step-label">Step 2 of 2 — Connect AI</span>
       <h2>Connect your AI.</h2>
       <p className="onboarding-lead">
         Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to get started — your key stays on your device.

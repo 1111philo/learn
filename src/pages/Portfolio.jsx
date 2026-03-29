@@ -1,49 +1,43 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
-import { getSummative, getSummativeAttempts, getJourney, getCoursePhase } from '../../js/storage.js';
-import { COURSE_PHASES } from '../lib/constants.js';
+import { getCourseKB, getDrafts } from '../../js/storage.js';
 
 export default function Portfolio() {
   const { state } = useApp();
   const navigate = useNavigate();
-  const { courseGroups, allProgress } = state;
+  const { courses } = state;
   const [courseWork, setCourseWork] = useState([]);
 
   useEffect(() => {
     (async () => {
       const work = [];
-      for (const cg of courseGroups) {
-        const phase = await getCoursePhase(cg.courseId);
-        if (!phase) continue; // no work started
+      for (const c of courses) {
+        const kb = await getCourseKB(c.courseId);
+        if (!kb) continue;
 
-        const summative = await getSummative(cg.courseId);
-        const attempts = await getSummativeAttempts(cg.courseId);
-        const journey = await getJourney(cg.courseId);
+        const drafts = await getDrafts(c.courseId);
+        const isComplete = kb.status === 'completed';
 
-        // Count formative drafts across all units
-        let draftCount = 0;
-        for (const ju of journey?.plan?.units || []) {
-          const p = allProgress[ju.unitId];
-          draftCount += p?.drafts?.length || 0;
-        }
-
-        const isMastered = phase === COURSE_PHASES.COMPLETED;
-        const workProductName = journey?.plan?.workProductDescription || summative?.exemplar?.slice(0, 40) || cg.name;
+        // Count screenshots vs text submissions
+        const screenshots = drafts.filter(d => d.screenshotKey).length;
+        const textResponses = drafts.filter(d => d.textResponse).length;
 
         work.push({
-          courseId: cg.courseId,
-          courseName: cg.name,
-          workProductName,
-          phase,
-          isMastered,
-          attemptCount: attempts.length,
-          draftCount: draftCount + attempts.length, // summative + formative captures
+          courseId: c.courseId,
+          courseName: c.name,
+          exemplar: kb.exemplar,
+          isComplete,
+          activitiesCompleted: kb.activitiesCompleted || 0,
+          learnerPosition: kb.learnerPosition,
+          totalSubmissions: drafts.length,
+          screenshots,
+          textResponses,
         });
       }
       setCourseWork(work);
     })();
-  }, [courseGroups, allProgress]);
+  }, [courses]);
 
   return (
     <>
@@ -56,9 +50,17 @@ export default function Portfolio() {
             <li key={cw.courseId} style={{ animationDelay: `${(i + 1) * 0.04}s` }}>
               <button className="work-card" onClick={() => navigate(`/work/${cw.courseId}`)}>
                 <strong className="work-card-title">{cw.courseName}</strong>
+                <div className="work-card-status">
+                  {cw.isComplete
+                    ? <span className="work-badge work-badge-complete">Completed</span>
+                    : <span className="work-badge">In progress</span>
+                  }
+                </div>
+                <p className="work-card-position">{cw.learnerPosition}</p>
                 <div className="work-card-stats">
-                  <span>{cw.isMastered ? 'Mastery achieved' : 'In progress'}</span>
-                  <span>{cw.draftCount} capture{cw.draftCount !== 1 ? 's' : ''}</span>
+                  <span>{cw.totalSubmissions} submission{cw.totalSubmissions !== 1 ? 's' : ''}</span>
+                  {cw.screenshots > 0 && <span>{cw.screenshots} screenshot{cw.screenshots !== 1 ? 's' : ''}</span>}
+                  {cw.textResponses > 0 && <span>{cw.textResponses} response{cw.textResponses !== 1 ? 's' : ''}</span>}
                 </div>
               </button>
             </li>

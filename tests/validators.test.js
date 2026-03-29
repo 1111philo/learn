@@ -4,10 +4,7 @@ import {
   validateSafety,
   validateActivity,
   validateAssessment,
-  validateSummative,
-  validateSummativeAssessment,
-  validateGapAnalysis,
-  validateJourney,
+  validateCourseKB,
 } from '../js/validators.js';
 
 // -- Helpers ------------------------------------------------------------------
@@ -22,86 +19,30 @@ function validActivity(overrides = {}) {
 
 function validAssessment(overrides = {}) {
   return {
-    score: 0.8,
-    recommendation: 'advance',
-    feedback: 'Great work on this activity.',
+    achieved: false,
+    demonstrates: 'Shows understanding of basic concepts.',
     strengths: ['Clear writing'],
-    improvements: ['Add more detail'],
-    ...overrides,
-  };
-}
-
-function validSummative(overrides = {}) {
-  return {
-    courseIntro: 'This course covers professional portfolio development. You will take an assessment first, learn from your results, then retake to show mastery.',
-    summaryForLearner: 'You will build a professional portfolio page in Google Docs. Mastery means clear structure, professional voice, and effective tool usage.',
-    task: {
-      steps: [
-        { instruction: 'Create a professional portfolio page in Google Docs.' },
-        { instruction: 'Add a header with your name and professional summary.' },
-      ],
+    moved: null,
+    needed: 'Connect personal values to professional context.',
+    courseKBUpdate: {
+      insights: ['Strong reflective writing but stays personal'],
+      learnerPosition: 'Beginner — strong writer, needs professional framing.',
     },
-    rubric: [
-      {
-        name: 'Professional communication',
-        levels: {
-          incomplete: 'No clear structure',
-          approaching: 'Basic structure present',
-          meets: 'Clear, professional structure',
-          exceeds: 'Exceptional communication with consistent voice',
-        },
-      },
-      {
-        name: 'Technical proficiency',
-        levels: {
-          incomplete: 'Unable to use the tool',
-          approaching: 'Basic tool usage',
-          meets: 'Effective tool usage',
-          exceeds: 'Advanced tool usage with creative solutions',
-        },
-      },
-    ],
-    exemplar: 'A well-structured portfolio page with clear headings, professional summary, and organized sections.',
     ...overrides,
   };
 }
 
-function validSummativeAssessment(overrides = {}) {
+function validCourseKB(overrides = {}) {
   return {
-    criteriaScores: [
-      { criterion: 'Professional communication', level: 'meets', score: 0.75, feedback: 'Good structure.' },
-      { criterion: 'Technical proficiency', level: 'approaching', score: 0.5, feedback: 'Needs more practice.' },
+    exemplar: 'A professional portfolio published on WordPress...',
+    objectives: [
+      { objective: 'Can identify interests and values', evidence: 'Written reflection connecting values to professional context' },
+      { objective: 'Can launch WordPress Playground', evidence: 'Published post on Playground instance' },
     ],
-    overallScore: 0.625,
-    mastery: false,
-    feedback: 'Good progress, keep working on technical skills.',
-    nextSteps: ['Practice formatting', 'Review examples'],
-    summaryForLearner: 'Good start with your portfolio structure. Your professional summary needs more detail, and the formatting could be more polished.',
-    ...overrides,
-  };
-}
-
-function validGapAnalysis(overrides = {}) {
-  return {
-    gaps: [
-      { criterion: 'Technical proficiency', currentLevel: 'approaching', targetLevel: 'meets', priority: 'high' },
-      { criterion: 'Professional communication', currentLevel: 'meets', targetLevel: 'exceeds', priority: 'medium' },
-    ],
-    ...overrides,
-  };
-}
-
-function validJourney(overrides = {}) {
-  return {
-    units: [
-      {
-        unitId: 'foundations-0-basic-wordpress',
-        activities: [
-          { type: 'explore', goal: 'Research portfolio layouts', rubricCriteria: ['Technical proficiency'] },
-          { type: 'create', goal: 'Build a draft portfolio', rubricCriteria: ['Professional communication', 'Technical proficiency'] },
-        ],
-      },
-    ],
+    learnerPosition: 'New learner, no activities completed yet.',
+    insights: [],
+    activitiesCompleted: 0,
+    status: 'active',
     ...overrides,
   };
 }
@@ -123,14 +64,14 @@ describe('validateSafety', () => {
 // -- validateActivity ---------------------------------------------------------
 
 describe('validateActivity', () => {
-  it('accepts a valid screenshot-format activity', () => {
+  it('accepts a valid activity ending with Capture', () => {
     assert.equal(validateActivity(validActivity()), null);
   });
 
-  it('accepts a valid text-format activity', () => {
+  it('accepts a valid activity ending with Submit', () => {
     assert.equal(validateActivity(validActivity({
       instruction: '1. Write a short paragraph about your goals\n2. Hit Submit to submit your response.',
-    }), { format: 'text' }), null);
+    })), null);
   });
 
   it('rejects missing instruction', () => {
@@ -141,16 +82,10 @@ describe('validateActivity', () => {
     assert.ok(validateActivity(validActivity({ tips: 'nope' })));
   });
 
-  it('rejects screenshot activity not ending with Capture', () => {
-    assert.ok(validateActivity(validActivity({
-      instruction: '1. Write something\n2. Submit your work.',
-    })));
-  });
-
-  it('rejects text activity not ending with Submit', () => {
-    assert.ok(validateActivity(validActivity({
-      instruction: '1. Write something\n2. Hit Capture to capture your screen.',
-    }), { format: 'text' }));
+  it('accepts activity with any closing step', () => {
+    assert.equal(validateActivity(validActivity({
+      instruction: '1. Write a short paragraph about your goals\n2. Share your response.',
+    })), null);
   });
 
   it('rejects too many steps (>5 total)', () => {
@@ -209,233 +144,93 @@ describe('validateAssessment', () => {
     assert.equal(validateAssessment(validAssessment()), null);
   });
 
-  it('rejects score below 0', () => {
-    assert.ok(validateAssessment(validAssessment({ score: -0.1 })));
+  it('rejects non-boolean achieved', () => {
+    assert.ok(validateAssessment(validAssessment({ achieved: 1 })));
   });
 
-  it('rejects score above 1', () => {
-    assert.ok(validateAssessment(validAssessment({ score: 1.1 })));
-  });
-
-  it('rejects non-number score', () => {
-    assert.ok(validateAssessment(validAssessment({ score: '0.5' })));
-  });
-
-  it('rejects invalid recommendation', () => {
-    assert.ok(validateAssessment(validAssessment({ recommendation: 'skip' })));
-  });
-
-  it('accepts all valid recommendations', () => {
-    for (const rec of ['advance', 'revise', 'continue']) {
-      assert.equal(validateAssessment(validAssessment({ recommendation: rec })), null);
-    }
-  });
-
-  it('rejects missing feedback', () => {
-    assert.ok(validateAssessment(validAssessment({ feedback: null })));
+  it('rejects missing demonstrates', () => {
+    assert.ok(validateAssessment(validAssessment({ demonstrates: '' })));
   });
 
   it('rejects missing strengths array', () => {
     assert.ok(validateAssessment(validAssessment({ strengths: 'good' })));
   });
 
-  it('rejects missing improvements array', () => {
-    assert.ok(validateAssessment(validAssessment({ improvements: 'more' })));
+  it('rejects missing moved', () => {
+    const a = validAssessment();
+    delete a.moved;
+    assert.ok(validateAssessment(a));
   });
 
-  it('rejects unsafe content in feedback', () => {
-    assert.ok(validateAssessment(validAssessment({ feedback: 'kill yourself for this work' })));
-  });
-});
-
-// -- validateSummative --------------------------------------------------------
-
-describe('validateSummative', () => {
-  it('accepts a valid summative', () => {
-    assert.equal(validateSummative(validSummative()), null);
+  it('accepts null moved (first activity)', () => {
+    assert.equal(validateAssessment(validAssessment({ moved: null })), null);
   });
 
-  it('rejects missing task', () => {
-    assert.ok(validateSummative(validSummative({ task: null })));
+  it('rejects missing needed', () => {
+    assert.ok(validateAssessment(validAssessment({ needed: '' })));
   });
 
-  it('rejects task with empty steps', () => {
-    assert.ok(validateSummative(validSummative({ task: { steps: [] } })));
+  it('rejects missing courseKBUpdate', () => {
+    assert.ok(validateAssessment(validAssessment({ courseKBUpdate: null })));
   });
 
-  it('rejects step missing instruction', () => {
-    assert.ok(validateSummative(validSummative({
-      task: { steps: [{ instruction: 'Good' }, {}] },
+  it('rejects missing courseKBUpdate.insights', () => {
+    assert.ok(validateAssessment(validAssessment({
+      courseKBUpdate: { insights: 'not array', learnerPosition: 'ok' },
     })));
   });
 
-  it('rejects empty rubric', () => {
-    assert.ok(validateSummative(validSummative({ rubric: [] })));
+  it('rejects missing courseKBUpdate.learnerPosition', () => {
+    assert.ok(validateAssessment(validAssessment({
+      courseKBUpdate: { insights: [], learnerPosition: '' },
+    })));
   });
 
-  it('rejects rubric criterion missing name', () => {
-    const s = validSummative();
-    s.rubric[0].name = '';
-    assert.ok(validateSummative(s));
+  it('rejects unsafe content', () => {
+    assert.ok(validateAssessment(validAssessment({
+      demonstrates: 'kill yourself for this work',
+    })));
   });
+});
 
-  it('rejects rubric criterion missing a level', () => {
-    const s = validSummative();
-    delete s.rubric[0].levels.exceeds;
-    assert.ok(validateSummative(s));
+// -- validateCourseKB ---------------------------------------------------------
+
+describe('validateCourseKB', () => {
+  it('accepts a valid course KB', () => {
+    assert.equal(validateCourseKB(validCourseKB()), null);
   });
 
   it('rejects missing exemplar', () => {
-    assert.ok(validateSummative(validSummative({ exemplar: '' })));
+    assert.ok(validateCourseKB(validCourseKB({ exemplar: '' })));
   });
 
-  it('rejects missing courseIntro', () => {
-    assert.ok(validateSummative(validSummative({ courseIntro: '' })));
+  it('rejects empty objectives', () => {
+    assert.ok(validateCourseKB(validCourseKB({ objectives: [] })));
   });
 
-  it('rejects missing summaryForLearner', () => {
-    assert.ok(validateSummative(validSummative({ summaryForLearner: '' })));
+  it('rejects objective missing evidence', () => {
+    assert.ok(validateCourseKB(validCourseKB({
+      objectives: [{ objective: 'Can do X', evidence: '' }],
+    })));
+  });
+
+  it('rejects missing learnerPosition', () => {
+    assert.ok(validateCourseKB(validCourseKB({ learnerPosition: '' })));
+  });
+
+  it('rejects missing insights array', () => {
+    assert.ok(validateCourseKB(validCourseKB({ insights: 'not array' })));
+  });
+
+  it('rejects missing activitiesCompleted', () => {
+    assert.ok(validateCourseKB(validCourseKB({ activitiesCompleted: 'zero' })));
+  });
+
+  it('rejects missing status', () => {
+    assert.ok(validateCourseKB(validCourseKB({ status: '' })));
   });
 
   it('rejects unsafe content in exemplar', () => {
-    assert.ok(validateSummative(validSummative({ exemplar: 'how to hack a database' })));
-  });
-});
-
-// -- validateSummativeAssessment ----------------------------------------------
-
-describe('validateSummativeAssessment', () => {
-  it('accepts a valid summative assessment', () => {
-    assert.equal(validateSummativeAssessment(validSummativeAssessment()), null);
-  });
-
-  it('rejects empty criteriaScores', () => {
-    assert.ok(validateSummativeAssessment(validSummativeAssessment({ criteriaScores: [] })));
-  });
-
-  it('rejects criterion with invalid level', () => {
-    const a = validSummativeAssessment();
-    a.criteriaScores[0].level = 'expert';
-    assert.ok(validateSummativeAssessment(a));
-  });
-
-  it('rejects criterion score out of range', () => {
-    const a = validSummativeAssessment();
-    a.criteriaScores[0].score = 1.5;
-    assert.ok(validateSummativeAssessment(a));
-  });
-
-  it('rejects overallScore out of range', () => {
-    assert.ok(validateSummativeAssessment(validSummativeAssessment({ overallScore: -0.1 })));
-  });
-
-  it('rejects non-boolean mastery', () => {
-    assert.ok(validateSummativeAssessment(validSummativeAssessment({ mastery: 1 })));
-  });
-
-  it('rejects missing feedback', () => {
-    assert.ok(validateSummativeAssessment(validSummativeAssessment({ feedback: '' })));
-  });
-
-  it('rejects missing summaryForLearner', () => {
-    assert.ok(validateSummativeAssessment(validSummativeAssessment({ summaryForLearner: '' })));
-  });
-
-  it('enforces ratchet rule — rejects lower score than prior attempt', () => {
-    const priorAttempt = {
-      criteriaScores: [
-        { criterion: 'Professional communication', score: 0.8 },
-        { criterion: 'Technical proficiency', score: 0.5 },
-      ],
-    };
-    const current = validSummativeAssessment();
-    current.criteriaScores[0].score = 0.7; // lower than prior 0.8
-    assert.ok(validateSummativeAssessment(current, priorAttempt));
-  });
-
-  it('allows equal or higher scores with prior attempt', () => {
-    const priorAttempt = {
-      criteriaScores: [
-        { criterion: 'Professional communication', score: 0.7 },
-        { criterion: 'Technical proficiency', score: 0.4 },
-      ],
-    };
-    assert.equal(validateSummativeAssessment(validSummativeAssessment(), priorAttempt), null);
-  });
-
-  it('passes with no prior attempt', () => {
-    assert.equal(validateSummativeAssessment(validSummativeAssessment(), null), null);
-  });
-});
-
-// -- validateGapAnalysis ------------------------------------------------------
-
-describe('validateGapAnalysis', () => {
-  it('accepts a valid gap analysis', () => {
-    assert.equal(validateGapAnalysis(validGapAnalysis()), null);
-  });
-
-  it('rejects empty gaps', () => {
-    assert.ok(validateGapAnalysis({ gaps: [] }));
-  });
-
-  it('rejects gap missing criterion', () => {
-    const g = validGapAnalysis();
-    g.gaps[0].criterion = '';
-    assert.ok(validateGapAnalysis(g));
-  });
-
-  it('rejects invalid currentLevel', () => {
-    const g = validGapAnalysis();
-    g.gaps[0].currentLevel = 'expert';
-    assert.ok(validateGapAnalysis(g));
-  });
-
-  it('rejects invalid priority', () => {
-    const g = validGapAnalysis();
-    g.gaps[0].priority = 'critical';
-    assert.ok(validateGapAnalysis(g));
-  });
-});
-
-// -- validateJourney ----------------------------------------------------------
-
-describe('validateJourney', () => {
-  it('accepts a valid journey', () => {
-    assert.equal(validateJourney(validJourney()), null);
-  });
-
-  it('rejects empty units', () => {
-    assert.ok(validateJourney({ units: [] }));
-  });
-
-  it('rejects unit missing unitId', () => {
-    const j = validJourney();
-    j.units[0].unitId = '';
-    assert.ok(validateJourney(j));
-  });
-
-  it('rejects unit with no activities', () => {
-    const j = validJourney();
-    j.units[0].activities = [];
-    assert.ok(validateJourney(j));
-  });
-
-  it('rejects activity missing type', () => {
-    const j = validJourney();
-    delete j.units[0].activities[0].type;
-    assert.ok(validateJourney(j));
-  });
-
-  it('rejects activity missing goal', () => {
-    const j = validJourney();
-    delete j.units[0].activities[0].goal;
-    assert.ok(validateJourney(j));
-  });
-
-  it('rejects activity with empty rubricCriteria', () => {
-    const j = validJourney();
-    j.units[0].activities[0].rubricCriteria = [];
-    assert.ok(validateJourney(j));
+    assert.ok(validateCourseKB(validCourseKB({ exemplar: 'how to hack a database' })));
   });
 });

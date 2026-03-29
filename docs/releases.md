@@ -63,16 +63,23 @@ See [Chrome Web Store API docs](https://developer.chrome.com/docs/webstore/using
 | `https://api.anthropic.com/*` | Claude API calls with the user's own key |
 | `https://learn.philosophers.group/*` | Cloud sync and authentication (optional) |
 
-## Course JSON structure
+## Course prompt format
 
-Each course in `data/courses.json` has a `courseId`, `name`, `description`, and a `units` array. Each unit has:
+Courses are defined as markdown files in `data/courses/` (e.g., `foundations.md`). Each file follows this structure:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `unitId` | `string` | Unique identifier |
-| `name` | `string` | Display title |
-| `description` | `string` | One sentence explaining why the learner benefits |
-| `dependsOn` | `string?` | Optional prerequisite unit ID |
-| `format` | `"text" \| "screenshot"` | How learners submit work for this unit |
-| `exemplar` | `string` | Description of mastery-level outcome (example, not content to copy) |
-| `learningObjectives` | `string[]` | Outcome statements the unit achieves |
+```markdown
+# Course Title
+
+One-line course description.
+
+## Exemplar
+A description of what the mastery-level outcome looks like.
+Multiple lines are fine.
+
+## Learning Objectives
+- Can do X
+- Can explain Y
+- Can identify Z
+```
+
+To add a new course, create a `.md` file in `data/courses/` and add its ID (filename without extension) to the `courseFiles` array in [`js/courseOwner.js`](../js/courseOwner.js).

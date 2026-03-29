@@ -9,26 +9,33 @@ import {
   getLearnerProfile, saveLearnerProfile,
   getLearnerProfileSummary, saveLearnerProfileSummary,
   getPreferences, savePreferences,
-  getWorkProducts,
-  getUnitProgress, saveUnitProgress, getAllProgress,
+  getOnboardingComplete, saveOnboardingComplete,
+  getWorkProducts, saveWorkProduct, deleteWorkProducts,
+  getCourseKB, saveCourseKB, deleteCourseKB,
+  getActivities, saveActivity, deleteActivitiesForCourse,
+  getActivityKBsForCourse, saveActivityKB, deleteActivityKBsForCourse,
+  getDrafts, saveDraft, deleteDraftsForCourse,
+  getCourseMessages, saveCourseMessages, clearCourseMessages,
   deleteProfile, deleteProfileSummary, deletePreferences,
-  deleteWorkProducts, deleteUnitProgress,
-  getSummative, saveSummative,
-  getSummativeAttempts, saveSummativeAttempt,
-  getGapAnalysis, saveGapAnalysis,
-  getJourney, saveJourney,
 } from './storage.js';
 
-// In-memory version map — tracks the server's version per key for optimistic locking.
-// Populated on load, updated on save. Not persisted (rebuilt each session from the server).
 const _versions = {};
+
+// Keys the server currently accepts. New keys (activities, activityKBs, messages,
+// courseKB, onboardingComplete) are stored locally and will sync once learn-service
+// is updated. Until then, skip them to avoid 400 console noise.
+const SERVER_KNOWN_PREFIXES = ['profile', 'profileSummary', 'preferences', 'work', 'summative', 'gap', 'journey', 'progress'];
+
+function serverAcceptsKey(syncKey) {
+  return SERVER_KNOWN_PREFIXES.some(p => syncKey === p || syncKey.startsWith(p + ':'));
+}
 
 /**
  * Save a key to the remote server.
- * Reads the current local value and PUTs it.
  */
 export async function save(syncKey) {
   if (!await isLoggedIn()) return;
+  if (!serverAcceptsKey(syncKey)) return;
 
   const data = await getLocalData(syncKey);
   if (data === null || data === undefined) return;
@@ -43,8 +50,10 @@ export async function save(syncKey) {
 
   if (res.ok) {
     _versions[syncKey] = (await res.json()).version;
+  } else if (res.status === 400) {
+    // Server doesn't recognize this sync key — skip silently
+    return;
   } else if (res.status === 409) {
-    // Version mismatch — get the server's current version and retry
     const current = await fetchOne(syncKey);
     if (current) {
       const retry = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`, {
@@ -61,7 +70,6 @@ export async function save(syncKey) {
 
 /**
  * Load all data from the server and write it into local storage.
- * Removes any local data the server doesn't have.
  */
 export async function loadAll() {
   if (!await isLoggedIn()) return;
@@ -79,12 +87,6 @@ export async function loadAll() {
   }
 
   // Remove local data the server doesn't have
-  const allProgress = await getAllProgress();
-  for (const unitId of Object.keys(allProgress)) {
-    if (!serverKeys.has(`progress:${unitId}`)) {
-      await removeLocalData(`progress:${unitId}`);
-    }
-  }
   for (const key of ['profile', 'profileSummary', 'work']) {
     if (!serverKeys.has(key)) {
       const d = await getLocalData(key);
@@ -105,25 +107,23 @@ async function getLocalData(syncKey) {
   if (syncKey === 'profile') return getLearnerProfile();
   if (syncKey === 'profileSummary') return getLearnerProfileSummary().then(s => s || null);
   if (syncKey === 'preferences') return getPreferences();
+  if (syncKey === 'onboardingComplete') return getOnboardingComplete();
   if (syncKey === 'work') return getWorkProducts();
-  if (syncKey.startsWith('summative:')) return getSummative(syncKey.slice('summative:'.length));
-  if (syncKey.startsWith('summative-attempts:')) return getSummativeAttempts(syncKey.slice('summative-attempts:'.length));
-  if (syncKey.startsWith('gap:')) return getGapAnalysis(syncKey.slice('gap:'.length));
-  if (syncKey.startsWith('journey:')) return getJourney(syncKey.slice('journey:'.length));
-  if (syncKey.startsWith('progress:')) {
-    const progress = await getUnitProgress(syncKey.slice('progress:'.length));
-    if (!progress) return null;
-    // Embed screenshots in drafts for cloud sync
+  if (syncKey.startsWith('courseKB:')) return getCourseKB(syncKey.slice('courseKB:'.length));
+  if (syncKey.startsWith('activities:')) return getActivities(syncKey.slice('activities:'.length));
+  if (syncKey.startsWith('activityKBs:')) return getActivityKBsForCourse(syncKey.slice('activityKBs:'.length));
+  if (syncKey.startsWith('drafts:')) {
+    const drafts = await getDrafts(syncKey.slice('drafts:'.length));
     const { getScreenshot } = await import('./storage.js');
-    const draftsWithScreenshots = await Promise.all(
-      (progress.drafts || []).map(async (d) => {
+    return Promise.all(
+      drafts.map(async (d) => {
         if (!d.screenshotKey) return d;
         const dataUrl = await getScreenshot(d.screenshotKey);
         return dataUrl ? { ...d, screenshotDataUrl: dataUrl } : d;
       })
     );
-    return { ...progress, drafts: draftsWithScreenshots };
   }
+  if (syncKey.startsWith('messages:')) return getCourseMessages(syncKey.slice('messages:'.length));
   return null;
 }
 
@@ -131,37 +131,47 @@ async function saveLocalData(syncKey, data) {
   if (syncKey === 'profile') return saveLearnerProfile(data);
   if (syncKey === 'profileSummary') return saveLearnerProfileSummary(data);
   if (syncKey === 'preferences') return savePreferences(data);
+  if (syncKey === 'onboardingComplete' && data) return saveOnboardingComplete();
   if (syncKey === 'work') {
-    // Work is an array — replace all work products
-    return (async () => {
-      const { deleteWorkProducts, saveWorkProduct } = await import('./storage.js');
-      await deleteWorkProducts();
-      for (const product of data) await saveWorkProduct(product);
-    })();
+    await deleteWorkProducts();
+    for (const product of data) await saveWorkProduct(product);
+    return;
   }
-  if (syncKey.startsWith('summative:')) return saveSummative(syncKey.slice('summative:'.length), data);
-  if (syncKey.startsWith('summative-attempts:')) {
-    // Attempts come as an array — save each one
-    for (const attempt of (Array.isArray(data) ? data : [data])) {
-      await saveSummativeAttempt(syncKey.slice('summative-attempts:'.length), attempt);
+  if (syncKey.startsWith('courseKB:')) return saveCourseKB(syncKey.slice('courseKB:'.length), data);
+  if (syncKey.startsWith('activities:')) {
+    const courseId = syncKey.slice('activities:'.length);
+    await deleteActivitiesForCourse(courseId);
+    for (const activity of (Array.isArray(data) ? data : [data])) {
+      await saveActivity(activity);
     }
     return;
   }
-  if (syncKey.startsWith('gap:')) return saveGapAnalysis(syncKey.slice('gap:'.length), data);
-  if (syncKey.startsWith('journey:')) return saveJourney(syncKey.slice('journey:'.length), data);
-  if (syncKey.startsWith('progress:')) {
-    // Extract and store embedded screenshots, then save progress without them
+  if (syncKey.startsWith('activityKBs:')) {
+    const courseId = syncKey.slice('activityKBs:'.length);
+    await deleteActivityKBsForCourse(courseId);
+    for (const kb of (Array.isArray(data) ? data : [data])) {
+      await saveActivityKB(kb.activityId, courseId, kb);
+    }
+    return;
+  }
+  if (syncKey.startsWith('drafts:')) {
+    const courseId = syncKey.slice('drafts:'.length);
     const { saveScreenshot } = await import('./storage.js');
-    const cleanDrafts = await Promise.all(
-      (data.drafts || []).map(async (d) => {
-        if (d.screenshotDataUrl && d.screenshotKey) {
-          await saveScreenshot(d.screenshotKey, d.screenshotDataUrl);
-        }
-        const { screenshotDataUrl, ...rest } = d;
-        return rest;
-      })
-    );
-    return saveUnitProgress(syncKey.slice('progress:'.length), { ...data, drafts: cleanDrafts });
+    await deleteDraftsForCourse(courseId);
+    for (const d of (Array.isArray(data) ? data : [data])) {
+      if (d.screenshotDataUrl && d.screenshotKey) {
+        await saveScreenshot(d.screenshotKey, d.screenshotDataUrl);
+      }
+      const { screenshotDataUrl, ...rest } = d;
+      await saveDraft(rest);
+    }
+    return;
+  }
+  if (syncKey.startsWith('messages:')) {
+    const courseId = syncKey.slice('messages:'.length);
+    await clearCourseMessages(courseId);
+    await saveCourseMessages(courseId, Array.isArray(data) ? data : [data]);
+    return;
   }
 }
 
@@ -170,7 +180,4 @@ function removeLocalData(syncKey) {
   if (syncKey === 'profileSummary') return deleteProfileSummary();
   if (syncKey === 'preferences') return deletePreferences();
   if (syncKey === 'work') return deleteWorkProducts();
-  if (syncKey.startsWith('progress:')) {
-    return deleteUnitProgress(syncKey.slice('progress:'.length));
-  }
 }

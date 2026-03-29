@@ -14,7 +14,7 @@ export default function NameStep({ data, updateData, goTo }) {
 
   return (
     <div className="onboarding">
-      <span className="onboarding-step-label">Step 1 of 3 — Your Name</span>
+      <span className="onboarding-step-label">Step 1 of 2 — Your Name</span>
       <h2>What's your name?</h2>
       <p className="onboarding-lead">Let's start with your name.</p>
       <label htmlFor="onboarding-name" className="sr-only">Your name</label>

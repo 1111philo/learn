@@ -3,10 +3,9 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useModal } from '../../contexts/ModalContext.jsx';
 import { useApp } from '../../contexts/AppContext.jsx';
 import PasswordField from '../PasswordField.jsx';
-import { getPreferences, getAllProgress } from '../../../js/storage.js';
-import { loadCourses, flattenCourses } from '../../../js/courses.js';
+import { getPreferences, savePreferences } from '../../../js/storage.js';
 import * as sync from '../../../js/sync.js';
-import { savePreferences } from '../../../js/storage.js';
+import { loadCourses } from '../../../js/courseOwner.js';
 import { syncInBackground } from '../../lib/syncDebounce.js';
 
 export default function LoginModal({ onSuccess }) {
@@ -41,10 +40,9 @@ export default function LoginModal({ onSuccess }) {
       // Refresh data from server
       try {
         await sync.loadAll();
-        const freshProgress = await getAllProgress();
         const freshPrefs = await getPreferences();
-        dispatch({ type: 'UPDATE_ALL_PROGRESS', allProgress: freshProgress });
-        dispatch({ type: 'SET_PREFERENCES', preferences: freshPrefs });
+        const courses = await loadCourses();
+        dispatch({ type: 'INIT_DATA', payload: { preferences: freshPrefs, courses } });
       } catch { /* offline */ }
 
       setTimeout(() => {
@@ -74,6 +72,7 @@ export default function LoginModal({ onSuccess }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') passwordRef.current?.focus(); }}
+          disabled={submitting}
         />
         <label htmlFor="modal-login-password">Password</label>
         <PasswordField
@@ -85,10 +84,11 @@ export default function LoginModal({ onSuccess }) {
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
           inputRef={passwordRef}
           required
+          disabled={submitting}
         />
         {error && <div className="login-error-msg" role="status" aria-live="polite">{error}</div>}
         <div className="action-bar">
-          <button type="button" className="secondary-btn" onClick={hide}>Cancel</button>
+          <button type="button" className="secondary-btn" onClick={hide} disabled={submitting}>Cancel</button>
           <button type="submit" className="primary-btn" disabled={submitting}>
             {submitting ? 'Signing in...' : 'Sign In'}
           </button>

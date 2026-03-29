@@ -16,8 +16,9 @@ To reset and re-run onboarding, clear extension storage via Chrome DevTools.
 ## Development workflow
 
 - Run `npm run dev` for the Vite dev server, or `npm run build` for production builds.
-- React components live in `src/`. Service modules (storage, orchestrator, auth, sync) live in `js/`.
+- React components live in `src/`. Service modules (storage, orchestrator, auth, sync, courseOwner) live in `js/`.
 - Agent system prompts live in `prompts/*.md` -- edit these to change agent behavior without touching code.
+- Course definitions live in `data/courses/*.md` -- each is a markdown file with exemplar + learning objectives.
 - Use Chrome DevTools on the side panel to inspect state and debug.
 
 For architecture details, see [docs/architecture.md](docs/architecture.md). For the full agent invocation flow, see [docs/agent-lifecycle.md](docs/agent-lifecycle.md).
@@ -27,12 +28,19 @@ For architecture details, see [docs/architecture.md](docs/architecture.md). For 
 Activities must:
 - Happen entirely in the browser tab (screenshots only capture the active tab)
 - Lead to one visible result on one page, fitting in a single viewport
-- End with "Hit Capture to capture your screen."
+- End with "Hit Capture to capture your screen." or "Hit Submit to submit your response."
 - Not reference desktop apps, terminals, or file system operations
 - Not use platform-specific keyboard shortcuts
+- Not use DevTools or browser developer tools
 - Take 5 minutes or less
-- Target specific rubric criteria from the gap analysis
-- Use a different activity type from the previous activity
+- Produce visible work (writing, creating, building, etc.)
+
+## Adding a new course
+
+1. Create a markdown file in `data/courses/` (e.g., `my-course.md`)
+2. Follow the format: `# Title`, description paragraph, `## Exemplar`, `## Learning Objectives` with bullet list
+3. Add the filename (without extension) to the `courseFiles` array in `js/courseOwner.js`
+4. Test with a real API key to verify the Course Owner generates a valid KB
 
 ## Guidelines
 
@@ -48,7 +56,7 @@ Activities must:
 npm test
 ```
 
-Tests use Node's built-in test runner (no extra dependencies). They validate `manifest.json`, `courses.json`, SQLite storage round-trips, and output validators. All tests must pass before merging.
+Tests use Node's built-in test runner (no extra dependencies). They validate `manifest.json`, course prompts, SQLite storage round-trips, and output validators. All tests must pass before merging.
 
 ## Schema changes
 

@@ -37,131 +37,51 @@ CREATE TABLE IF NOT EXISTS profile_summary (
   updated_at INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS courses (
+CREATE TABLE IF NOT EXISTS course_kbs (
   course_id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT,
-  depends_on TEXT,
-  is_user_created INTEGER DEFAULT 0,
-  created_at INTEGER
+  kb TEXT NOT NULL,
+  updated_at INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS units (
-  unit_id TEXT PRIMARY KEY,
-  course_id TEXT NOT NULL REFERENCES courses(course_id),
-  name TEXT NOT NULL,
-  description TEXT,
-  depends_on TEXT,
-  sequence INTEGER,
-  status TEXT DEFAULT 'not_started',
-  current_activity_index INTEGER DEFAULT 0,
-  started_at INTEGER,
-  completed_at INTEGER,
-  final_work_product_url TEXT,
-  journey_order INTEGER,
-  rubric_criteria TEXT
-);
-
-CREATE TABLE IF NOT EXISTS summatives (
-  course_id TEXT PRIMARY KEY,
-  task TEXT NOT NULL,
-  rubric TEXT NOT NULL,
-  exemplar TEXT NOT NULL,
-  tool TEXT,
-  estimated_time INTEGER,
-  personalized INTEGER DEFAULT 0,
-  conversation_id TEXT,
-  course_intro TEXT,
-  summary_for_learner TEXT,
-  created_at INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS summative_attempts (
-  id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS activity_kbs (
+  activity_id TEXT PRIMARY KEY,
   course_id TEXT NOT NULL,
-  attempt_number INTEGER NOT NULL,
-  screenshots TEXT,
-  text_responses TEXT,
-  criteria_scores TEXT,
-  overall_score REAL,
-  mastery INTEGER DEFAULT 0,
-  feedback TEXT,
-  next_steps TEXT,
-  is_baseline INTEGER DEFAULT 0,
-  summary_for_learner TEXT,
-  timestamp INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS gap_analysis (
-  course_id TEXT PRIMARY KEY,
-  gaps TEXT NOT NULL,
-  suggested_focus TEXT,
-  created_at INTEGER,
+  kb TEXT NOT NULL,
   updated_at INTEGER
 );
-
-CREATE TABLE IF NOT EXISTS journeys (
-  course_id TEXT PRIMARY KEY,
-  plan TEXT NOT NULL,
-  phase TEXT DEFAULT 'summative_setup',
-  created_at INTEGER,
-  updated_at INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS conversations (
-  id TEXT PRIMARY KEY,
-  unit_id TEXT REFERENCES units(unit_id),
-  type TEXT NOT NULL,
-  activity_id TEXT,
-  created_at INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  conversation_id TEXT NOT NULL REFERENCES conversations(id),
-  role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  timestamp INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, timestamp);
 
 CREATE TABLE IF NOT EXISTS activities (
   id TEXT PRIMARY KEY,
-  unit_id TEXT NOT NULL REFERENCES units(unit_id),
-  type TEXT NOT NULL,
-  goal TEXT NOT NULL,
+  course_id TEXT NOT NULL,
+  activity_number INTEGER NOT NULL,
   instruction TEXT,
   tips TEXT,
-  sequence INTEGER,
-  conversation_id TEXT REFERENCES conversations(id),
-  rubric_criteria TEXT
+  objective_focus TEXT,
+  created_at INTEGER
 );
-
-CREATE INDEX IF NOT EXISTS idx_summative_attempts_course
-  ON summative_attempts(course_id, attempt_number);
 
 CREATE TABLE IF NOT EXISTS drafts (
   id TEXT PRIMARY KEY,
   activity_id TEXT NOT NULL REFERENCES activities(id),
-  unit_id TEXT NOT NULL,
+  course_id TEXT NOT NULL,
   screenshot_key TEXT,
   text_response TEXT,
   url TEXT,
-  score REAL,
-  feedback TEXT,
+  achieved INTEGER DEFAULT 0,
+  demonstrates TEXT,
+  moved TEXT,
+  needed TEXT,
   strengths TEXT,
-  improvements TEXT,
-  recommendation TEXT,
-  timestamp INTEGER,
-  rubric_criteria_scores TEXT
+  attempt INTEGER DEFAULT 1,
+  timestamp INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
+CREATE INDEX IF NOT EXISTS idx_drafts_course ON drafts(course_id);
 
 CREATE TABLE IF NOT EXISTS work_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  unit_id TEXT NOT NULL,
+  course_id TEXT NOT NULL,
   course_name TEXT,
   url TEXT,
   completed_at INTEGER
@@ -196,36 +116,9 @@ CREATE INDEX IF NOT EXISTS idx_course_msg_course
 
 `;
 
-// Migrations for adding columns to existing tables.
-// ALTER TABLE ADD COLUMN throws if column exists; caught in init().
-const MIGRATIONS = [
-  'ALTER TABLE units ADD COLUMN journey_order INTEGER',
-  'ALTER TABLE units ADD COLUMN rubric_criteria TEXT',
-  'ALTER TABLE activities ADD COLUMN rubric_criteria TEXT',
-  'ALTER TABLE drafts ADD COLUMN rubric_criteria_scores TEXT',
-  'ALTER TABLE summatives ADD COLUMN course_intro TEXT',
-  'ALTER TABLE summatives ADD COLUMN summary_for_learner TEXT',
-  'ALTER TABLE summative_attempts ADD COLUMN summary_for_learner TEXT',
-  'ALTER TABLE drafts ADD COLUMN text_response TEXT',
-  'ALTER TABLE summative_attempts ADD COLUMN text_responses TEXT',
-  `CREATE TABLE IF NOT EXISTS course_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    course_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL DEFAULT '',
-    msg_type TEXT NOT NULL,
-    phase TEXT,
-    metadata TEXT,
-    timestamp INTEGER NOT NULL
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_course_msg_course ON course_messages(course_id, timestamp)`,
-];
-
 // -- Initialization -----------------------------------------------------------
 
 export async function init() {
-  // sql-wasm.js is loaded as a classic script in sidepanel.html,
-  // making initSqlJs available as a global before this module runs.
   const SQL = await globalThis.initSqlJs({
     locateFile: file => chrome.runtime.getURL(`lib/${file}`),
   });
@@ -233,17 +126,7 @@ export async function init() {
   const stored = await chrome.storage.local.get(DB_STORAGE_KEY);
   if (stored[DB_STORAGE_KEY]) {
     _db = new SQL.Database(new Uint8Array(stored[DB_STORAGE_KEY]));
-    // Ensure any new tables exist (for future schema additions)
     _db.run(SCHEMA_SQL);
-    // Migrate: add new columns to existing tables (safe to re-run)
-    for (const stmt of MIGRATIONS) {
-      try { _db.run(stmt); } catch (_) { /* column already exists */ }
-    }
-    // Clean up any activity rows with bare (non-scoped) IDs from before the fix
-    _db.run("DELETE FROM drafts WHERE activity_id NOT LIKE '%::%'");
-    _db.run("DELETE FROM messages WHERE conversation_id IN (SELECT conversation_id FROM activities WHERE id NOT LIKE '%::%')");
-    _db.run("DELETE FROM conversations WHERE activity_id NOT LIKE '%::%' AND activity_id IS NOT NULL");
-    _db.run("DELETE FROM activities WHERE id NOT LIKE '%::%'");
     _dirty = true;
   } else {
     _db = new SQL.Database();
@@ -252,7 +135,6 @@ export async function init() {
     await persist();
   }
 
-  // Persist on visibility change (panel hidden)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && _dirty) {
       persist();
@@ -262,21 +144,18 @@ export async function init() {
 
 // -- Query API ----------------------------------------------------------------
 
-/** Execute a write statement (INSERT, UPDATE, DELETE). Marks DB dirty. */
 export function run(sql, params = []) {
   _db.run(sql, params);
   _dirty = true;
   schedulePersist();
 }
 
-/** Execute multiple statements in a string (no params). Marks DB dirty. */
 export function exec(sql) {
   _db.exec(sql);
   _dirty = true;
   schedulePersist();
 }
 
-/** Return the first row as an object, or null. */
 export function query(sql, params = []) {
   const stmt = _db.prepare(sql);
   stmt.bind(params);
@@ -289,7 +168,6 @@ export function query(sql, params = []) {
   return null;
 }
 
-/** Return all rows as an array of objects. */
 export function queryAll(sql, params = []) {
   const stmt = _db.prepare(sql);
   stmt.bind(params);
@@ -311,7 +189,6 @@ function schedulePersist() {
   }, PERSIST_DEBOUNCE_MS);
 }
 
-/** Serialize the database and save to chrome.storage.local. */
 export async function persist() {
   if (!_db) return;
   if (_persistTimer) {
@@ -323,12 +200,10 @@ export async function persist() {
   _dirty = false;
 }
 
-/** Return the raw sql.js Database instance (escape hatch). */
 export function getDb() {
   return _db;
 }
 
-/** Drop all data and re-create the schema. Used by sign-out. */
 export async function clearAllData() {
   if (_db) {
     _db.close();

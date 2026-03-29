@@ -60,7 +60,7 @@ export default function AppShell({ children }) {
 
   const navTo = (path) => navigate(path);
   const currentNav = (path) => {
-    if (path === '/courses') return location.pathname === '/courses' || location.pathname.startsWith('/unit') || location.pathname.startsWith('/courses/');
+    if (path === '/courses') return location.pathname === '/courses' || location.pathname.startsWith('/courses/');
     if (path === '/work') return location.pathname.startsWith('/work');
     return location.pathname === path;
   };

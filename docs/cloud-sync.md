@@ -25,15 +25,15 @@ When logged in, the server is the source of truth. Data is written to the server
 
 | Key pattern | Data |
 |------------|------|
-| `summative:{courseId}` | Summative assessment (task, rubric, exemplar) |
-| `summative-attempts:{courseId}` | All summative attempts |
-| `gap:{courseId}` | Gap analysis |
-| `journey:{courseId}` | Learning journey plan + phase |
-| `progress:{unitId}` | Unit progress (activities, drafts) |
 | `profile` | Learner profile |
+| `profileSummary` | Learner profile summary |
 | `preferences` | User preferences |
+| `work` | Work products (completed courses) |
+| `courseKB:{courseId}` | Course knowledge base |
+| `activities:{courseId}` | Activities for a course |
+| `drafts:{courseId}` | Drafts (submissions + assessments) for a course |
 
-Screenshots are never synced -- they remain in local IndexedDB only.
+Screenshots are embedded as `screenshotDataUrl` in draft data during sync upload and extracted back to IndexedDB on download.
 
 ## AI provider routing
 

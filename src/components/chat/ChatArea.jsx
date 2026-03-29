@@ -1,21 +1,24 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, forwardRef } from 'react';
 
-export default function ChatArea({ children }) {
-  const ref = useRef(null);
-  const prevChildCount = useRef(0);
+const ChatArea = forwardRef(function ChatArea({ children }, ref) {
+  const localRef = useRef(null);
+  const scrollRef = ref || localRef;
 
   useEffect(() => {
     // Scroll to bottom when content changes
-    if (ref.current) {
+    const el = typeof scrollRef === 'function' ? null : scrollRef.current;
+    if (el) {
       requestAnimationFrame(() => {
-        if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+        if (el) el.scrollTop = el.scrollHeight;
       });
     }
   });
 
   return (
-    <div className="chat" role="log" aria-label="Course conversation" ref={ref}>
+    <div className="chat" role="log" aria-label="Course conversation" ref={scrollRef}>
       {children}
     </div>
   );
-}
+});
+
+export default ChatArea;

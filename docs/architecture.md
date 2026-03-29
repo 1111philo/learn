@@ -4,21 +4,15 @@
 
 ## Agents
 
-Ten agents drive the learning experience. Each loads a system prompt from `prompts/*.md` and returns structured JSON validated by `js/validators.js`.
+Five agents (3 LLM + 2 hybrid) drive the learning experience. Each LLM agent loads a system prompt from `prompts/*.md` and returns structured JSON validated by `js/validators.js`.
 
 | Agent | Prompt | Model | Purpose |
 |-------|--------|-------|---------|
-| Onboarding Conversation | [`onboarding-conversation.md`](../prompts/onboarding-conversation.md) | Heavy + vision | Multi-turn chat that builds a learner profile from screenshots |
-| Onboarding Profile | [`onboarding-profile.md`](../prompts/onboarding-profile.md) | Light | Creates a profile from name + statement (fallback when conversation is skipped) |
-| Summative Generation | [`summative-generation.md`](../prompts/summative-generation.md) | Light | Generates the summative assessment: task (with per-step format), rubric, exemplar, and learner-facing intro/summary from unit exemplars and formats |
-| Guide | [`guide.md`](../prompts/guide.md) | Light | Appears at orientation checkpoints to orient the learner, explain what's next, and answer questions |
-| Summative Assessment | [`summative-assessment.md`](../prompts/summative-assessment.md) | Heavy (screenshots) / Light (text) | Scores summative submissions (screenshots and/or text) against rubric criteria; produces learner summary |
-| Gap Analysis | [`gap-analysis.md`](../prompts/gap-analysis.md) | Light | Identifies per-criterion gaps from baseline summative attempt |
-| Journey Generation | [`course-creation.md`](../prompts/course-creation.md) | Light | Selects, orders, and sizes units with formative activities mapped to rubric criteria; respects unit formats and exemplars |
-| Activity Creation | [`activity-creation.md`](../prompts/activity-creation.md) | Light | Generates one formative activity targeting specific rubric criteria; format-aware (screenshot ends with "Capture", text ends with "Submit") |
-| Activity Assessment | [`activity-assessment.md`](../prompts/activity-assessment.md) | Heavy (screenshots) / Light (text) | Evaluates formative submissions with structured feedback and optional rubric scoring |
-| Activity Q&A | *inline* | Light | Answers learner questions with enriched context (exemplar, rubric, latest scores) |
-| Learner Profile | [`learner-profile-update.md`](../prompts/learner-profile-update.md) | Light | Updates learner profile after assessments, feedback, and mastery |
+| Guide | [`guide.md`](../prompts/guide.md) | Light | Orients the learner at course start and completion; handles follow-up Q&A; streams responses token by token |
+| Course Owner | [`course-owner.md`](../prompts/course-owner.md) | Light | Initializes the course KB from course prompt + learner profile; produces structured objectives, evidence descriptors, initial learner position |
+| Activity Creator | [`activity-creation.md`](../prompts/activity-creation.md) | Light | Generates one activity at a time from the enriched course KB; returns `{ instruction, tips[] }` |
+| Activity Assessor | [`activity-assessment.md`](../prompts/activity-assessment.md) | Heavy (screenshots) / Light (text) | Evaluates submissions against exemplar/objectives; returns assessment + `courseKBUpdate` that feeds insights back into the KB |
+| Learner Profile Owner | [`learner-profile-owner.md`](../prompts/learner-profile-owner.md) + code | Light (completion) / none (incremental) | Hybrid: code-level incremental updates after each assessment; LLM deep update on course completion |
 
 `MODEL_LIGHT` = `claude-haiku-4-5`. `MODEL_HEAVY` = `claude-sonnet-4-6`. See [`js/api.js`](../js/api.js) for model constants.
 
@@ -28,16 +22,52 @@ For the full invocation sequence with inputs and outputs, see [Agent Lifecycle](
 
 [`js/orchestrator.js`](../js/orchestrator.js) is the central layer between agents and the app:
 
-- **`converse(promptName, messages)`** -- multi-turn conversations (onboarding). Loads a prompt file, sends message history, returns parsed JSON.
-- **`converseStream(promptName, messages, onChunk)`** -- streaming conversations (guide). Yields text tokens via callback as they arrive. Falls back to non-streaming for proxy.
-- **`chatWithContext(systemPrompt, messages)`** -- one-off Q&A with an inline system prompt. Returns raw text.
-- **Agent-specific functions** -- `generateSummative()`, `assessSummativeAttempt()`, `analyzeGaps()`, `generateJourney()`, `generateNextActivity()`, `assessDraft()`, `reassessDraft()`, and profile update functions. Each assembles context, calls the API, parses JSON, and runs validation.
+- **`converseStream(promptName, messages, onChunk)`** -- streaming conversations (guide). Yields text tokens via callback as they arrive. Falls back to non-streaming if no local API key.
+- **`initializeCourseKB(course, profileSummary)`** -- Course Owner: generates the initial course KB.
+- **`createActivity(courseKB, profileSummary, activityNumber, priorSummary)`** -- Activity Creator: generates the next activity.
+- **`assessSubmission(courseKB, instruction, priorAttempts, profileSummary, screenshot, text)`** -- Activity Assessor: evaluates a submission.
+- **`updateProfileOnCompletion(...)`** -- Learner Profile Owner (LLM): deep profile update on course mastery.
+- **`incrementalProfileUpdate(profile, courseId, result)`** -- Learner Profile Owner (code): lightweight stat update after each assessment.
+- **`updateProfileFromFeedback(...)`** -- Profile update from user feedback in Settings.
 - **Routing** -- if logged in, calls go to the learn-service Bedrock proxy; otherwise, they use the user's Anthropic API key directly.
 - **Retry** -- validation failures retry once automatically. Transient API errors (503, 529, 500) retry up to twice with backoff (3s, 6s).
 
-[`src/lib/courseEngine.js`](../src/lib/courseEngine.js) is the unified state machine that sits above the orchestrator. It manages phase transitions, calls orchestrator functions, invokes the Guide Agent to narrate transitions, and appends all messages to the `course_messages` table. `CourseChat.jsx` calls courseEngine functions in response to user actions.
+[`src/lib/courseEngine.js`](../src/lib/courseEngine.js) is the state machine that sits above the orchestrator. It manages the exemplar-driven learning loop: course start, submission handling, KB enrichment, activity generation, and completion detection. `CourseChat.jsx` calls courseEngine functions in response to user actions.
 
-A program knowledge base ([`data/knowledge-base.md`](../data/knowledge-base.md)) is automatically loaded and appended to the system prompt for the Guide and Onboarding Conversation agents. This gives them context about the AI Leaders program (FAQ, timeline, participants, values) so they can answer program-related questions. The KB is cached after first load.
+[`js/courseOwner.js`](../js/courseOwner.js) loads course prompt files from `data/courses/*.md`, parses them into structured data (`{ courseId, name, description, exemplar, learningObjectives }`), and provides `updateCourseKBFromAssessment()` to merge assessment insights into the course KB.
+
+A program knowledge base ([`data/knowledge-base.md`](../data/knowledge-base.md)) is automatically loaded and appended to the system prompt for the Guide agent. This gives it context about the AI Leaders program so it can answer program-related questions. The KB is cached after first load.
+
+## Knowledge bases
+
+Three knowledge bases drive personalization throughout the learning experience:
+
+### Course KB (`course_kbs` table)
+Initialized by the Course Owner from the course prompt + learner profile. Contains:
+- `exemplar` -- the mastery-level outcome description
+- `objectives[]` -- each with `objective` and `evidence` (what demonstrates it)
+- `learnerPosition` -- where the learner currently stands (updated after each assessment)
+- `insights[]` -- accumulated observations about the learner's work (grows with each assessment)
+- `activitiesCompleted` -- count of activities completed
+- `status` -- `"active"` or `"completed"`
+
+After every assessment, the Assessor's `courseKBUpdate` is merged in via `updateCourseKBFromAssessment()`: new insights are appended, learner position is replaced, and activity count is incremented.
+
+### Activity KB (`activity_kbs` table)
+Per-activity record containing:
+- `instruction`, `tips` -- the generated activity
+- `attempts[]` -- each attempt's assessment results (achieved, demonstrates, strengths, moved, needed)
+
+Used as context when generating subsequent activities.
+
+### Learner Profile (`profile` + `profile_summary` tables)
+Persistent across courses:
+- `name`, `goal`
+- `masteredCourses[]`, `activeCourses[]`
+- `strengths[]`, `weaknesses[]`
+- `preferences{}`
+- Updated incrementally by code after each assessment
+- Updated deeply by LLM on course completion
 
 ## Output validation
 
@@ -45,43 +75,30 @@ All agent outputs pass through deterministic validators in [`js/validators.js`](
 
 | Validator | Checks |
 |-----------|--------|
-| `validateSummative` | Task with steps array, rubric with 4 mastery levels per criterion, exemplar, `courseIntro`, `summaryForLearner`, content safety |
-| `validateSummativeAssessment` | All criteria scored, ratchet rule (scores only go up), `summaryForLearner`, content safety |
-| `validateGapAnalysis` | Criterion/level/priority structure |
-| `validateJourney` | Valid unit IDs, activities with types/goals/rubricCriteria |
-| `validateActivity` | Format-aware: screenshot ends with "Capture", text ends with "Submit"; max 4 steps, browser-only, no platform shortcuts, no multi-site, produces visible work, content safety |
-| `validateAssessment` | Score 0-1, valid recommendation, feedback/strengths/improvements arrays, content safety |
+| `validateActivity` | Instruction present, tips array, ends with "Capture" or "Submit", max 5 steps (4 + final), browser-only, no platform shortcuts, no multi-site, no DevTools, produces visible work, content safety |
+| `validateAssessment` | `achieved` boolean, `demonstrates` string, `strengths` array, `needed` string, `courseKBUpdate` with `insights[]` and `learnerPosition`, content safety |
+| `validateCourseKB` | Exemplar, objectives array (each with objective + evidence), learnerPosition, insights array, activitiesCompleted number, status, content safety |
 
 ## Content hierarchy
 
 ```
-Course (courses.json)
-  └── Units (each with format, exemplar, learningObjectives)
-        ├── format: "screenshot" or "text" (how learners submit work)
-        └── exemplar: mastery-level outcome description
-  └── Summative Assessment (generated per course from all unit objectives/exemplars)
-        ├── Task (multi-step, each step has a format)
-        ├── Rubric (criteria with 4 mastery levels, FIXED once generated)
-        └── Exemplar (what mastery looks like)
-  └── Journey (selected/ordered units with formative activities)
-        └── Formative Activities (generated per unit, targeting rubric criteria)
+Course prompt (data/courses/*.md)
+  ├── Exemplar (mastery-level outcome description)
+  ├── Learning Objectives (bullet list)
+  └── Course KB (generated by Course Owner, enriched by Assessor)
+        └── Activities (generated dynamically by Activity Creator)
               └── Drafts (screenshot captures or text responses with AI assessment)
 ```
 
-[`data/courses.json`](../data/courses.json) defines courses, each containing a `units` array. Each unit has a `unitId`, `learningObjectives`, `format` ("text" or "screenshot"), `exemplar` (mastery-level outcome description), and an optional `dependsOn` prerequisite. The `format` determines how learners submit work. The `exemplar` is an example of an outcome — learners match its quality and depth, not its content. The journey agent selects which units to include, their order, and how many activities per unit.
+Courses are defined as markdown files in `data/courses/`. Each file has:
+- `# Title` -- course name
+- First paragraph -- course description
+- `## Exemplar` -- what mastery looks like
+- `## Learning Objectives` -- bullet list of outcomes
 
-## Orientation checkpoints
+[`js/courseOwner.js`](../js/courseOwner.js) parses these files via `loadCourses()`. Adding a new course means creating a `.md` file in `data/courses/` and adding its ID to the `courseFiles` array in `courseOwner.js`.
 
-Between every major step, the learner sees an orientation screen powered by the **Guide Agent**. The guide generates a personalized message based on the learner's profile, scores, and progress context, then handles follow-up Q&A via multi-turn conversation.
-
-| Phase | Checkpoint | What the learner sees |
-|-------|-----------|----------------------|
-| `course_intro` | Before diagnostic | Guide greeting + course overview |
-| `baseline_results` | After diagnostic | Scores + guide framing results as a starting point |
-| `journey_overview` | After journey generated | Guide overview of personalized learning path |
-| `retake_ready` | Before retake | Prior scores + guide encouragement |
-
-At each checkpoint, the compose bar is available for Q&A. The rubric is FIXED — the guide explains it but cannot change it.
+There are no predefined units, rubrics, journeys, or summative assessments. Activities are generated dynamically based on the evolving course KB.
 
 ## Storage
 
@@ -92,13 +109,42 @@ All structured data lives in an in-memory SQLite database powered by [sql.js](ht
 - [`js/db.js`](../js/db.js) -- database lifecycle: init, schema creation, persistence, column migrations
 - [`js/storage.js`](../js/storage.js) -- query API: getters/setters for all data types
 
-Key tables: `summatives`, `summative_attempts`, `gap_analysis`, `journeys`, `units`, `activities`, `drafts`, `course_messages`, `profile`, `preferences`, `work_products`, `auth`, `pending_state`.
+Tables: `settings`, `preferences`, `profile`, `profile_summary`, `course_kbs`, `activity_kbs`, `activities`, `drafts`, `work_products`, `auth`, `pending_state`, `course_messages`.
 
-Activity IDs are scoped to their unit in the DB (`unitId::activityId`) to prevent cross-unit collisions. The `course_messages` table stores the unified conversation per course (role, content, msg_type, phase, metadata JSON, timestamp). Completed phases can be collapsed in the UI to manage conversation length. In-progress state (summative captures) is persisted to `pending_state` so it survives panel reloads.
+The `course_messages` table stores the unified conversation per course (role, content, msg_type, phase, metadata JSON, timestamp). Activity IDs follow the pattern `{courseId}-act-{number}`. Drafts store assessment results inline (`achieved`, `demonstrates`, `moved`, `needed`, `strengths`).
 
 ### IndexedDB (binary assets)
 
-Screenshots are stored in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` and `summative_attempts` tables. Text responses are stored directly in the SQLite `text_response` column — no IndexedDB needed.
+Screenshots are stored in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the SQLite `text_response` column.
+
+## Data flow
+
+```
+Course Prompt (.md) ─── Course Owner ─── Course KB (initialized)
+                                              │
+                          Activity Creator ←──┤ (reads enriched KB)
+                                │             │
+                          Activity ───────────┤
+                                │             │
+                          Learner submits     │
+                                │             │
+                          Activity Assessor ──┤ (writes courseKBUpdate back)
+                                │             │
+                   ┌────────────┴──────┐      │
+                   │                   │      │
+              achieved: false    achieved: true
+                   │                   │
+              Next activity      Guide celebrates
+              (from enriched KB) Profile deep update
+                                 Course complete
+
+Learner Profile ──── threads through every agent call as context
+```
+
+- The **course KB** is the central data structure: initialized once, then enriched after every assessment with new insights and updated learner position.
+- The **Activity Creator** reads the enriched KB, so each activity is more precisely tuned to the learner.
+- The **Activity Assessor** writes back to the KB via `courseKBUpdate`, closing the learning loop.
+- The **learner profile** is passed as context to every agent call but updated separately (incrementally by code, deeply by LLM on completion).
 
 ## File structure
 
@@ -112,7 +158,7 @@ lib/                     Vendored sql.js (WASM)
 js/                      Service modules (vanilla JS)
   db.js                  SQLite lifecycle
   storage.js             Query layer + IndexedDB
-  courses.js             Course loading + prerequisites
+  courseOwner.js          Course prompt loading + KB updates
   api.js                 Anthropic API client
   orchestrator.js        Agent orchestration
   validators.js          Output validators
@@ -127,7 +173,8 @@ src/                     React app
   components/            AppShell, chat/*, modals/*
   pages/                 CoursesList, CourseChat, Portfolio, Settings, onboarding/*
 prompts/                 Agent system prompts (markdown)
-data/courses.json        Course definitions (with unit formats + exemplars)
+data/courses/            Course prompt files (markdown)
+data/knowledge-base.md   Program knowledge base
 tests/                   Node test runner (manifest, courses, validators, storage)
 docs/                    Documentation
 dist/                    Build output (Chrome extension)

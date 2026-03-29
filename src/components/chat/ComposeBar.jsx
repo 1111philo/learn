@@ -1,10 +1,6 @@
 import { useState, useRef } from 'react';
 import { useAutoResize } from '../../hooks/useAutoResize.js';
 
-/**
- * Chat compose bar — always Q&A. Text submissions and screenshots
- * are handled separately via ResponseModal and capture buttons.
- */
 export default function ComposeBar({
   placeholder = 'Ask a question...',
   onSend,
@@ -24,7 +20,7 @@ export default function ComposeBar({
 
   return (
     <div className="chat-compose">
-      <div className="compose-input-row">
+      <div className="compose-card">
         <label htmlFor="chat-input" className="sr-only">Your message</label>
         <textarea
           ref={inputRef}
@@ -39,11 +35,14 @@ export default function ComposeBar({
           }}
           disabled={disabled}
         />
-        <button className="send-btn" aria-label="Send" onClick={send} disabled={disabled || !text.trim()}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M3 14V9l10-1L3 7V2l13 6z" />
-          </svg>
-        </button>
+        <div className="compose-actions">
+          <button className="compose-send-btn" aria-label="Send" onClick={send} disabled={disabled || !text.trim()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

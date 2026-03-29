@@ -17,29 +17,22 @@ export default function App() {
   const { loggedIn, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect to onboarding on initial load only (not on every state change)
   useEffect(() => {
     if (!state.loaded || authLoading) return;
-    // Skip if already on an onboarding route
     if (window.location.hash.includes('/onboarding')) return;
     (async () => {
       const done = await getOnboardingComplete();
       if (!done && loggedIn) {
-        // Logged-in user — check if they already have a profile (synced from server)
         const profile = await getLearnerProfile();
         if (profile) {
-          // Profile exists — skip onboarding, stamp the flag
           await saveOnboardingComplete();
         } else {
-          // No profile yet — send to About You step to generate one
-          navigate('/onboarding/about', { replace: true });
+          navigate('/onboarding', { replace: true });
         }
       } else if (!done && !loggedIn) {
         navigate('/onboarding', { replace: true });
       }
     })();
-    // Only run once on initial load
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.loaded, authLoading]);
 
   if (!state.loaded || authLoading) {

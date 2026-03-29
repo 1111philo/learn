@@ -7,16 +7,16 @@ import {
   getApiKey, saveApiKey,
   savePreferences,
   getLearnerProfileSummary, getLearnerProfile,
+  saveLearnerProfile, saveLearnerProfileSummary,
 } from '../../js/storage.js';
 import * as orchestrator from '../../js/orchestrator.js';
 import { syncInBackground } from '../lib/syncDebounce.js';
-import { ensureProfileExists, queueProfileUpdate, mergeProfile } from '../lib/profileQueue.js';
-import { saveLearnerProfile, saveLearnerProfileSummary } from '../../js/storage.js';
+import { ensureProfileExists, mergeProfile } from '../lib/profileQueue.js';
 
 export default function Settings() {
   const { state, dispatch } = useApp();
-  const { loggedIn, user } = useAuth();
-  const { show: showModal, hide: hideModal } = useModal();
+  const { loggedIn } = useAuth();
+  const { show: showModal } = useModal();
   const [apiKey, setApiKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [keyFeedback, setKeyFeedback] = useState('');
@@ -35,7 +35,7 @@ export default function Settings() {
   const handleSaveKey = async () => {
     const val = apiKey.trim();
     if (!val || val === '\u2022'.repeat(40)) return;
-    await saveApiKey(val);
+    await saveApiKey(val); // API keys stay local only — never synced to server
     setHasKey(true);
     setApiKey('\u2022'.repeat(40));
     setKeyFeedback('Saved!');
