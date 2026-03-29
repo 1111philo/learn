@@ -3,21 +3,23 @@
  * manages course KB updates after assessments.
  */
 
+import { getUserCourses } from './storage.js';
+
 /** Max recent insights to keep in full. Older ones get summarized. */
 const MAX_RECENT_INSIGHTS = 10;
 
 let coursesCache = null;
 
 /**
- * Load all course prompts from data/courses/*.md.
+ * Load all courses: built-in files + user-created from SQLite.
  * Returns an array of { courseId, name, description, exemplar, learningObjectives }.
  */
 export async function loadCourses() {
   if (coursesCache) return coursesCache;
 
+  // Built-in courses from files
   const courseFiles = ['foundations'];
   const courses = [];
-
   for (const id of courseFiles) {
     const url = chrome.runtime.getURL(`data/courses/${id}.md`);
     const resp = await fetch(url);
@@ -25,14 +27,25 @@ export async function loadCourses() {
     courses.push(parseCoursePrompt(id, text));
   }
 
+  // User-created courses from SQLite
+  const userCourses = await getUserCourses();
+  for (const row of userCourses) {
+    courses.push(parseCoursePrompt(row.course_id, row.markdown));
+  }
+
   coursesCache = courses;
   return courses;
+}
+
+/** Clear the cache so loadCourses() re-fetches on next call. */
+export function invalidateCoursesCache() {
+  coursesCache = null;
 }
 
 /**
  * Parse a course prompt markdown file into structured data.
  */
-function parseCoursePrompt(courseId, markdown) {
+export function parseCoursePrompt(courseId, markdown) {
   const lines = markdown.split('\n');
   let name = '';
   let description = '';

@@ -52,9 +52,7 @@ See [Chrome Web Store API docs](https://developer.chrome.com/docs/webstore/using
 |-----------|-----|
 | `sidePanel` | Run the app in the Chrome side panel |
 | `storage` | Persist metadata locally |
-| `unlimitedStorage` | Allow large screenshot storage in IndexedDB |
-| `activeTab` | Capture screenshots and read the active tab URL |
-| `tabs` | Query tab information for draft recording |
+| `unlimitedStorage` | Allow large image storage in IndexedDB |
 
 ### Host permissions
 

@@ -16,6 +16,7 @@ import {
   getActivityKBsForCourse, saveActivityKB, deleteActivityKBsForCourse,
   getDrafts, saveDraft, deleteDraftsForCourse,
   getCourseMessages, saveCourseMessages, clearCourseMessages,
+  getScreenshot, saveScreenshot,
   deleteProfile, deleteProfileSummary, deletePreferences,
 } from './storage.js';
 
@@ -114,7 +115,7 @@ async function getLocalData(syncKey) {
   if (syncKey.startsWith('activityKBs:')) return getActivityKBsForCourse(syncKey.slice('activityKBs:'.length));
   if (syncKey.startsWith('drafts:')) {
     const drafts = await getDrafts(syncKey.slice('drafts:'.length));
-    const { getScreenshot } = await import('./storage.js');
+    // getScreenshot is statically imported above
     return Promise.all(
       drafts.map(async (d) => {
         if (!d.screenshotKey) return d;
@@ -156,7 +157,7 @@ async function saveLocalData(syncKey, data) {
   }
   if (syncKey.startsWith('drafts:')) {
     const courseId = syncKey.slice('drafts:'.length);
-    const { saveScreenshot } = await import('./storage.js');
+    // saveScreenshot is statically imported above
     await deleteDraftsForCourse(courseId);
     for (const d of (Array.isArray(data) ? data : [data])) {
       if (d.screenshotDataUrl && d.screenshotKey) {

@@ -9,7 +9,7 @@ You receive:
 - `activityInstruction`: what the learner was asked to do
 - `priorAttempts`: all prior submissions and assessments for this activity
 - `learnerProfile`: the learner's profile summary
-- `submission`: screenshot (image) or text response
+- `submission`: uploaded image or text response
 
 ## Assessment philosophy
 

@@ -1,6 +1,7 @@
 export const VIEW_DEPTH = {
   '/onboarding': 0,
   '/courses': 1,
+  '/courses/create': 2,
   '/course': 2,
   '/work': 1,
   '/work-detail': 2,

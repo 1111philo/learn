@@ -8,7 +8,9 @@ import { launchConfetti } from '../lib/confetti.js';
 import {
   getCourseKB, getActivities,
   getCourseMessages, deleteCourseProgress,
+  getUserCourseMarkdown, deleteUserCourse,
 } from '../../js/storage.js';
+import { invalidateCoursesCache, loadCourses } from '../../js/courseOwner.js';
 import * as engine from '../lib/courseEngine.js';
 
 import ChatArea from '../components/chat/ChatArea.jsx';
@@ -26,7 +28,7 @@ import ResponseModal from '../components/modals/ResponseModal.jsx';
 export default function CourseChat() {
   const { courseGroupId } = useParams();
   const navigate = useNavigate();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { courses } = state;
   const { show: showModal } = useModal();
   const course = courses.find(c => c.courseId === courseGroupId);
@@ -37,12 +39,9 @@ export default function CourseChat() {
   const [currentActivity, setCurrentActivity] = useState(null);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
-  const [actionTaken, setActionTaken] = useState(false);
-  const [instructionPinned, setInstructionPinned] = useState(false);
-  const instructionRef = useRef(null);
-  const chatRef = useRef(null);
+  const [takenActions, setTakenActions] = useState(new Set());
 
-  // Streaming guide text
+  // Streaming
   const [streamingText, setStreamingText] = useState(null);
   const displayText = useStreamedText(streamingText);
   const pendingAfterStreamRef = useRef(null);
@@ -51,29 +50,11 @@ export default function CourseChat() {
     if (displayText === null && pendingAfterStreamRef.current) {
       const { msgs, p } = pendingAfterStreamRef.current;
       pendingAfterStreamRef.current = null;
-      if (msgs) {
-        if (msgs.some(m => m.msgType === MSG_TYPES.ACTION)) setActionTaken(false);
-        setMessages(prev => [...prev, ...msgs]);
-      }
+      if (msgs) setMessages(prev => [...prev, ...msgs]);
       if (p) setPhase(p);
       setLoading('');
     }
   }, [displayText]);
-
-  // -- Pin instruction when scrolled past --------------------------------------
-
-  useEffect(() => {
-    const el = instructionRef.current;
-    const root = chatRef.current;
-    if (!el || !root) { setInstructionPinned(false); return; }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => setInstructionPinned(!entry.isIntersecting),
-      { root, threshold: 0 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [messages, currentActivity]);
 
   // -- Load on mount ----------------------------------------------------------
 
@@ -94,15 +75,19 @@ export default function CourseChat() {
           : existingMsgs.length > 0 ? COURSE_PHASES.LEARNING : COURSE_PHASES.COURSE_INTRO;
         setPhase(currentPhase);
 
-        // Restore current activity
         if (currentPhase === COURSE_PHASES.LEARNING) {
           const activities = await getActivities(courseGroupId);
-          if (activities.length) {
-            setCurrentActivity(activities[activities.length - 1]);
-          }
+          if (activities.length) setCurrentActivity(activities[activities.length - 1]);
+        }
+
+        // Mark all actions except the last as taken
+        const actionIndices = existingMsgs
+          .map((m, i) => m.msgType === MSG_TYPES.ACTION ? i : -1)
+          .filter(i => i >= 0);
+        if (actionIndices.length > 1) {
+          setTakenActions(new Set(actionIndices.slice(0, -1)));
         }
       } else {
-        // New course — guide welcome (no activity yet)
         setLoading('starting');
         setStreamingText('');
         try {
@@ -123,25 +108,19 @@ export default function CourseChat() {
     return () => { cancelled = true; };
   }, [courseGroupId]);
 
-  // -- Helpers ----------------------------------------------------------------
+  const appendMessages = (newMsgs) => setMessages(prev => [...prev, ...newMsgs]);
 
-  const appendMessages = (newMsgs) => {
-    if (newMsgs.some(m => m.msgType === MSG_TYPES.ACTION)) setActionTaken(false);
-    setMessages(prev => [...prev, ...newMsgs]);
-  };
+  // -- Mark an action as taken by its message index --
+  const markActionTaken = (idx) => setTakenActions(prev => new Set([...prev, idx]));
 
   // -- Actions ----------------------------------------------------------------
 
-  const handleAction = useCallback(async (action) => {
+  const handleAction = useCallback(async (action, msgIdx) => {
     setError('');
-    setActionTaken(true);
+    markActionTaken(msgIdx);
 
-    if (action === 'back_to_courses') {
-      navigate('/courses');
-      return;
-    }
+    if (action === 'back_to_courses') { navigate('/courses'); return; }
 
-    // Both "Start First Activity" and "Next Activity" generate the next activity
     if (action === 'start_activity' || action === 'next_activity') {
       setLoading(action);
       try {
@@ -149,23 +128,17 @@ export default function CourseChat() {
         appendMessages(result.messages);
         setCurrentActivity(result.activity);
         setPhase(result.phase);
-
-        const freshKB = await getCourseKB(courseGroupId);
-        setCourseKB(freshKB);
+        setCourseKB(await getCourseKB(courseGroupId));
       } catch (e) {
         setError(e.message || 'Failed to create activity.');
       }
       setLoading('');
-      return;
     }
   }, [courseGroupId, course, navigate]);
-
-  // -- Send (Q&A) -------------------------------------------------------------
 
   const handleSend = useCallback(async (text) => {
     if (!text?.trim()) return;
     setError('');
-
     setLoading('qa');
     setStreamingText('');
     appendMessages([{ role: 'user', content: text, msgType: MSG_TYPES.USER, phase, timestamp: Date.now() }]);
@@ -182,14 +155,12 @@ export default function CourseChat() {
     }
   }, [courseGroupId, course, phase, currentActivity]);
 
-  // -- Submit Work ------------------------------------------------------------
-
-  const handleSubmitWork = useCallback(async ({ text, screenshot }) => {
+  const handleSubmitWork = useCallback(async ({ text, screenshot }, msgIdx) => {
     if (!text && !screenshot) return;
     if (!currentActivity) return;
     setError('');
+    markActionTaken(msgIdx);
     setLoading('assessing');
-
     try {
       const result = await engine.handleSubmission(
         courseGroupId, course, currentActivity.id, screenshot, text || null
@@ -197,17 +168,26 @@ export default function CourseChat() {
       appendMessages(result.messages);
       setPhase(result.phase);
       if (result.achieved) launchConfetti();
-
-      // Keep currentActivity so learner can resubmit — activity clears when next one loads
-      const freshKB = await getCourseKB(courseGroupId);
-      setCourseKB(freshKB);
+      setCourseKB(await getCourseKB(courseGroupId));
     } catch (e) {
       setError(e.message || 'Submission failed.');
     }
     setLoading('');
   }, [courseGroupId, course, currentActivity]);
 
-  // -- Reset ------------------------------------------------------------------
+  const isCustomCourse = courseGroupId?.startsWith('custom-');
+
+  const handleExport = useCallback(async () => {
+    const markdown = await getUserCourseMarkdown(courseGroupId);
+    if (!markdown) return;
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${course?.name || 'course'}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [courseGroupId, course]);
 
   const handleReset = () => {
     showModal(
@@ -215,8 +195,23 @@ export default function CourseChat() {
         title="Reset Course?"
         message="This will delete all progress for this course. You'll start from scratch."
         confirmLabel="Reset Course"
+        onConfirm={async () => { await deleteCourseProgress(courseGroupId); navigate('/courses'); }}
+      />
+    );
+  };
+
+  const handleDelete = () => {
+    showModal(
+      <ConfirmModal
+        title="Delete Course?"
+        message="This will permanently delete this course and all its progress."
+        confirmLabel="Delete Course"
         onConfirm={async () => {
           await deleteCourseProgress(courseGroupId);
+          await deleteUserCourse(courseGroupId);
+          invalidateCoursesCache();
+          const refreshed = await loadCourses();
+          dispatch({ type: 'REFRESH_COURSES', courses: refreshed });
           navigate('/courses');
         }}
       />
@@ -226,51 +221,114 @@ export default function CourseChat() {
   // -- Render -----------------------------------------------------------------
 
   if (!course) return <p>Course not found.</p>;
+  const busy = !!loading;
 
-  // Find the current activity's instruction message for ref attachment
-  const currentInstructionIdx = currentActivity
-    ? [...messages].reverse().findIndex(m => m.msgType === MSG_TYPES.INSTRUCTION && m.metadata?.activityId === currentActivity.id)
-    : -1;
-  const instructionMsgIdx = currentInstructionIdx >= 0 ? messages.length - 1 - currentInstructionIdx : -1;
+  const TAKEN_LABELS = {
+    'Start First Activity': 'Started First Activity',
+    'Load Next Activity': 'Loaded Next Activity',
+    'Complete Activity': 'Completed Activity',
+    'Next Course': 'Returned to Courses',
+  };
+
+  // Build a set of message indices that are grouped INTO an action card
+  // (the INSTRUCTION or FEEDBACK right before an active ACTION)
+  const groupedIntoCard = new Set();
+  messages.forEach((msg, idx) => {
+    if (msg.msgType !== MSG_TYPES.ACTION) return;
+    if (takenActions.has(idx)) return;
+    // Find the nearest preceding INSTRUCTION or FEEDBACK (skipping sections)
+    for (let i = idx - 1; i >= 0; i--) {
+      const prev = messages[i];
+      if (prev.msgType === MSG_TYPES.INSTRUCTION || prev.msgType === MSG_TYPES.FEEDBACK) {
+        groupedIntoCard.add(i);
+        break;
+      }
+      if (prev.msgType !== MSG_TYPES.SECTION) break;
+    }
+  });
 
   const renderMessage = (msg, idx) => {
+    // Skip messages that are grouped into an action card
+    if (groupedIntoCard.has(idx)) return null;
+
     switch (msg.msgType) {
       case MSG_TYPES.GUIDE:
         return <AssistantMessage key={idx} content={msg.content} />;
       case MSG_TYPES.USER:
         return <UserMessage key={idx} content={msg.content} />;
-      case MSG_TYPES.INSTRUCTION: {
-        const isCurrentInstruction = idx === instructionMsgIdx;
-        return (
-          <div key={idx} ref={isCurrentInstruction ? instructionRef : undefined}>
-            <InstructionMessage text={msg.content} tips={msg.metadata?.tips} activityNumber={msg.metadata?.activityNumber} />
-          </div>
-        );
-      }
+      case MSG_TYPES.INSTRUCTION:
+        return <InstructionMessage key={idx} text={msg.content} tips={msg.metadata?.tips} activityNumber={msg.metadata?.activityNumber} />;
       case MSG_TYPES.SUBMISSION:
         return <DraftMessage key={idx} draft={msg.metadata || {}} />;
       case MSG_TYPES.FEEDBACK:
         return <FeedbackCard key={idx} draft={msg.metadata || {}} />;
-      case MSG_TYPES.ACTION:
-        // Action buttons render in the persistent bottom bar, not inline
-        return null;
+      case MSG_TYPES.ACTION: {
+        const action = msg.metadata?.action;
+        const label = msg.metadata?.label || msg.content;
+        const taken = takenActions.has(idx);
+        const isSubmit = action === 'complete_activity';
+
+        if (taken) {
+          return (
+            <div key={idx} style={{ textAlign: 'center', margin: '6px 0' }}>
+              <span className="action-taken-label">{TAKEN_LABELS[label] || label}</span>
+            </div>
+          );
+        }
+
+        // Find the grouped content to render inside the card
+        let groupedContent = null;
+        for (let i = idx - 1; i >= 0; i--) {
+          const prev = messages[i];
+          if (prev.msgType === MSG_TYPES.INSTRUCTION) {
+            groupedContent = (
+              <>
+                <div className="action-card-header">Activity {prev.metadata?.activityNumber}</div>
+                <InstructionMessage text={prev.content} tips={prev.metadata?.tips} />
+              </>
+            );
+            break;
+          }
+          if (prev.msgType === MSG_TYPES.FEEDBACK) {
+            groupedContent = (
+              <>
+                <div className="action-card-header">Assessment</div>
+                <FeedbackCard draft={prev.metadata || {}} />
+              </>
+            );
+            break;
+          }
+          if (prev.msgType !== MSG_TYPES.SECTION) break;
+        }
+
+        return (
+          <div key={idx} className="action-card">
+            {groupedContent}
+            <button
+              className={`primary-btn action-icon-btn full-width${isSubmit ? ' btn-success' : ''}`}
+              onClick={() => isSubmit
+                ? showModal(<ResponseModal onSubmit={({ text, screenshot }) => handleSubmitWork({ text, screenshot }, idx)} />)
+                : handleAction(action, idx)}
+              disabled={busy}
+            >
+              {isSubmit ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              ) : action === 'back_to_courses' ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              )}
+              {label}
+            </button>
+          </div>
+        );
+      }
       case MSG_TYPES.SECTION:
         return <div key={idx} className="chat-section-heading" role="separator">{msg.content}</div>;
       default:
         return <AssistantMessage key={idx} content={msg.content} />;
     }
   };
-
-  const showSubmitButton = phase === COURSE_PHASES.LEARNING && currentActivity;
-  const busy = !!loading;
-
-  // Find the latest pending action from messages
-  const pendingAction = !actionTaken
-    ? [...messages].reverse().find(m => m.msgType === MSG_TYPES.ACTION)?.metadata
-    : null;
-
-  // Submit is available when working on an activity and no pending action (assessment done)
-  const showSubmit = showSubmitButton && !pendingAction;
 
   return (
     <div className="course-layout">
@@ -280,25 +338,20 @@ export default function CourseChat() {
           <h2>{course.name}</h2>
           <ProgressBar courseKB={courseKB} />
         </div>
+        {isCustomCourse && (
+          <button className="reset-btn" onClick={handleExport} aria-label="Export course" title="Export course markdown">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        )}
         {phase && <button className="reset-btn" onClick={handleReset} aria-label="Reset course" title="Reset course">&#8635;</button>}
+        {isCustomCourse && (
+          <button className="reset-btn" onClick={handleDelete} aria-label="Delete course" title="Delete course">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        )}
       </div>
 
-      {/* Pinned activity bar — appears when instruction scrolls out of view */}
-      {showSubmit && instructionPinned && (
-        <div className="pinned-activity-bar">
-          <span className="pinned-activity-label">Activity {currentActivity.activityNumber}</span>
-          <button
-            className="primary-btn btn-success action-icon-btn"
-            onClick={() => showModal(<ResponseModal onSubmit={handleSubmitWork} />)}
-            disabled={busy}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-            Complete Activity
-          </button>
-        </div>
-      )}
-
-      <ChatArea ref={chatRef}>
+      <ChatArea>
         {messages.map(renderMessage)}
         {displayText != null && displayText.length > 0 && (
           <AssistantMessage content={displayText} />
@@ -311,42 +364,13 @@ export default function CourseChat() {
         {error && <div className="msg msg-response" role="alert" style={{ color: 'var(--color-warning)' }}>{error}</div>}
       </ChatArea>
 
-      {/* Bottom bar: action buttons + Q&A */}
-      {phase && (
+      {phase && phase !== COURSE_PHASES.COMPLETED && (
         <div className="course-bottom-bar">
-          {pendingAction && (
-            <button
-              className="primary-btn action-icon-btn full-width"
-              onClick={() => handleAction(pendingAction.action)}
-              disabled={busy}
-            >
-              {pendingAction.action === 'back_to_courses' ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-              )}
-              {pendingAction.label}
-            </button>
-          )}
-          {showSubmit && !instructionPinned && (
-            <button
-              className="primary-btn btn-success action-icon-btn full-width"
-              onClick={() => showModal(<ResponseModal onSubmit={handleSubmitWork} />)}
-              disabled={busy}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-              Complete Activity
-            </button>
-          )}
-          {phase !== COURSE_PHASES.COMPLETED && (
-            <ComposeBar
-              placeholder={showSubmit
-                ? 'Ask the guide about this activity...'
-                : 'Ask the guide a question...'}
-              onSend={handleSend}
-              disabled={busy}
-            />
-          )}
+          <ComposeBar
+            placeholder="Ask the guide a question..."
+            onSend={handleSend}
+            disabled={busy}
+          />
         </div>
       )}
     </div>

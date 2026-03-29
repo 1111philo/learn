@@ -33,7 +33,7 @@ When logged in, the server is the source of truth. Data is written to the server
 | `activities:{courseId}` | Activities for a course |
 | `drafts:{courseId}` | Drafts (submissions + assessments) for a course |
 
-Screenshots are embedded as `screenshotDataUrl` in draft data during sync upload and extracted back to IndexedDB on download.
+Images are embedded as `screenshotDataUrl` in draft data during sync upload and extracted back to IndexedDB on download.
 
 ## AI provider routing
 

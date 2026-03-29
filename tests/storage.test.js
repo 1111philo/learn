@@ -45,6 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_drafts_course ON drafts(course_id);
 CREATE TABLE IF NOT EXISTS work_products (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT NOT NULL, course_name TEXT, url TEXT, completed_at INTEGER);
 CREATE TABLE IF NOT EXISTS auth (id INTEGER PRIMARY KEY CHECK (id = 1), access_token TEXT, refresh_token TEXT, user_json TEXT);
 CREATE TABLE IF NOT EXISTS pending_state (key TEXT PRIMARY KEY, state_json TEXT, updated_at INTEGER);
+CREATE TABLE IF NOT EXISTS courses (course_id TEXT PRIMARY KEY, markdown TEXT NOT NULL, created_at INTEGER);
 CREATE TABLE IF NOT EXISTS course_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', msg_type TEXT NOT NULL, phase TEXT, metadata TEXT, timestamp INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_course_msg_course ON course_messages(course_id, timestamp);
 `;
@@ -62,6 +63,7 @@ describe('SQLite schema', () => {
     const tables = queryAll("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
     const names = tables.map(t => t.name);
     assert.ok(names.includes('settings'));
+    assert.ok(names.includes('courses'));
     assert.ok(names.includes('course_kbs'));
     assert.ok(names.includes('activity_kbs'));
     assert.ok(names.includes('activities'));
@@ -248,6 +250,19 @@ describe('course messages', () => {
     run('DELETE FROM course_messages WHERE course_id = ?', ['test-clear']);
     const rows = queryAll('SELECT * FROM course_messages WHERE course_id = ?', ['test-clear']);
     assert.equal(rows.length, 0);
+  });
+});
+
+describe('user-created courses', () => {
+  it('stores and retrieves a user course', () => {
+    const md = '# My Course\n\nA test course.\n\n## Exemplar\nSomething great.\n\n## Learning Objectives\n- Can do X\n- Can do Y';
+    run('INSERT INTO courses (course_id, markdown, created_at) VALUES (?, ?, ?)',
+      ['custom-123', md, 1000]);
+
+    const rows = queryAll('SELECT * FROM courses');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].course_id, 'custom-123');
+    assert.ok(rows[0].markdown.includes('My Course'));
   });
 });
 

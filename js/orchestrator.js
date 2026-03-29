@@ -34,7 +34,7 @@ async function loadKnowledgeBase() {
 }
 
 /** Agents that get the knowledge base injected into their system prompt. */
-const KB_AGENTS = ['guide'];
+const KB_AGENTS = ['guide', 'course-creator'];
 
 function parseJSON(text) {
   const trimmed = text.trim();
@@ -113,10 +113,6 @@ export async function isReady() {
 
 // -- Guide (streaming) --------------------------------------------------------
 
-/**
- * Stream a guide response. Calls onChunk(partialText) as tokens arrive.
- * System prompt is assembled from: general KB + course KB + activity KB + learner profile.
- */
 export async function converseStream(promptName, messages, onChunk, maxTokens = 512) {
   let systemPrompt = await loadPrompt(promptName);
   if (KB_AGENTS.includes(promptName)) {
@@ -154,9 +150,6 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
 
 // -- Course Owner (LLM) -------------------------------------------------------
 
-/**
- * Initialize a course KB from a course prompt + learner profile.
- */
 export async function initializeCourseKB(course, profileSummary) {
   const systemPrompt = await loadPrompt('course-owner');
 
@@ -184,13 +177,9 @@ export async function initializeCourseKB(course, profileSummary) {
 
 // -- Activity Creator ---------------------------------------------------------
 
-/**
- * Generate the next activity from the course KB + learner profile.
- */
 export async function createActivity(courseKB, profileSummary, activityNumber, priorActivitiesSummary) {
   const systemPrompt = await loadPrompt('activity-creation');
 
-  // Cap prior activities summary to last 5 to manage context size
   const priorLines = (priorActivitiesSummary || 'None').split('\n');
   const cappedPrior = priorLines.length > 5
     ? `[${priorLines.length - 5} earlier activities omitted]\n${priorLines.slice(-5).join('\n')}`
@@ -224,10 +213,6 @@ export async function createActivity(courseKB, profileSummary, activityNumber, p
 
 // -- Activity Assessor --------------------------------------------------------
 
-/**
- * Assess a submission against the course exemplar and objectives.
- * Pass screenshotDataUrl for screenshots, textResponse for text.
- */
 export async function assessSubmission(courseKB, activityInstruction, priorAttempts, profileSummary, screenshotDataUrl, textResponse) {
   const systemPrompt = await loadPrompt('activity-assessment');
 
@@ -289,9 +274,6 @@ export async function assessSubmission(courseKB, activityInstruction, priorAttem
 
 // -- Learner Profile Owner (LLM — deep update on course completion) -----------
 
-/**
- * Deep profile update when a course is completed.
- */
 export async function updateProfileOnCompletion(fullProfile, courseKB, courseName, courseId, activitiesCompleted) {
   const systemPrompt = await loadPrompt('learner-profile-owner');
 
@@ -315,20 +297,14 @@ export async function updateProfileOnCompletion(fullProfile, courseKB, courseNam
 
 // -- Learner Profile Owner (code — incremental merge after assessment) --------
 
-/**
- * Incremental profile update from assessment results (code, no LLM call).
- * Updates active courses and basic stats.
- */
 export function incrementalProfileUpdate(profile, courseId, assessmentResult) {
   const updated = { ...profile };
 
-  // Track active courses
   if (!updated.activeCourses) updated.activeCourses = [];
   if (!updated.activeCourses.includes(courseId)) {
     updated.activeCourses.push(courseId);
   }
 
-  // Update strengths from demonstrated work
   if (assessmentResult.strengths?.length) {
     updated.latestStrengths = assessmentResult.strengths;
   }
@@ -361,4 +337,23 @@ export async function updateProfileFromFeedback(fullProfile, feedbackText, activ
   });
 
   return parseJSON(content);
+}
+
+// -- Course markdown extraction (from conversation) ---------------------------
+
+/**
+ * Extract structured course markdown from a creation conversation.
+ * One-shot call — reads the conversation and synthesizes the course.
+ */
+export async function extractCourseMarkdown(conversationText) {
+  const systemPrompt = await loadPrompt('course-extractor');
+
+  const { content } = await callApi({
+    model: MODEL_LIGHT,
+    systemPrompt,
+    messages: [{ role: 'user', content: conversationText }],
+    maxTokens: 1536,
+  });
+
+  return content.trim();
 }

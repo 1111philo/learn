@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext.jsx';
 import { ModalProvider } from './contexts/ModalContext.jsx';
 import App from './App.jsx';
 import { init as initDatabase } from '../js/db.js';
+import { getApiKey, saveApiKey, getPreferences, savePreferences } from '../js/storage.js';
 import '../sidepanel.css';
 
 let initialized = false;
@@ -29,7 +30,6 @@ async function bootstrap() {
       .replace(/,\s*([\]}])/g, '$1')
       .replace(/(\w+)\s*:/g, '"$1":')
     );
-    const { getApiKey, saveApiKey, getPreferences, savePreferences } = await import('../js/storage.js');
     if (ENV.apiKey) await saveApiKey(ENV.apiKey);
     if (ENV.name) {
       const prefs = await getPreferences();

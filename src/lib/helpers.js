@@ -21,6 +21,9 @@ export function renderMd(text) {
   );
   escaped = linkify(escaped);
   escaped = escaped.replace(/\n/g, '<br>');
+  // Clean up <br> tags adjacent to block-level list elements
+  escaped = escaped.replace(/<br>(<\/?[uo]l>)/g, '$1');
+  escaped = escaped.replace(/(<\/?[uo]l>)<br>/g, '$1');
   return escaped;
 }
 

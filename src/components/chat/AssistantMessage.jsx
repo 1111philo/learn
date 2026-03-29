@@ -10,7 +10,7 @@ export default function AssistantMessage({ content }) {
 
   return (
     <div className="msg msg-response">
-      <p dangerouslySetInnerHTML={{ __html: renderMd(text) }} />
+      <div dangerouslySetInnerHTML={{ __html: renderMd(text) }} />
     </div>
   );
 }

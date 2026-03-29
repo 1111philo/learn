@@ -26,9 +26,9 @@ For architecture details, see [docs/architecture.md](docs/architecture.md). For 
 ## Activity constraints
 
 Activities must:
-- Happen entirely in the browser tab (screenshots only capture the active tab)
+- Be completable entirely in the browser
 - Lead to one visible result on one page, fitting in a single viewport
-- End with "Hit Capture to capture your screen." or "Hit Submit to submit your response."
+- End with "Upload an image of your work." or "Hit Submit to submit your response."
 - Not reference desktop apps, terminals, or file system operations
 - Not use platform-specific keyboard shortcuts
 - Not use DevTools or browser developer tools

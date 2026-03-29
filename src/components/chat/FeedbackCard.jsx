@@ -3,7 +3,7 @@ import { renderMd } from '../../lib/helpers.js';
 export default function FeedbackCard({ draft }) {
   return (
     <div className="feedback-card msg msg-response">
-      <p dangerouslySetInnerHTML={{ __html: renderMd(draft.demonstrates || '') }} />
+      <div dangerouslySetInnerHTML={{ __html: renderMd(draft.demonstrates || '') }} />
       {draft.strengths?.length > 0 && (
         <>
           <strong>Strengths:</strong>

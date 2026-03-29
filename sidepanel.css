@@ -172,10 +172,16 @@ header {
 /* ── Main content ───────────────────────────────────────────────────────── */
 main {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space);
   outline: none;
   position: relative;
+}
+
+/* When course layout manages its own scrolling, main must not scroll */
+main:has(.course-layout) {
+  overflow: hidden;
 }
 
 main:focus-visible {
@@ -310,6 +316,7 @@ nav button:focus-visible {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   margin: calc(var(--space) * -1);
 }
 
@@ -323,28 +330,48 @@ nav button:focus-visible {
 
 .course-layout > .chat {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space);
   background: #fafaf8;
   font-size: 16px;
 }
 
-.pinned-activity-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px var(--space);
-  border-bottom: 1px solid var(--color-border);
+.action-card {
   background: var(--color-bg);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space);
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-.pinned-activity-label {
-  font-size: 0.8rem;
-  font-weight: 600;
+.action-card-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--color-text-secondary);
+}
+
+.action-card .msg {
+  padding: 0;
+  max-width: 100%;
+}
+
+.action-card .msg-response.instruction-msg {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.action-card .msg-response.feedback-card {
+  border: none;
+  padding: 0;
+  background: transparent;
 }
 
 .course-bottom-bar {
@@ -355,6 +382,17 @@ nav button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.action-taken-label {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.6;
 }
 
 .course-bottom-bar .chat-compose {
@@ -373,6 +411,64 @@ nav button:focus-visible {
 .action-icon-btn.full-width {
   width: 100%;
 }
+
+/* ── Create course ─────────────────────────────────────────────────────── */
+.course-card-create {
+  border-style: dashed;
+  color: var(--color-text-secondary);
+}
+
+.course-card-create:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.creation-panel {
+  flex-shrink: 0;
+  padding: 10px var(--space);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.creation-meter {
+  flex: 1;
+  min-width: 0;
+}
+
+.creation-meter-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.creation-meter-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #dc2626, #ea580c, #d97706, #65a30d, #16a34a);
+  position: relative;
+  overflow: hidden;
+}
+
+.creation-meter-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-surface);
+  transition: width 0.5s ease;
+}
+
+.create-course-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 
 .course-header {
   display: flex;
@@ -706,25 +802,27 @@ hr {
   height: 32px;
   border: none;
   border-radius: 8px;
-  background: var(--color-text-secondary);
+  background: var(--color-accent);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
 }
 
-.compose-send-btn:hover { background: var(--color-primary); }
+.compose-send-btn.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
 
 .compose-send-btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
-}
-
-.compose-send-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
 }
 
 .compose-preview {
@@ -953,8 +1051,8 @@ hr {
   border-radius: var(--radius);
   background: var(--color-surface);
   resize: none;
-  min-height: 80px;
-  max-height: 160px;
+  min-height: 140px;
+  max-height: 50vh;
   overflow-y: auto;
 }
 

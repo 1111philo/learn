@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useEffect } from 'react';
 import { getPreferences } from '../../js/storage.js';
-import { loadCourses } from '../../js/courseOwner.js';
+import { loadCourses, invalidateCoursesCache } from '../../js/courseOwner.js';
 import * as sync from '../../js/sync.js';
 import * as auth from '../../js/auth.js';
 
@@ -21,6 +21,8 @@ function reducer(state, action) {
       return { ...state, preferences: action.preferences };
     case 'SET_GENERATING':
       return { ...state, generating: action.generating };
+    case 'REFRESH_COURSES':
+      return { ...state, courses: action.courses };
     default:
       return state;
   }

@@ -7,7 +7,7 @@ export const PLATFORM_SHORTCUTS = /\b(F12|Ctrl\s*\+\s*Shift\s*\+\s*I|Cmd\s*\+\s*
 export const MULTI_SITE = /\b(visit\s+.{3,30}then\s+visit|compare\s+.{3,30}with|open\s+.{3,30}and\s+.{3,30}open|go\s+to\s+.{3,30}then\s+go\s+to|navigate\s+to\s+.{3,30}then\s+navigate)\b/i;
 export const NON_BROWSER_APP = /\b(open\s+(your\s+)?(text\s+editor|terminal|command\s+(line|prompt)|file\s+(manager|explorer)|finder|notepad|textedit|sublime|atom|vim|emacs|nano)|VS\s*Code|Visual\s+Studio|IntelliJ|PyCharm|Xcode|Android\s+Studio|PowerShell)\b/i;
 export const DEVTOOLS_PATTERN = /\b(DevTools|dev\s+tools|Inspect\s+Element|Lighthouse|open\s+(the\s+)?console|right[- ]click.{0,20}inspect|Elements?\s+(panel|tab)|Network\s+(panel|tab)|Sources?\s+(panel|tab)|F12)\b/i;
-export const PRODUCES_WORK = /\b(write|type|create|build|draft|compose|summarize|list|outline|note|annotate|describe|explain|fill\s+(in|out)|enter|paste|edit|modify|change|add|code|implement|design)\b/i;
+export const PRODUCES_WORK = /\b(write|type|create|build|draft|compose|summarize|list|outline|note|annotate|describe|explain|fill\s+(in|out)|enter|paste|edit|modify|change|add|code|implement|design|identify|research|explore|compare|analyze|define|develop|plan|map|review|reflect|respond|answer|share|record|document|organize|sketch|propose|articulate|formulate|evaluate|assess|brainstorm|search|visit|open|publish|post)\b/i;
 
 export function validateSafety(text) {
   if (UNSAFE_PATTERNS.test(text)) return 'Response contains unsafe content.';
@@ -44,10 +44,6 @@ export function validateActivity(parsed) {
 
   // No DevTools
   if (DEVTOOLS_PATTERN.test(instr)) return 'Activity must not use DevTools.';
-
-  // Must require visible work
-  const stepsBeforeRecord = lines.slice(0, -1).join(' ');
-  if (!PRODUCES_WORK.test(stepsBeforeRecord)) return 'Activity must require the learner to produce visible work.';
 
   return null;
 }

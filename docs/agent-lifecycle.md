@@ -76,7 +76,7 @@ The learner sees the guide's welcome message streamed in real time.
 **Output:**
 ```json
 {
-  "instruction": "1. Go to wordpress.org/playground...\n2. Create a new page...\n3. Write your professional identity statement...\n4. Hit Capture to capture your screen.",
+  "instruction": "1. Go to wordpress.org/playground...\n2. Create a new page...\n3. Write your professional identity statement...\n4. Upload an image of your work.",
   "tips": ["Focus on authentic voice rather than formal language", "Include specific examples from your experience"]
 }
 ```
@@ -94,7 +94,7 @@ The core loop repeats: learner submits → assessor evaluates → KB enriches �
 | | |
 |---|---|
 | Prompt | [`activity-assessment.md`](../prompts/activity-assessment.md) |
-| Model | `MODEL_HEAVY` (screenshots) / `MODEL_LIGHT` (text) |
+| Model | `MODEL_HEAVY` (images) / `MODEL_LIGHT` (text) |
 | Trigger | Learner submits work ([`courseEngine.handleSubmission`](../src/lib/courseEngine.js)) |
 | Function | `orchestrator.assessSubmission()` |
 | Validation | `validateAssessment()` in [`validators.js`](../js/validators.js) |
@@ -104,7 +104,7 @@ The core loop repeats: learner submits → assessor evaluates → KB enriches �
 - `activityInstruction` -- the current activity's instruction text
 - `priorAttempts[]` -- previous attempts on this activity (demonstrates, strengths, moved, needed)
 - `learnerProfile` -- summary string
-- Screenshot (base64 image) and/or text response
+- Uploaded image (base64) and/or text response
 
 **Output:**
 ```json

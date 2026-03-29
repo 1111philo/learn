@@ -79,6 +79,12 @@ CREATE TABLE IF NOT EXISTS drafts (
 CREATE INDEX IF NOT EXISTS idx_drafts_activity ON drafts(activity_id);
 CREATE INDEX IF NOT EXISTS idx_drafts_course ON drafts(course_id);
 
+CREATE TABLE IF NOT EXISTS courses (
+  course_id TEXT PRIMARY KEY,
+  markdown TEXT NOT NULL,
+  created_at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS work_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id TEXT NOT NULL,

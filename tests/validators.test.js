@@ -124,12 +124,6 @@ describe('validateActivity', () => {
     })));
   });
 
-  it('rejects activity with no visible work', () => {
-    assert.ok(validateActivity(validActivity({
-      instruction: '1. Visit the homepage\n2. Look around\n3. Hit Capture to capture your screen.',
-    })));
-  });
-
   it('rejects unsafe content', () => {
     assert.ok(validateActivity(validActivity({
       instruction: '1. Write about how to steal passwords\n2. Hit Capture to capture your screen.',

@@ -51,7 +51,10 @@ async function buildGuideMessages(course, courseKB, checkpoint, conversationTail
     ...conversationTail,
   ];
   if (conversationTail.length === 0) {
-    fullMessages.push({ role: 'user', content: 'Orient me.' });
+    const prompt = checkpoint === 'course_complete' ? 'Celebrate my achievement.'
+      : checkpoint === 'post_assessment' ? 'Comment on my assessment.'
+      : 'Orient me.';
+    fullMessages.push({ role: 'user', content: prompt });
   }
   return fullMessages;
 }
@@ -157,6 +160,12 @@ export async function generateNextActivity(courseId, course) {
       metadata: { activityId, activityNumber: nextNum, tips: generated.tips },
       timestamp: ts(),
     },
+    {
+      role: 'assistant', content: 'Complete Activity', msgType: MSG_TYPES.ACTION,
+      phase: COURSE_PHASES.LEARNING,
+      metadata: { action: 'complete_activity', label: 'Complete Activity' },
+      timestamp: ts(),
+    },
   ];
 
   await saveCourseMessages(courseId, messages);
@@ -259,7 +268,12 @@ export async function handleSubmission(courseId, course, activityId, screenshot,
       await saveCourseKB(courseId, enrichedKB);
       syncInBackground(`courseKB:${courseId}`);
     }
-    const guideMsg = await callGuide(course, enrichedKB, 'course_complete', [], {});
+    const guideMsg = await callGuide(course, enrichedKB, 'course_complete', [], {
+      demonstrates: result.demonstrates,
+      strengths: result.strengths,
+      moved: result.moved,
+      activitiesCompleted: enrichedKB.activitiesCompleted,
+    });
     if (guideMsg) {
       messages.push({
         role: 'assistant', content: guideMsg, msgType: MSG_TYPES.GUIDE,
@@ -297,9 +311,9 @@ export async function handleSubmission(courseId, course, activityId, screenshot,
 
   // Not achieved → "Next Activity" button
   messages.push({
-    role: 'assistant', content: 'Next Activity', msgType: MSG_TYPES.ACTION,
+    role: 'assistant', content: 'Load Next Activity', msgType: MSG_TYPES.ACTION,
     phase: COURSE_PHASES.LEARNING,
-    metadata: { action: 'next_activity', label: 'Next Activity' },
+    metadata: { action: 'next_activity', label: 'Load Next Activity' },
     timestamp: ts(),
   });
 

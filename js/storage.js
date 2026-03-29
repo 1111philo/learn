@@ -258,6 +258,35 @@ export async function clearCourseMessages(courseId) {
   run('DELETE FROM course_messages WHERE course_id = ?', [courseId]);
 }
 
+// -- User-created courses -----------------------------------------------------
+
+export async function saveUserCourse(courseId, markdown) {
+  run(
+    'INSERT OR REPLACE INTO courses (course_id, markdown, created_at) VALUES (?, ?, ?)',
+    [courseId, markdown, Date.now()]
+  );
+}
+
+export async function getUserCourses() {
+  return queryAll('SELECT * FROM courses ORDER BY created_at');
+}
+
+export async function getUserCourseMarkdown(courseId) {
+  const row = query('SELECT markdown FROM courses WHERE course_id = ?', [courseId]);
+  return row ? row.markdown : null;
+}
+
+export async function deleteUserCourse(courseId) {
+  run('DELETE FROM courses WHERE course_id = ?', [courseId]);
+}
+
+export async function getDraftCourseId() {
+  const row = query(
+    "SELECT course_id FROM course_messages WHERE course_id LIKE 'create:%' ORDER BY timestamp DESC LIMIT 1"
+  );
+  return row ? row.course_id : null;
+}
+
 // -- Work products ------------------------------------------------------------
 
 export async function getWorkProducts() {
