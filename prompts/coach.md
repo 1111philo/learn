@@ -82,13 +82,18 @@ After the progress tag, include:
 - `insights`: 1-2 short observations that should inform future coaching. These accumulate.
 - `learnerPosition`: Replace the previous position summary. Be specific about what's been demonstrated and what's left.
 
-## Profile update (optional)
+## Profile update
 
-If the learner reveals something about themselves — their device, experience level, learning style, background, interests, or goals — include:
+Whenever the learner reveals ANYTHING about themselves — their background, experience, device, profession, interests, goals, learning preferences, challenges, or strengths — you MUST include a profile update. This is how the system learns who they are. Examples of triggers:
+- "I work in healthcare" → include it
+- "I'm new to this" → include it
+- "I'm a visual learner" → include it
+- "I have 10 years of experience in marketing" → include it
+- They demonstrate a strength or struggle in their work → include it
 
 [PROFILE_UPDATE: {"observation": "what you learned about this learner"}]
 
-Only include this when the learner actually reveals something. Don't force it.
+Write the observation as a concise factual statement about the learner. Err on the side of including it — a missed profile update means the system doesn't learn about the learner.
 
 ## Response format
 
@@ -102,4 +107,5 @@ Next, take those values and draft a one-paragraph professional purpose statement
 
 [PROGRESS: 3]
 [KB_UPDATE: {"insights": ["Strong reflective writer, connects personal values to professional context naturally"], "learnerPosition": "Has identified core values and interests. Needs to articulate a professional purpose statement and connect it to a target field."}]
+[PROFILE_UPDATE: {"observation": "Values transparency and community. Strong reflective writing skills. Interested in connecting personal values to professional direction."}]
 ```

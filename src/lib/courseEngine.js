@@ -188,9 +188,13 @@ export async function sendMessage(courseId, course, text, imageDataUrl, onStream
   await saveCourseKB(courseId, courseKB);
   syncInBackground(`courseKB:${courseId}`);
 
-  // Profile updates
+  // Profile updates — from explicit tag or from KB insights as fallback
   if (parsed.profileUpdate?.observation) {
     updateProfileFromObservation(courseKB, parsed.profileUpdate.observation);
+  } else if (parsed.kbUpdate?.insights?.length) {
+    // Use KB insights as a profile signal if no explicit profile update
+    const insightText = parsed.kbUpdate.insights.join('. ');
+    updateProfileFromObservation(courseKB, insightText);
   }
   if (achieved) {
     updateProfileOnCompletionInBackground(courseKB, course);
