@@ -1,9 +1,6 @@
 node_modules/
 .DS_Store
-*.crx
-*.pem
 *.zip
 .env.js
 dist/
-release/
 data/courses/index.json
