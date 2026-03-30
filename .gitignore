@@ -5,4 +5,5 @@ node_modules/
 *.zip
 .env.js
 dist/
+release/
 data/courses/index.json

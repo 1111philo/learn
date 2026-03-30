@@ -45,6 +45,23 @@ export function AppProvider({ children }) {
     load();
   }, []);
 
+  // Re-sync when the app returns to foreground (multi-device: pick up changes from other devices)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!await auth.isLoggedIn()) return;
+      try {
+        await sync.loadAll();
+        invalidateCoursesCache();
+        const preferences = await getPreferences();
+        const courses = await loadCourses();
+        dispatch({ type: 'INIT_DATA', payload: { preferences, courses } });
+      } catch { /* offline or session expired — handled elsewhere */ }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   return (
     <AppContext.Provider value={{ state, dispatch }}>
       {children}

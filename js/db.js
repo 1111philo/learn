@@ -1,8 +1,10 @@
 /**
  * SQLite database module for 1111 Learn.
- * Uses sql.js (WASM) with persistence to chrome.storage.local.
+ * Uses sql.js (WASM) with persistence via platform abstraction.
  * Screenshots remain in IndexedDB — only referenced by key in the drafts table.
  */
+
+import { resolveAssetURL, kvStorage } from './platform.js';
 
 const DB_STORAGE_KEY = '_sqliteDb';
 const PERSIST_DEBOUNCE_MS = 1000;
@@ -118,10 +120,10 @@ CREATE INDEX IF NOT EXISTS idx_course_msg_course
 
 export async function init() {
   const SQL = await globalThis.initSqlJs({
-    locateFile: file => chrome.runtime.getURL(`lib/${file}`),
+    locateFile: file => resolveAssetURL(`lib/${file}`),
   });
 
-  const stored = await chrome.storage.local.get(DB_STORAGE_KEY);
+  const stored = await kvStorage.get(DB_STORAGE_KEY);
   if (stored[DB_STORAGE_KEY]) {
     _db = new SQL.Database(new Uint8Array(stored[DB_STORAGE_KEY]));
     _db.run(SCHEMA_SQL);
@@ -194,7 +196,7 @@ export async function persist() {
     _persistTimer = null;
   }
   const data = _db.export();
-  await chrome.storage.local.set({ [DB_STORAGE_KEY]: Array.from(data) });
+  await kvStorage.set({ [DB_STORAGE_KEY]: Array.from(data) });
   _dirty = false;
 }
 
@@ -212,5 +214,5 @@ export async function clearAllData() {
     clearTimeout(_persistTimer);
     _persistTimer = null;
   }
-  await chrome.storage.local.remove(DB_STORAGE_KEY);
+  await kvStorage.remove(DB_STORAGE_KEY);
 }

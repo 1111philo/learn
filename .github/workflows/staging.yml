@@ -8,37 +8,33 @@ permissions:
   contents: write
 
 jobs:
-  staging-rc:
-    # Skip runs triggered by the version bump commit
+  # ── Determine RC version ─────────────────────────────────────────────────
+  prepare:
     if: "!contains(github.event.head_commit.message, 'chore: bump version')"
     runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.rc.outputs.skip }}
+      rc_version: ${{ steps.rc.outputs.rc_version }}
+      base_version: ${{ steps.rc.outputs.base_version }}
+      rc_num: ${{ steps.rc.outputs.rc_num }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history for merge-base and tag counting
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
-
-      - name: Build extension
-        run: npm run build
+      - run: npm ci
+      - run: npm test
 
       - name: Determine RC version
         id: rc
         run: |
-          # Get main's version — this is the base for all RCs
           BASE_VERSION=$(git show origin/main:manifest.json | jq -r '.version' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Count commits on staging since it diverged from main,
-          # excluding version bump commits (which are bot noise)
           MERGE_BASE=$(git merge-base origin/main HEAD)
           RC_NUM=$(git log --oneline "$MERGE_BASE..HEAD" --grep='chore: bump version' --invert-grep | wc -l | tr -d ' ')
 
@@ -53,7 +49,6 @@ jobs:
           echo "rc_version=${BASE_VERSION}-RC${RC_NUM}" >> "$GITHUB_OUTPUT"
           echo "RC version: ${BASE_VERSION}-RC${RC_NUM}"
 
-          # Save commit list for release notes
           git log --pretty=format:"%h %s" "$MERGE_BASE..HEAD" --grep='chore: bump version' --invert-grep > /tmp/commits.txt
 
       - name: Write testing instructions
@@ -65,20 +60,28 @@ jobs:
 
           ## How to test this release candidate
 
-          ### New testers
-          1. Download the `.zip` file attached to this release.
+          ### Chrome extension
+          1. Download the `-chrome.zip` file attached to this release.
           2. Unzip it to a folder on your computer.
           3. Open Chrome and go to `chrome://extensions`.
           4. Enable **Developer mode** (toggle in the top-right corner).
           5. Click **Load unpacked** and select the unzipped folder.
           6. The 1111 Learn icon will appear in your toolbar — click it to open the side panel.
-          7. Complete the onboarding wizard (you'll need an Anthropic API key).
 
-          ### Existing testers updating to a new RC
-          1. Download the `.zip` file attached to this release.
-          2. Unzip it, replacing the contents of your existing extension folder.
-          3. Go to `chrome://extensions` and click the **reload** button (↻) on the 1111 Learn card.
-          4. Your data (courses, progress, profile) is preserved — the extension migrates data automatically.
+          ### Android
+          1. Download the `.apk` file attached to this release.
+          2. Transfer it to your Android device and install it (you may need to enable "Install from unknown sources").
+
+          ### iOS (Simulator only)
+          1. Download the `-ios-simulator.zip` file.
+          2. Unzip and drag `App.app` into an open iOS Simulator.
+
+          ### macOS
+          1. Download the `.dmg` file.
+          2. Open it and drag 1111 Learn to Applications.
+
+          ### Windows
+          1. Download the `-setup.exe` file and run the installer.
 
           ### What to look for
           - Verify existing course progress and learner profile are intact after updating.
@@ -142,53 +145,213 @@ jobs:
               f.write(testing)
           PYEOF
 
-      - name: Update manifest.json with RC version
+      - name: Upload release notes
         if: steps.rc.outputs.skip != 'true'
-        run: |
-          BASE_VERSION="${{ steps.rc.outputs.base_version }}"
-          RC_NUM="${{ steps.rc.outputs.rc_num }}"
-          RC_DISPLAY="${{ steps.rc.outputs.rc_version }}"
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/release_notes.md
 
-          # version uses 4-segment numeric format for Chrome compatibility
-          jq --arg v "${BASE_VERSION}.${RC_NUM}" --arg vn "$RC_DISPLAY" \
+  # ── Chrome extension ─────────────────────────────────────────────────────
+  build-chrome:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+
+      - name: Set RC version in manifest
+        run: |
+          BASE="${{ needs.prepare.outputs.base_version }}"
+          RC_NUM="${{ needs.prepare.outputs.rc_num }}"
+          RC_DISPLAY="${{ needs.prepare.outputs.rc_version }}"
+          jq --arg v "${BASE}.${RC_NUM}" --arg vn "$RC_DISPLAY" \
             '.version = $v | .version_name = $vn' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
-          echo "Updated manifest.json:"
-          cat manifest.json
 
-      - name: Rebuild with RC version and package zip
-        if: steps.rc.outputs.skip != 'true'
+      - name: Build and package
         run: |
-          RC_VERSION="${{ steps.rc.outputs.rc_version }}"
-          ZIP_NAME="1111-learn-v${RC_VERSION}.zip"
-
-          # Rebuild so dist/ has the updated RC manifest
           npm run build
+          cd dist && zip -r ../1111-learn-chrome-v${{ needs.prepare.outputs.rc_version }}.zip . -x '.env.js' && cd ..
 
-          cd dist
-          # Exclude .env.js (dev credentials, should never be in releases)
-          zip -r "../$ZIP_NAME" . -x '.env.js'
-          cd ..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: 1111-learn-chrome-v${{ needs.prepare.outputs.rc_version }}.zip
 
-          echo "zip_name=$ZIP_NAME" >> "$GITHUB_ENV"
+  # ── Android APK ──────────────────────────────────────────────────────────
+  build-android:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Commit version bump
-        if: steps.rc.outputs.skip != 'true'
+      - run: npm ci
+      - run: npm run build:app
+      - run: npx cap sync android
+
+      - name: Build Android APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Rename APK
         run: |
-          RC_VERSION="${{ steps.rc.outputs.rc_version }}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             1111-learn-android-v${{ needs.prepare.outputs.rc_version }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: 1111-learn-android-v${{ needs.prepare.outputs.rc_version }}.apk
+
+  # ── iOS build ────────────────────────────────────────────────────────────
+  build-ios:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build:app
+      - run: npx cap sync ios
+
+      - name: Build iOS (simulator, unsigned)
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" | tail -20
+
+      - name: Package iOS build
+        run: |
+          cd ios/App/build/Build/Products/Release-iphonesimulator
+          zip -r ../../../../../../1111-learn-ios-simulator-v${{ needs.prepare.outputs.rc_version }}.zip App.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: 1111-learn-ios-simulator-v${{ needs.prepare.outputs.rc_version }}.zip
+
+  # ── Electron macOS ───────────────────────────────────────────────────────
+  build-electron-mac:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build:app
+
+      - name: Build Electron macOS
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --config.extraMetadata.version=${{ needs.prepare.outputs.rc_version }}
+
+      - name: Rename artifacts
+        run: |
+          for f in release/*.dmg; do
+            [ -f "$f" ] && cp "$f" "1111-learn-macos-v${{ needs.prepare.outputs.rc_version }}.dmg"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: electron-mac
+          path: 1111-learn-macos-v${{ needs.prepare.outputs.rc_version }}.dmg
+
+  # ── Electron Windows ─────────────────────────────────────────────────────
+  build-electron-win:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build:app
+
+      - name: Build Electron Windows
+        run: npx electron-builder --win --config.extraMetadata.version=${{ needs.prepare.outputs.rc_version }}
+
+      - name: Rename artifacts
+        shell: bash
+        run: |
+          for f in release/*.exe; do
+            [ -f "$f" ] && cp "$f" "1111-learn-windows-v${{ needs.prepare.outputs.rc_version }}-setup.exe"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: electron-win
+          path: 1111-learn-windows-v${{ needs.prepare.outputs.rc_version }}-setup.exe
+
+  # ── Commit version bump + create pre-release ─────────────────────────────
+  release:
+    needs: [prepare, build-chrome, build-android, build-ios, build-electron-mac, build-electron-win]
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Commit RC version bump
+        run: |
+          BASE="${{ needs.prepare.outputs.base_version }}"
+          RC_NUM="${{ needs.prepare.outputs.rc_num }}"
+          RC_DISPLAY="${{ needs.prepare.outputs.rc_version }}"
+          jq --arg v "${BASE}.${RC_NUM}" --arg vn "$RC_DISPLAY" \
+            '.version = $v | .version_name = $vn' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifest.json
-          git commit -m "chore: bump version to ${RC_VERSION}" || echo "No changes to commit"
+          git commit -m "chore: bump version to ${RC_DISPLAY}" || echo "No changes to commit"
           git push
 
       - name: Create GitHub pre-release
-        if: steps.rc.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RC_VERSION="${{ steps.rc.outputs.rc_version }}"
+          RC_VERSION="${{ needs.prepare.outputs.rc_version }}"
+
+          FILES=""
+          for f in artifacts/chrome-extension/*.zip; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/android-apk/*.apk; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/ios-build/*.zip; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/electron-mac/*; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/electron-win/*.exe; do [ -f "$f" ] && FILES="$FILES $f"; done
+
           gh release create "v${RC_VERSION}" \
-            "${{ env.zip_name }}" \
+            $FILES \
             --title "v${RC_VERSION}" \
-            --notes-file /tmp/release_notes.md \
+            --notes-file artifacts/release-notes/release_notes.md \
             --prerelease

@@ -1,6 +1,6 @@
 # Architecture
 
-1111 Learn is a Chrome extension (Manifest V3) that runs in the side panel. The UI is a React 18 app built with Vite. Service modules are vanilla JS (ES modules) in `js/`, imported by React components in `src/`.
+1111 Learn is a Chrome extension (Manifest V3, side panel) that also runs as native apps on iOS, Android, macOS, and Windows via Capacitor (mobile) and Electron (desktop). The UI is a React 18 app built with Vite. Service modules are vanilla JS (ES modules) in `js/`, imported by React components in `src/`. A platform abstraction layer (`js/platform.js`) replaces Chrome-specific APIs so all platforms share the same web code.
 
 ## Agents
 
@@ -101,8 +101,9 @@ There are no predefined units, rubrics, journeys, or summative assessments. Acti
 
 ### SQLite (structured data)
 
-All structured data lives in an in-memory SQLite database powered by [sql.js](https://github.com/sql-js/sql.js) (WASM). The database is serialized and persisted to `chrome.storage.local` under `_sqliteDb` (debounced, plus on `visibilitychange`).
+All structured data lives in an in-memory SQLite database powered by [sql.js](https://github.com/sql-js/sql.js) (WASM). The database is serialized and persisted via `kvStorage` from [`js/platform.js`](../js/platform.js) under key `_sqliteDb` (debounced, plus on `visibilitychange`). The platform abstraction routes persistence to `chrome.storage.local` (extension), `@capacitor/filesystem` (mobile), Node `fs` via IPC (Electron), or IndexedDB (web fallback).
 
+- [`js/platform.js`](../js/platform.js) -- platform detection, asset URL resolution, cross-platform key-value storage
 - [`js/db.js`](../js/db.js) -- database lifecycle: init, schema creation, persistence, column migrations
 - [`js/storage.js`](../js/storage.js) -- query API: getters/setters for all data types
 
@@ -152,9 +153,13 @@ manifest.json            Chrome extension manifest (MV3)
 background.js            Opens the side panel on icon click
 sidepanel.html           Vite entry point
 sidepanel.css            Global styles
-vite.config.js           Vite build config
+vite.config.js           Chrome extension Vite build config
+vite.config.app.js       Native app Vite build config
+vite.config.shared.js    Shared Vite plugins and targets
+capacitor.config.json    Capacitor config (iOS + Android)
 lib/                     Vendored sql.js (WASM)
 js/                      Service modules (vanilla JS)
+  platform.js            Platform abstraction (asset URLs, storage, detection)
   db.js                  SQLite lifecycle
   storage.js             Query layer + IndexedDB for images
   courseOwner.js          Course prompt loading + KB updates
@@ -163,6 +168,9 @@ js/                      Service modules (vanilla JS)
   validators.js          Output validators
   auth.js                Auth for learn-service
   sync.js                Cloud data sync
+electron/                Electron desktop app shell
+  main.cjs               Main process (window, IPC handlers)
+  preload.cjs            Preload script (contextBridge)
 src/                     React app
   main.jsx               Entry: db init, React mount
   App.jsx                Routes
@@ -174,7 +182,9 @@ src/                     React app
 prompts/                 Agent system prompts (markdown)
 data/courses/            Course prompt files (markdown)
 data/knowledge-base.md   Program knowledge base
-tests/                   Node test runner (manifest, courses, validators, storage)
+tests/                   Node test runner (manifest, courses, validators, storage, platform)
+ios/                     Capacitor iOS project (generated)
+android/                 Capacitor Android project (generated)
 docs/                    Documentation
-dist/                    Build output (Chrome extension)
+dist/                    Build output (all platforms)
 ```

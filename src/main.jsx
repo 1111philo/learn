@@ -7,6 +7,7 @@ import { ModalProvider } from './contexts/ModalContext.jsx';
 import App from './App.jsx';
 import { init as initDatabase } from '../js/db.js';
 import { getApiKey, saveApiKey, getPreferences, savePreferences } from '../js/storage.js';
+import { resolveAssetURL } from '../js/platform.js';
 import '../sidepanel.css';
 
 let initialized = false;
@@ -16,9 +17,9 @@ async function bootstrap() {
   initialized = true;
 
   // Seed from .env.js if present (dev convenience — file is gitignored).
-  // Loaded at runtime via chrome.runtime.getURL since Vite can't bundle dotfiles.
+  // Loaded at runtime via resolveAssetURL since Vite can't bundle dotfiles.
   try {
-    const envUrl = chrome.runtime.getURL('.env.js');
+    const envUrl = resolveAssetURL('.env.js');
     const envResp = await fetch(envUrl);
     if (!envResp.ok) throw new Error('no .env.js');
     const envText = await envResp.text();

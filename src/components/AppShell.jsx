@@ -8,7 +8,7 @@ import LoginModal from './modals/LoginModal.jsx';
 export default function AppShell({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { loggedIn, user, logout } = useAuth();
+  const { loggedIn, user, logout, sessionExpired } = useAuth();
   const { show: showModal } = useModal();
   const animClass = useViewTransition();
   const isOnboarding = location.pathname.startsWith('/onboarding');
@@ -27,6 +27,15 @@ export default function AppShell({ children }) {
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [dropdownOpen]);
+
+  // Prompt re-login when session expires on another device
+  useEffect(() => {
+    if (sessionExpired) {
+      showModal(
+        <LoginModal message="Your session expired. Please sign in again to continue syncing." />,
+      );
+    }
+  }, [sessionExpired, showModal]);
 
   // Close dropdown on Escape
   useEffect(() => {
