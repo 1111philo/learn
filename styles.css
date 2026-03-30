@@ -567,7 +567,7 @@ h2 {
 
 .creation-panel {
   flex-shrink: 0;
-  padding: 10px max(var(--space), calc((100% - 720px) / 2));
+  padding: 10px max(var(--space), calc((100% - var(--content-max)) / 2));
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
   display: flex;
