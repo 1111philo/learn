@@ -102,9 +102,9 @@ export default function Settings() {
       )}
 
       <div className="settings-section">
-        <h3>Learner Profile</h3>
+        <h3 id="profile-heading">Learner Profile</h3>
         <p className="settings-hint">Updated automatically by the AI as you complete activities.</p>
-        <div className="profile-display" aria-label="Learner profile summary">
+        <div className="profile-display" aria-labelledby="profile-heading">
           {profileSummary || <em>No profile yet. Complete an activity to build your profile.</em>}
         </div>
         <button className="secondary-btn profile-feedback-btn" onClick={handleProfileFeedback}>

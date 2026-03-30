@@ -3,7 +3,7 @@
  * parses structured JSON responses.
  */
 
-import { callClaude, streamClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
+import { callClaude, streamClaude, parseSSEStream, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
 import { validateCourseKB } from './validators.js';
@@ -102,6 +102,27 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
   }
 
+  // Logged-in users call through the service proxy
+  if (await isLoggedIn()) {
+    const resp = await authenticatedFetch('/v1/ai/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL_LIGHT, max_tokens: maxTokens, system: systemPrompt, messages, stream: true }),
+    });
+    const contentType = resp.headers.get('content-type') || '';
+    if (resp.ok && contentType.includes('text/event-stream')) {
+      // Proxy supports SSE streaming
+      let full = '';
+      for await (const chunk of parseSSEStream(resp.body)) { full += chunk; onChunk(full); }
+      return full;
+    }
+    // Non-streaming response (proxy returned JSON)
+    const { content } = await parseResponse(resp);
+    onChunk(content);
+    return content;
+  }
+
+  // Direct Anthropic API with user's own key (streaming)
   const apiKey = await getApiKey();
   if (apiKey) {
     let full = '';
@@ -110,9 +131,7 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     return full;
   }
 
-  const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
-  onChunk(content);
-  return content;
+  throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
 }
 
 // -- Course Owner (LLM) -------------------------------------------------------

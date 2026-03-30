@@ -219,7 +219,7 @@ export default function CourseCreate() {
         </div>
       )}
 
-      <ChatArea>
+      <ChatArea courseName="Course Creator">
         {messages.map(renderMessage)}
         {displayText != null && displayText.length > 0 && (
           <AssistantMessage content={displayText} />
