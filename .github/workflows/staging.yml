@@ -195,7 +195,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - run: npm ci
       - run: npm run build:app
@@ -244,8 +244,11 @@ jobs:
 
       - name: Package iOS build
         run: |
-          cd ios/App/build/Build/Products/Release-iphonesimulator
-          zip -r ../../../../../../1111-learn-ios-simulator-v${{ needs.prepare.outputs.rc_version }}.zip App.app
+          APP_PATH=$(find ios/App/build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then echo "No .app found"; exit 1; fi
+          APP_DIR=$(dirname "$APP_PATH")
+          cd "$APP_DIR"
+          zip -r "$GITHUB_WORKSPACE/1111-learn-ios-simulator-v${{ needs.prepare.outputs.rc_version }}.zip" "$(basename "$APP_PATH")"
 
       - uses: actions/upload-artifact@v4
         with:
