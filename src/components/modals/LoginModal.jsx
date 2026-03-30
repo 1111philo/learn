@@ -5,8 +5,7 @@ import { useApp } from '../../contexts/AppContext.jsx';
 import PasswordField from '../PasswordField.jsx';
 import { getPreferences, savePreferences } from '../../../js/storage.js';
 import * as sync from '../../../js/sync.js';
-import { loadCourses } from '../../../js/courseOwner.js';
-import { syncInBackground } from '../../lib/syncDebounce.js';
+import { loadCourses, invalidateCoursesCache } from '../../../js/courseOwner.js';
 import { forgotPassword } from '../../../js/auth.js';
 
 export default function LoginModal({ onSuccess, message }) {
@@ -31,21 +30,22 @@ export default function LoginModal({ onSuccess, message }) {
     try {
       const authUser = await login(email.trim(), password);
 
-      // Sync auth name into preferences
+      // Pull server data first (server is source of truth)
+      try {
+        await sync.loadAll();
+      } catch { /* offline — keep local data */ }
+
+      // Sync auth name into local preferences
       if (authUser?.name) {
         const prefs = { ...(await getPreferences()), name: authUser.name };
         await savePreferences(prefs);
-        dispatch({ type: 'SET_PREFERENCES', preferences: prefs });
-        syncInBackground('preferences');
       }
 
-      // Refresh data from server
-      try {
-        await sync.loadAll();
-        const freshPrefs = await getPreferences();
-        const courses = await loadCourses();
-        dispatch({ type: 'INIT_DATA', payload: { preferences: freshPrefs, courses } });
-      } catch { /* offline */ }
+      // Refresh all React state from local storage (now populated from server)
+      invalidateCoursesCache();
+      const freshPrefs = await getPreferences();
+      const courses = await loadCourses();
+      dispatch({ type: 'INIT_DATA', payload: { preferences: freshPrefs, courses } });
 
       setTimeout(() => {
         hide();
