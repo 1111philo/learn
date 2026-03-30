@@ -446,6 +446,11 @@ h2 {
   width: 100%;
 }
 
+.course-layout > .chat > .msg-user {
+  width: fit-content;
+  margin-right: max(0px, calc((100% - 720px) / 2));
+}
+
 
 .course-layout > .chat {
   flex: 1;
