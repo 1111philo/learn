@@ -35,9 +35,9 @@ export default function App() {
   }, [state.loaded, authLoading]);
 
   if (!state.loaded || authLoading) {
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+    return <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
       <span className="loading-spinner-inline" aria-hidden="true" />
-    </div>;
+    </main>;
   }
 
   return (
