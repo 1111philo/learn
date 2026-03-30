@@ -10,7 +10,7 @@
     "cap:android": "npm run build:app && npx cap sync android",
     "electron:dev": "npm run build:app && electron electron/main.cjs",
     "electron:build": "npm run build:app && electron-builder",
-    "build:web": "vite build --config vite.config.app.js --base /learn/",
+    "build:web": "vite build --config vite.config.app.js",
     "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
