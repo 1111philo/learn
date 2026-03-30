@@ -105,7 +105,7 @@ function ConfirmSignOut({ onConfirm }) {
       <p>This will clear all local data and return you to the welcome screen.</p>
       <div className="action-bar">
         <button className="secondary-btn" onClick={hide}>Cancel</button>
-        <button className="danger-btn" onClick={() => { hide(); onConfirm(); }}>Sign Out</button>
+        <button className="danger-btn" onClick={async () => { await onConfirm(); hide(); }}>Sign Out</button>
       </div>
     </>
   );
