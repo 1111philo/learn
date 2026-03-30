@@ -21,8 +21,8 @@ Everything happens in the browser. Images and text responses are assessed by the
 ## Quick start
 
 ```bash
-git clone https://github.com/1111philo/learn-extension.git
-cd learn-extension
+git clone https://github.com/1111philo/learn.git
+cd learn
 npm install
 npm run build
 ```
