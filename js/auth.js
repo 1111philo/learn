@@ -11,7 +11,7 @@ import {
 
 // Lambda Function URL — supports response streaming for SSE.
 // API Gateway is no longer used (streamHandle is incompatible with it).
-const SERVICE_URL = 'https://k3prb3ssqoijpwdain5tylwp4m0iagzq.lambda-url.us-east-2.on.aws';
+const SERVICE_URL = 'https://oaqs3vycouibj7rpf27vujh5lu0jrgbr.lambda-url.us-east-2.on.aws';
 
 // -- Session expiry event -----------------------------------------------------
 
