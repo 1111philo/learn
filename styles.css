@@ -367,8 +367,7 @@ h2 {
   background: var(--color-bg);
 }
 
-/* Center course header/chat/compose content on wide screens */
-.course-layout > .course-header > *,
+/* Center chat + compose content on wide screens (800px readable width) */
 .course-layout > .chat > *,
 .course-bottom-bar > * {
   max-width: 800px;
@@ -1853,7 +1852,8 @@ hr {
     margin-right: auto;
     padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
   }
-  header {
+  header,
+  .course-layout > .course-header {
     /* Content aligns with main's 960px max-width; background spans full width */
     padding: 12px max(calc(var(--space) * 3), calc((100% - 960px) / 2 + var(--space) * 3));
   }
