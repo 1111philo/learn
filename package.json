@@ -41,6 +41,7 @@
     "directories": {
       "output": "release"
     },
+    "icon": "assets/icon-512.png",
     "mac": {
       "target": ["dmg", "zip"],
       "category": "public.app-category.education"
