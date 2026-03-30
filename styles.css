@@ -1329,8 +1329,18 @@ hr {
 }
 
 /* -- API key settings ------------------------------------------------------- */
+.settings-page {
+  max-width: 520px;
+}
+
 .settings-section {
-  margin-bottom: var(--space);
+  margin-bottom: calc(var(--space) * 2);
+  padding-bottom: calc(var(--space) * 2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
 }
 
 .settings-section h3 {
@@ -1891,15 +1901,6 @@ hr {
     grid-template-columns: repeat(2, 1fr);
   }
   .msg.msg-user { max-width: 75%; }
-  .settings-page {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: calc(var(--space) * 2);
-  }
-  .settings-page > h2,
-  .settings-page > .settings-section:last-child {
-    grid-column: 1 / -1;
-  }
 }
 
 /* ── Wide desktop (1440px+) ── */

@@ -120,7 +120,7 @@ export default function Settings() {
             <button type="submit" className="primary-btn">Save</button>
             {nameFeedback && <div className="key-feedback success">{nameFeedback}</div>}
           </form>
-          <form className="settings-form" onSubmit={handleChangePassword} style={{ marginTop: 'var(--space)' }}>
+          <form className="settings-form" onSubmit={handleChangePassword}>
             <label>
               New Password
               <PasswordField
@@ -150,8 +150,6 @@ export default function Settings() {
         </div>
       )}
 
-      {loggedIn && <hr />}
-
       <div className="settings-section">
         <h3>AI Provider</h3>
         {loggedIn ? (
@@ -177,8 +175,6 @@ export default function Settings() {
           </>
         )}
       </div>
-
-      <hr />
 
       {!loggedIn && (
         <div className="settings-section">
