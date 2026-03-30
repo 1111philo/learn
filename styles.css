@@ -496,7 +496,7 @@ h2 {
 
 .course-bottom-bar {
   flex-shrink: 0;
-  padding: 10px var(--space);
+  padding: 10px max(var(--space), calc((100% - 720px) / 2));
   border-top: 1px solid var(--color-border);
   background: var(--color-bg);
   display: flex;
@@ -562,7 +562,7 @@ h2 {
 
 .creation-panel {
   flex-shrink: 0;
-  padding: 10px var(--space);
+  padding: 10px max(var(--space), calc((100% - 720px) / 2));
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
   display: flex;
