@@ -11,6 +11,10 @@ import {
 
 const SERVICE_URL = 'https://account.philosophers.group';
 
+// Lambda Function URL for response streaming (API Gateway buffers responses).
+// After deploying learn-service, replace with the StreamingUrl output value.
+const STREAM_SERVICE_URL = '';  // e.g. 'https://xxx.lambda-url.us-east-2.on.aws'
+
 // -- Session expiry event -----------------------------------------------------
 
 const _sessionExpiredListeners = new Set();
@@ -117,6 +121,33 @@ export async function authenticatedFetch(path, options = {}) {
   if (!tokens?.accessToken) throw new Error('Not logged in');
 
   const doFetch = (token) => fetch(`${SERVICE_URL}${path}`, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
+  });
+
+  let res = await doFetch(tokens.accessToken);
+
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) throw new Error('Session expired');
+    const newTokens = await getAuthTokens();
+    res = await doFetch(newTokens.accessToken);
+  }
+
+  return res;
+}
+
+/**
+ * Make an authenticated streaming request via the Lambda Function URL.
+ * Falls back to the regular API Gateway URL if no streaming URL is configured.
+ */
+export async function authenticatedStreamFetch(path, options = {}) {
+  if (!STREAM_SERVICE_URL) return authenticatedFetch(path, options);
+
+  const tokens = await getAuthTokens();
+  if (!tokens?.accessToken) throw new Error('Not logged in');
+
+  const doFetch = (token) => fetch(`${STREAM_SERVICE_URL}${path}`, {
     ...options,
     headers: { ...options.headers, Authorization: `Bearer ${token}` },
   });
