@@ -113,39 +113,33 @@ export default function Settings() {
             <span className="account-value">{user?.email || ''}</span>
           </div>
           <form className="settings-form" onSubmit={handleSaveName}>
-            <label>
-              Name
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
+            <label htmlFor="account-name">Name</label>
+            <input id="account-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
             <button type="submit" className="primary-btn">Save</button>
-            {nameFeedback && <div className="key-feedback success">{nameFeedback}</div>}
+            {nameFeedback && <div className="key-feedback success" role="status" aria-live="polite">{nameFeedback}</div>}
           </form>
           <form className="settings-form" onSubmit={handleChangePassword}>
-            <label>
-              New Password
-              <PasswordField
-                id="new-password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={passwordSubmitting}
-              />
-            </label>
-            <label>
-              Confirm Password
-              <PasswordField
-                id="confirm-password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleChangePassword(e); } }}
-                disabled={passwordSubmitting}
-              />
-            </label>
+            <label htmlFor="new-password">New Password</label>
+            <PasswordField
+              id="new-password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={passwordSubmitting}
+            />
+            <label htmlFor="confirm-password">Confirm Password</label>
+            <PasswordField
+              id="confirm-password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleChangePassword(e); } }}
+              disabled={passwordSubmitting}
+            />
             <button type="submit" className="primary-btn" disabled={passwordSubmitting}>
               {passwordSubmitting ? 'Changing...' : 'Change Password'}
             </button>
-            {passwordFeedback && <div className="key-feedback">{passwordFeedback}</div>}
+            {passwordFeedback && <div className="key-feedback" role="status" aria-live="polite">{passwordFeedback}</div>}
           </form>
         </div>
       )}
@@ -161,6 +155,7 @@ export default function Settings() {
             <p className="settings-hint">
               Enter your <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to enable AI-powered learning.
             </p>
+            <label htmlFor="api-key-input" className="sr-only">API Key</label>
             <div className="api-key-row">
               <PasswordField
                 id="api-key-input"
@@ -171,7 +166,7 @@ export default function Settings() {
               />
               <button className="primary-btn" onClick={handleSaveKey}>Save</button>
             </div>
-            {keyFeedback && <div className="key-feedback success">{keyFeedback}</div>}
+            {keyFeedback && <div className="key-feedback success" role="status" aria-live="polite">{keyFeedback}</div>}
           </>
         )}
       </div>
@@ -180,10 +175,8 @@ export default function Settings() {
         <div className="settings-section">
           <h3>Personalization</h3>
           <form className="settings-form" onSubmit={handleSaveName}>
-            <label>
-              Name
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
+            <label htmlFor="pref-name">Name</label>
+            <input id="pref-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
             <button type="submit" className="primary-btn">Save</button>
           </form>
         </div>

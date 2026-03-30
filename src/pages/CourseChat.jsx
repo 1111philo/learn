@@ -180,7 +180,7 @@ export default function CourseChat() {
             {msg.content && <UserMessage content={msg.content} />}
             {msg.metadata?.imageDataUrl && (
               <div className="msg msg-user" style={{ padding: '6px', marginTop: msg.content ? '4px' : 0 }}>
-                <img src={msg.metadata.imageDataUrl} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
+                <img src={msg.metadata.imageDataUrl} alt="Your uploaded work" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
               </div>
             )}
           </div>
@@ -200,13 +200,13 @@ export default function CourseChat() {
         </div>
         {isCustomCourse && (
           <button className="reset-btn" onClick={handleExport} aria-label="Export course" title="Export course markdown">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         )}
         {phase && <button className="reset-btn" onClick={handleReset} aria-label="Reset course" title="Reset course">&#8635;</button>}
         {isCustomCourse && (
           <button className="reset-btn" onClick={handleDelete} aria-label="Delete course" title="Delete course">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
         )}
       </div>

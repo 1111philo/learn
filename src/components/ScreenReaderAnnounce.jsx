@@ -13,13 +13,13 @@ export default function ScreenReaderAnnounce() {
 
   useEffect(() => {
     const path = location.pathname;
-    const name = ROUTE_NAMES[path];
+    let name = ROUTE_NAMES[path];
+    if (!name && path.startsWith('/courses/create')) name = 'Create Course';
+    else if (!name && path.startsWith('/courses/')) name = 'Course';
+
     if (name) {
       setMessage(`Navigated to ${name}`);
-    } else if (path.startsWith('/courses/create')) {
-      setMessage('Navigated to course creation');
-    } else if (path.startsWith('/courses/')) {
-      setMessage('Navigated to course');
+      document.title = `${name} — 1111 Learn`;
     }
   }, [location.pathname]);
 

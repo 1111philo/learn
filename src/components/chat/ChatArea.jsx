@@ -45,7 +45,7 @@ const ChatArea = forwardRef(function ChatArea({ children, courseName }, ref) {
   }, [scrollRef]);
 
   return (
-    <div className="chat" role="log" aria-label={courseName ? `${courseName} conversation` : 'Course conversation'} ref={scrollRef}>
+    <div className="chat" role="log" aria-live="polite" aria-label={courseName ? `${courseName} conversation` : 'Course conversation'} ref={scrollRef}>
       {children}
     </div>
   );

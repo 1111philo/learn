@@ -9,7 +9,7 @@ export default function AssistantMessage({ content }) {
   } catch { /* plain text */ }
 
   return (
-    <div className="msg msg-response">
+    <div className="msg msg-response" role="article" aria-label="Coach message">
       <div dangerouslySetInnerHTML={{ __html: renderMd(text) }} />
     </div>
   );

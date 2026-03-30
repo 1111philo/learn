@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useCallback, useId } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 const ModalContext = createContext(null);
 
@@ -23,6 +24,7 @@ export function ModalProvider({ children }) {
           <AlertDialog.Portal>
             <AlertDialog.Overlay className="modal-overlay" />
             <AlertDialog.Content className="modal" aria-label={modal?.label || undefined}>
+              <VisuallyHidden><AlertDialog.Title>{modal?.label || 'Dialog'}</AlertDialog.Title></VisuallyHidden>
               {modal?.content}
             </AlertDialog.Content>
           </AlertDialog.Portal>
@@ -32,6 +34,7 @@ export function ModalProvider({ children }) {
           <Dialog.Portal>
             <Dialog.Overlay className="modal-overlay" />
             <Dialog.Content className="modal" aria-label={modal?.label || undefined}>
+              <VisuallyHidden><Dialog.Title>{modal?.label || 'Dialog'}</Dialog.Title></VisuallyHidden>
               {modal?.content}
             </Dialog.Content>
           </Dialog.Portal>

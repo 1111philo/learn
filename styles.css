@@ -1,6 +1,21 @@
 /* ── Reset & base ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  padding: 8px 16px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  z-index: 200;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0; }
+
 :root {
   --color-bg: #ffffff;
   --color-surface: #f5f5f5;

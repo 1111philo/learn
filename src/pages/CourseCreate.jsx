@@ -186,8 +186,15 @@ export default function CourseCreate() {
       {/* Readiness panel — between header and chat */}
       {hasUserMessage && (
         <div className="creation-panel">
-          <div className="creation-meter">
-            <div className="creation-meter-labels">
+          <div
+            className="creation-meter"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={10}
+            aria-valuenow={readiness}
+            aria-label={`Course readiness: ${readiness} out of 10`}
+          >
+            <div className="creation-meter-labels" aria-hidden="true">
               <span>Not ready</span>
               <span>Ready</span>
             </div>

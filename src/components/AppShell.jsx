@@ -48,8 +48,9 @@ export default function AppShell({ children }) {
 
   return (
     <>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       {!isOnboarding && (
-        <header>
+        <header role="banner">
           <img src="assets/icon-32.png" alt="1111" className="logo" />
           <span className="header-title">Learn</span>
           <nav className="header-nav" aria-label="Main navigation">

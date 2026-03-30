@@ -9,8 +9,16 @@ export default function ProgressBar({ courseKB }) {
   const pct = isComplete ? 100 : progress * 10;
 
   return (
-    <div className="creation-meter" style={{ marginTop: '6px' }}>
-      <div className="creation-meter-labels">
+    <div
+      className="creation-meter"
+      style={{ marginTop: '6px' }}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      aria-label={`Course progress: ${pct}% toward exemplar`}
+    >
+      <div className="creation-meter-labels" aria-hidden="true">
         <span>Starting</span>
         <span>Exemplar</span>
       </div>
