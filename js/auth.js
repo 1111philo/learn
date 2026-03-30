@@ -137,6 +137,40 @@ export async function authenticatedFetch(path, options = {}) {
 
 
 /**
+ * Request a password reset email.
+ */
+export async function forgotPassword(email) {
+  const res = await fetch(`${SERVICE_URL}/v1/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Request failed');
+  }
+}
+
+/**
+ * Update the authenticated user's profile (name, password, etc.).
+ * Returns the updated user object.
+ */
+export async function updateProfile(updates) {
+  const res = await authenticatedFetch('/v1/me', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Update failed');
+  }
+  const data = await res.json();
+  await saveAuthUser(data);
+  return data;
+}
+
+/**
  * Fetch the API key assigned by the admin (if any).
  * Returns the key string or null.
  */

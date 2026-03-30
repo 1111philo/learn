@@ -67,7 +67,10 @@ export default function AppShell({ children }) {
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content className="user-dropdown" sideOffset={6} align="end">
-                    <DropdownMenu.Label className="user-dropdown-email">{user?.email || ''}</DropdownMenu.Label>
+                    <DropdownMenu.Label className="user-dropdown-email">{user?.name || user?.email || ''}</DropdownMenu.Label>
+                    <DropdownMenu.Item className="secondary-btn user-dropdown-action" onSelect={() => navigate('/settings')}>
+                      Manage Account
+                    </DropdownMenu.Item>
                     <DropdownMenu.Item className="secondary-btn user-dropdown-action" onSelect={handleSignOut}>
                       Sign Out
                     </DropdownMenu.Item>
