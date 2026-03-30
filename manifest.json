@@ -19,7 +19,7 @@
   },
   "host_permissions": [
     "https://api.anthropic.com/*",
-    "https://learn.philosophers.group/*"
+    "https://account.philosophers.group/*"
   ],
   "background": {
     "service_worker": "background.js"

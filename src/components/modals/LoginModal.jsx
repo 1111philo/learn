@@ -61,7 +61,7 @@ export default function LoginModal({ onSuccess, message }) {
       {message
         ? <p>{message}</p>
         : <p>Sign in to sync your data with{' '}
-            <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.
+            <a href="https://account.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.
           </p>
       }
       <form className="settings-form" onSubmit={handleSubmit} action="#">

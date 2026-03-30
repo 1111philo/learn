@@ -89,7 +89,7 @@ jobs:
           ### What to look for
           - Verify existing course progress and learner profile are intact after updating.
           - Test the new changes described above.
-          - Report issues at https://github.com/1111philo/learn-extension/issues.
+          - Report issues at https://github.com/1111philo/learn/issues.
           INSTEOF
 
       - name: Generate release notes

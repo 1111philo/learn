@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-1111 Learn is a Chrome extension that helps learners build their professional portfolio through AI-guided courses. This privacy policy explains what data is collected, how it is used, and your rights regarding that data.
+1111 Learn is a multi-platform learning app that helps learners build their professional portfolio through AI-guided courses. This privacy policy explains what data is collected, how it is used, and your rights regarding that data.
 
 **In short:** your learning data stays on your device by default. No telemetry is collected. Optional cloud sync (via sign-in) stores your learning data on our servers for cross-device access.
 
@@ -105,5 +105,5 @@ We may update this privacy policy from time to time. Changes will be reflected i
 If you have questions, concerns, or requests regarding your data or this privacy policy:
 
 - **Email:** [1111@philosophers.group](mailto:1111@philosophers.group)
-- **GitHub:** [Open an issue](https://github.com/1111philo/learn-extension/issues) on our repository
+- **GitHub:** [Open an issue](https://github.com/1111philo/learn/issues) on our repository
 - **Organization:** 11:11 Philosopher's Group -- [philosophers.group](https://philosophers.group)

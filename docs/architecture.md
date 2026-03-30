@@ -1,6 +1,6 @@
 # Architecture
 
-1111 Learn is a Chrome extension (Manifest V3, side panel) that also runs as native apps on iOS, Android, macOS, and Windows via Capacitor (mobile) and Electron (desktop). The UI is a React 18 app built with Vite. Service modules are vanilla JS (ES modules) in `js/`, imported by React components in `src/`. A platform abstraction layer (`js/platform.js`) replaces Chrome-specific APIs so all platforms share the same web code.
+1111 Learn is a multi-platform learning app that runs as a web app, Chrome extension, native mobile apps (iOS, Android via Capacitor), and desktop apps (macOS, Windows via Electron). The UI is a React 18 app built with Vite. Service modules are vanilla JS (ES modules) in `js/`, imported by React components in `src/`. A platform abstraction layer (`js/platform.js`) replaces Chrome-specific APIs so all platforms share the same web code.
 
 ## Agents
 

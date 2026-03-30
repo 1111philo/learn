@@ -26,7 +26,7 @@ The program's core philosophy is "learn by doing." Participants don't just study
 - **Slack** (1111philo.slack.com): The communication hub. Key channels include `#ai-leaders-participants` (main discussion), `#ai-leaders-social` (casual conversation), `#ai-leaders-community` (broader community), and `#announcements` (official updates).
 - **1111 Learn Platform:** A custom GenAI-powered learning platform where participants work through course material and build their portfolio. Every activity is designed to improve the participant's portfolio.
 - **YouTube:** Orientation videos and future course content hosted on the 11:11 YouTube channel.
-- **GitHub:** Open-source projects including the learning platform Chrome extension and Slack service (`1111philo/1111-slack`, `1111philo/learn-extension`).
+- **GitHub:** Open-source projects including the learning platform and Slack service (`1111philo/1111-slack`, `1111philo/learn`).
 
 ## 3. Frequently Asked Questions
 
@@ -82,7 +82,7 @@ A: Participants learn about specific opportunities as part of the coursework, so
 A: Absolutely. Everyone has access to course materials and builds a portfolio. The skills, portfolio, and certification you earn are valuable regardless of placement selection. Future cohorts may also offer additional opportunities.
 
 **Q: Who owns the work I create?**
-A: You own your intellectual property. The program's privacy policy is published at github.com/1111philo/learn-extension/blob/main/PRIVACY.md.
+A: You own your intellectual property. The program's privacy policy is published at github.com/1111philo/learn/blob/main/PRIVACY.md.
 
 ### Support & Community
 
