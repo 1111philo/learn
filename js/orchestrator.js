@@ -4,7 +4,7 @@
  */
 
 import { callClaude, streamClaude, parseSSEStream, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
-import { isLoggedIn, authenticatedFetch } from './auth.js';
+import { isLoggedIn, authenticatedFetch, authenticatedStreamFetch } from './auth.js';
 import { getApiKey } from './storage.js';
 import { validateCourseKB } from './validators.js';
 import { resolveAssetURL } from './platform.js';
@@ -102,9 +102,9 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
   }
 
-  // Logged-in users call through the service proxy
+  // Logged-in users call through the service proxy (streaming via Function URL)
   if (await isLoggedIn()) {
-    const resp = await authenticatedFetch('/v1/ai/messages', {
+    const resp = await authenticatedStreamFetch('/v1/ai/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL_LIGHT, max_tokens: maxTokens, system: systemPrompt, messages, stream: true }),
