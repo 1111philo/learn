@@ -49,8 +49,7 @@ header {
   flex-shrink: 0;
   position: relative;
   z-index: 50;
-  /* Full-width background, centered content on desktop */
-  max-width: 100%;
+  scrollbar-gutter: stable;
 }
 
 header > * { flex-shrink: 0; }
@@ -226,6 +225,7 @@ main {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   outline: none;
   position: relative;
 }
