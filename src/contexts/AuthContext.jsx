@@ -39,12 +39,6 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     await authModule.logout();
     await clearAllData();
-    try {
-      if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
-        const dbs = await indexedDB.databases();
-        for (const db of dbs) { if (db.name) indexedDB.deleteDatabase(db.name); }
-      }
-    } catch { /* not supported in all WebView environments */ }
     await initDatabase();
     setLoggedIn(false);
     setUser(null);

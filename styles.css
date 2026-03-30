@@ -226,19 +226,25 @@ main {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space);
   outline: none;
   position: relative;
+}
+
+main > * {
   max-width: 960px;
   margin-left: auto;
   margin-right: auto;
-  width: 100%;
+  padding-left: var(--space);
+  padding-right: var(--space);
 }
 
 /* When course layout manages its own scrolling, main must not scroll.
    Remove max-width/padding so the course layout spans full width. */
 main:has(.course-layout) {
   overflow: hidden;
+}
+
+main:has(.course-layout) > * {
   max-width: none;
   padding: 0;
   margin: 0;
@@ -1904,7 +1910,7 @@ hr {
 
 /* ── Tablet (640px+) ── */
 @media (min-width: 640px) {
-  main { padding: var(--space) calc(var(--space) * 2); }
+  main > * { padding-left: calc(var(--space) * 2); padding-right: calc(var(--space) * 2); }
   .modal { max-width: 480px; }
 }
 
@@ -1912,12 +1918,14 @@ hr {
 @media (min-width: 1024px) {
   .header-nav { display: flex; }
   .bottom-nav { display: none; }
-  main {
-    padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
+  main > * {
+    padding-left: calc(var(--space) * 3);
+    padding-right: calc(var(--space) * 3);
   }
-  header,
+  header {
+    padding: 12px max(calc(var(--space) * 3), calc((100% - 960px) / 2 + var(--space) * 3));
+  }
   .course-layout > .course-header {
-    /* Content aligns with main's 960px max-width; background spans full width */
     padding: 12px max(calc(var(--space) * 3), calc((100% - 960px) / 2 + var(--space) * 3));
   }
   .course-list {
