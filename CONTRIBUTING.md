@@ -7,33 +7,18 @@ Thank you for your interest in contributing. This project is maintained by [11:1
 1. Fork and clone the repository.
 2. Run `npm install` to install dependencies.
 3. Copy `.env.example.js` to `.env.js` and fill in your Anthropic API key and name. This file is gitignored. On app load, these values seed storage automatically.
-4. Run `npm run build` to build into `dist/`.
-5. Load `dist/` as an unpacked extension in Chrome (`chrome://extensions` > Developer mode > Load unpacked).
-6. Click the extension icon to open the side panel. The onboarding wizard runs on first use.
+4. Run `npm run dev` to start the Vite dev server, or `npm run build` to build into `dist/`.
+5. Open the dev server URL in your browser. The onboarding wizard runs on first use.
 
-To reset and re-run onboarding, clear extension storage via Chrome DevTools.
+To reset and re-run onboarding, clear site data in your browser's DevTools.
 
 ## Development workflow
 
-- Run `npm run dev` for the Vite dev server, or `npm run build` for the Chrome extension production build.
+- Run `npm run dev` for the Vite dev server, or `npm run build` for production builds.
 - React components live in `src/`. Service modules (storage, orchestrator, auth, sync, courseOwner, platform) live in `js/`.
 - Agent system prompts live in `prompts/*.md` -- edit these to change agent behavior without touching code.
 - Course definitions live in `data/courses/*.md` -- each is a markdown file with exemplar + learning objectives.
-- Use Chrome DevTools on the side panel to inspect state and debug.
-
-### Native app builds
-
-The app also runs on iOS, Android, macOS, and Windows via Capacitor (mobile) and Electron (desktop):
-
-| Command | What it does |
-|---------|-------------|
-| `npm run build:app` | Vite build for native apps (no Chrome manifest/background) |
-| `npm run cap:ios` | Build + sync to iOS (requires Xcode) |
-| `npm run cap:android` | Build + sync to Android (requires Android Studio) |
-| `npm run electron:dev` | Build + launch Electron desktop app |
-| `npm run electron:build` | Package Electron for distribution |
-
-All platforms share the same web code. `js/platform.js` abstracts Chrome extension APIs so they work on every platform.
+- Use browser DevTools to inspect state and debug.
 
 For architecture details, see [docs/architecture.md](docs/architecture.md). For the full agent invocation flow, see [docs/agent-lifecycle.md](docs/agent-lifecycle.md).
 
@@ -53,14 +38,14 @@ Activities must:
 
 1. Create a markdown file in `data/courses/` (e.g., `my-course.md`)
 2. Follow the format: `# Title`, description paragraph, `## Exemplar`, `## Learning Objectives` with bullet list
-3. Add the filename (without extension) to the `courseFiles` array in `js/courseOwner.js`
+3. The build-time manifest plugin auto-discovers all `.md` files in `data/courses/`
 4. Test with a real API key to verify the Course Owner generates a valid KB
 
 ## Guidelines
 
 - **Accessibility is required.** Every interactive element must be keyboard-operable and have an accessible name.
-- **Keep it lightweight.** No heavy frameworks or dependencies. Must perform well on Chromebooks and Android tablets.
-- **Local-first.** No telemetry. All data stays on-device unless the user logs in to sync.
+- **Keep it lightweight.** No heavy frameworks or dependencies.
+- **Local-first.** No telemetry. All data stays in the browser unless the user logs in to sync.
 - **Update documentation.** If your change adds, removes, or renames a feature, file, or permission, update the relevant docs.
 - **Test prompts.** When editing `prompts/*.md`, test with a real API key to verify the agent returns valid JSON.
 
@@ -70,7 +55,7 @@ Activities must:
 npm test
 ```
 
-Tests use Node's built-in test runner (no extra dependencies). They validate `manifest.json`, course prompts, SQLite storage round-trips, and output validators. All tests must pass before merging.
+Tests use Node's built-in test runner (no extra dependencies). They validate course prompts, SQLite storage round-trips, platform utilities, and output validators. All tests must pass before merging.
 
 ## Schema changes
 
@@ -87,7 +72,7 @@ Data is stored in SQLite via sql.js (WASM). When adding or modifying tables/colu
 2. Make focused, well-described commits.
 3. Run `npm test` -- all tests must pass.
 4. Open a pull request **into `staging`** with a clear summary.
-5. Once merged, a release candidate (RC) build is automatically created.
+5. Once merged, a release candidate (RC) tag is automatically created.
 
 **`main` is protected** -- all changes flow through `staging` via pull request. See [docs/releases.md](docs/releases.md) for the full versioning and release process.
 

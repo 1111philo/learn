@@ -8,7 +8,7 @@ import App from './App.jsx';
 import { init as initDatabase } from '../js/db.js';
 import { getApiKey, saveApiKey, getPreferences, savePreferences } from '../js/storage.js';
 import { resolveAssetURL } from '../js/platform.js';
-import '../sidepanel.css';
+import '../styles.css';
 
 let initialized = false;
 

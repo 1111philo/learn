@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useModal } from '../contexts/ModalContext.jsx';
 import { useViewTransition } from '../hooks/useViewTransition.js';
@@ -12,21 +13,6 @@ export default function AppShell({ children }) {
   const { show: showModal } = useModal();
   const animClass = useViewTransition();
   const isOnboarding = location.pathname.startsWith('/onboarding');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const btnRef = useRef(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const handler = (e) => {
-      if (!dropdownRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }, [dropdownOpen]);
 
   // Prompt re-login when session expires on another device
   useEffect(() => {
@@ -37,26 +23,13 @@ export default function AppShell({ children }) {
     }
   }, [sessionExpired, showModal]);
 
-  // Close dropdown on Escape
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const handler = (e) => {
-      if (e.key === 'Escape') { setDropdownOpen(false); btnRef.current?.focus(); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [dropdownOpen]);
-
   const handleUserMenuClick = () => {
     if (!loggedIn) {
       showModal(<LoginModal />);
-      return;
     }
-    setDropdownOpen(!dropdownOpen);
   };
 
   const handleSignOut = () => {
-    setDropdownOpen(false);
     showModal(
       <ConfirmSignOut onConfirm={async () => {
         await logout();
@@ -79,27 +52,32 @@ export default function AppShell({ children }) {
         <header>
           <img src="assets/icon-32.png" alt="1111" className="logo" />
           <span className="header-title">Learn</span>
+          <nav className="header-nav" aria-label="Main navigation">
+            <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
+            <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
+          </nav>
           <div className="header-spacer" />
-          <div className="user-menu" id="user-menu">
-            <button
-              className="user-menu-btn"
-              ref={btnRef}
-              aria-label={loggedIn ? `Account: ${user?.email || 'signed in'}` : 'Login'}
-              aria-haspopup={loggedIn ? 'true' : undefined}
-              aria-expanded={loggedIn ? String(dropdownOpen) : undefined}
-              aria-controls={loggedIn ? 'user-dropdown-menu' : undefined}
-              onClick={handleUserMenuClick}
-            >
-              <span id="user-menu-label">{loggedIn ? (user?.email || 'Account') : 'Login'}</span>
-            </button>
-            {loggedIn && !dropdownOpen ? null : null}
-            {dropdownOpen && (
-              <div className="user-dropdown" id="user-dropdown-menu" role="menu" ref={dropdownRef}>
-                <p className="user-dropdown-email">{user?.email || ''}</p>
-                <button className="secondary-btn" style={{ width: '100%' }} onClick={handleSignOut}>
-                  Sign Out
-                </button>
-              </div>
+          <div className="user-menu">
+            {loggedIn ? (
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button className="user-menu-btn" aria-label={`Account: ${user?.email || 'signed in'}`}>
+                    <span>{user?.email || 'Account'}</span>
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content className="user-dropdown" sideOffset={6} align="end">
+                    <DropdownMenu.Label className="user-dropdown-email">{user?.email || ''}</DropdownMenu.Label>
+                    <DropdownMenu.Item className="secondary-btn user-dropdown-action" onSelect={handleSignOut}>
+                      Sign Out
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            ) : (
+              <button className="user-menu-btn" aria-label="Login" onClick={handleUserMenuClick}>
+                <span>Login</span>
+              </button>
             )}
           </div>
         </header>
@@ -110,7 +88,7 @@ export default function AppShell({ children }) {
       </main>
 
       {!isOnboarding && (
-        <nav aria-label="Main navigation">
+        <nav className="bottom-nav" aria-label="Main navigation">
           <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
           <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
         </nav>
@@ -127,7 +105,7 @@ function ConfirmSignOut({ onConfirm }) {
       <p>This will clear all local data and return you to the welcome screen.</p>
       <div className="action-bar">
         <button className="secondary-btn" onClick={hide}>Cancel</button>
-        <button className="danger-btn" onClick={() => { hide(); onConfirm(); }}>Sign Out</button>
+        <button className="danger-btn" onClick={async () => { await onConfirm(); hide(); }}>Sign Out</button>
       </div>
     </>
   );

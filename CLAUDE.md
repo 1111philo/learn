@@ -1,7 +1,7 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a multi-platform learning app that runs as a web app, Chrome extension (Manifest V3, side panel), native mobile apps (iOS, Android via Capacitor), and desktop apps (macOS, Windows via Electron). Seven AI agents drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the Coach converses with the learner -- coaching, creating activities, and assessing submissions inline -- while enriching a growing knowledge base, repeating until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted via a platform abstraction layer (`js/platform.js`) that routes to `chrome.storage.local` (extension), `@capacitor/filesystem` (mobile), Node `fs` via IPC (Electron), or IndexedDB (web). Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a web app deployed to `learn.philosophers.group` via GitHub Pages. Seven AI agents drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the Coach converses with the learner -- coaching, creating activities, and assessing submissions inline -- while enriching a growing knowledge base, repeating until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to IndexedDB via `js/platform.js`. Binary assets (uploaded images) also use IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
 Seven agents drive the learning experience. The **Coach** is the learner's companion, teacher, and assessor in one continuous conversation — it coaches toward the exemplar, evaluates responses, tracks progress, and updates the knowledge base inline.
@@ -50,20 +50,20 @@ Everything in a course happens in one continuous chat. The course header has a *
 The profile updates via `[PROFILE_UPDATE]` signals from the Coach and deeply on course completion (LLM call via Learner Profile Owner). Profile feedback from settings also triggers an LLM update via Learner Profile Update. All updates run through a sequential queue in `src/lib/profileQueue.js` to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. `mergeProfile()` in `src/lib/profileQueue.js` unions array fields (`activeCourses`, `masteredCourses`), merges preferences so agent responses can never accidentally lose accumulated data.
 
 ### Storage (SQLite)
-All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted via the platform abstraction layer (`js/platform.js`) under key `_sqliteDb` (debounced, plus on `visibilitychange`). On the Chrome extension this uses `chrome.storage.local`; on mobile it uses `@capacitor/filesystem`; on desktop it uses Node `fs` via Electron IPC; on web it falls back to IndexedDB. `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Uploaded images remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the `text_response` column of the `drafts` table.
+All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted to IndexedDB via `js/platform.js` under key `_sqliteDb` (debounced, plus on `visibilitychange`). `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Uploaded images remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the `text_response` column of the `drafts` table.
 
 **Tables:** `settings`, `preferences`, `profile`, `profile_summary`, `courses` (user-created), `course_kbs`, `activity_kbs`, `activities`, `drafts`, `auth`, `pending_state`, `course_messages`.
 
 The `course_messages` table stores the unified conversation per course (role, content, msg_type, phase, metadata JSON, timestamp). The `course_kbs` table stores the evolving course knowledge base keyed by course_id. The `activity_kbs` table stores per-activity knowledge (instruction, tips, attempt history) keyed by activity_id. Activities are identified as `{courseId}-act-{number}`. Drafts store assessment results inline: `achieved`, `demonstrates`, `moved`, `needed`, `strengths`.
 
 ### Cloud sync
-Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the extension works fully offline/locally. When logged in, the server is the source of truth: data is written to the server after every local save, and pulled from the server on startup/login. Local storage acts as a read cache for fast access.
+Optional login via `learn-service` (separate repo) enables cross-device data persistence. Login is never required -- the app works fully offline/locally. When logged in, the server is the source of truth: data is written to the server after every local save, and pulled from the server on startup/login. Local storage acts as a read cache for fast access.
 
 - **Auth:** `js/auth.js` handles login/logout/token refresh via JWT access tokens (15 min) + refresh tokens (30 day, rotated on use). Tokens are stored in the SQLite `auth` table. On login, the auth user's name is synced into local preferences. If logged in, the onboarding wizard is skipped. The Personalization section in Settings is hidden when logged in (name comes from the service).
 - **Remote storage:** `js/sync.js` is a thin client for `/v1/sync` endpoints on `learn-service`. `sync.save(key)` PUTs local data to the server (handles version conflicts by retrying with the server's version). `sync.loadAll()` GETs all data from the server and replaces local storage, removing any local data the server doesn't have. Version numbers are tracked in memory (not persisted) and rebuilt each session.
 - **AI provider routing:** `js/orchestrator.js` routes API calls based on priority: (1) logged in → learn-service Bedrock proxy `/v1/ai/messages` via JWT auth, (2) Anthropic API key → direct Anthropic API. Logged-in users need no API key.
-- **API key provisioning:** On login, if no local API key exists, the extension checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it.
-- **Startup:** On bootstrap, if logged in, `sync.loadAll()` runs before reading local data. This ensures the extension reflects the server state. Falls back to local cache if offline.
+- **API key provisioning:** On login, if no local API key exists, the app checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it.
+- **Startup:** On bootstrap, if logged in, `sync.loadAll()` runs before reading local data. This ensures the app reflects the server state. Falls back to local cache if offline.
 - **Settings UI:** When signed out, the Personalization section shows a name field and the AI Provider section shows the API key input. When signed in, Personalization is hidden (name comes from the service) and the API key section shows a note that AI is provided by the 1111 Learn account. Sign Out is in the header user dropdown, not the Settings page.
 
 ## Content hierarchy
@@ -77,12 +77,11 @@ The Course Owner agent transforms the course prompt into a structured course KB 
 ## Key conventions
 - The UI is a React app (React 18, React Router, Vite). Source lives in `src/` — pages, components, contexts, hooks, lib modules.
 - Service modules (`js/db.js`, `js/storage.js`, `js/orchestrator.js`, `js/auth.js`, `js/sync.js`, `js/api.js`, `js/validators.js`, `js/courseOwner.js`, `js/platform.js`) are vanilla JS (ES modules) and stay outside `src/`. React components import from them.
-- `js/platform.js` is the cross-platform abstraction layer. It exports `resolveAssetURL()` (replaces `chrome.runtime.getURL`), `kvStorage` (replaces `chrome.storage.local`), and `getPlatform()`. All Chrome-specific API calls go through this module.
-- Vite builds to `dist/` for all platforms. `npm run build` includes Chrome extension files (manifest.json, background.js); `npm run build:app` omits them. CI zips `dist/` for releases.
-- The entry point is `sidepanel.html` → `src/main.jsx` (initializes SQLite, then mounts React).
-- Storage is abstracted in `js/storage.js` (SQLite via sql.js for structured data, IndexedDB for uploaded images). `js/db.js` manages the SQLite lifecycle. Platform-specific persistence is handled by `js/platform.js`.
+- `js/platform.js` exports `resolveAssetURL()` (returns relative paths for fetching static assets) and `kvStorage` (IndexedDB-backed persistence for the SQLite database binary).
+- Vite builds to `dist/` which is deployed to GitHub Pages. The entry point is `sidepanel.html` → `src/main.jsx` (initializes SQLite, then mounts React).
+- Storage is abstracted in `js/storage.js` (SQLite via sql.js for structured data, IndexedDB for uploaded images). `js/db.js` manages the SQLite lifecycle.
 - API calls go through `js/api.js`; agent orchestration through `js/orchestrator.js`.
-- Agent system prompts are in `prompts/` as markdown files, loaded at runtime via `resolveAssetURL()` from `js/platform.js`.
+- Agent system prompts are in `prompts/` as markdown files, loaded at runtime via `fetch()` with relative paths.
 - Activities must be completable entirely in the browser. Learners upload images of their work or type text responses.
 - Activities end with "Upload an image of your work." or "Hit Submit to submit your response."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
@@ -91,44 +90,34 @@ The Course Owner agent transforms the course prompt into a structured course KB 
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
 
 ## CI/CD
-Two GitHub Actions workflows handle versioning and releases across two branches. Both build all platform variants in parallel.
+Three GitHub Actions workflows handle testing, versioning, and deployment:
 
 ### Staging workflow (`.github/workflows/staging.yml`)
-Runs on every push to `staging`:
-1. **Prepare**: runs tests, determines RC version, generates release notes via Claude (Haiku)
-2. **Build** (5 parallel jobs): Chrome extension zip, Android APK, iOS simulator build, Electron macOS DMG, Electron Windows installer
-3. **Release**: commits the RC version bump, creates a GitHub **pre-release** with all artifacts attached
-4. The RC number resets automatically when `staging` is merged into `main` (since the merge-base moves forward)
+Runs on every push to `staging`: runs tests, builds, determines RC version, generates release notes via Claude (Haiku), creates a GitHub **pre-release** tag.
 
 ### Release workflow (`.github/workflows/release.yml`)
-Runs on every push to `main` (which should only happen via PR from `staging`):
-1. **Prepare**: runs tests, collects commits since last release, calls Claude (Haiku) for semver bump and release notes
-2. **Build** (5 parallel jobs): Chrome extension zip, Android APK, iOS simulator build, Electron macOS DMG, Electron Windows installer
-3. **Release**: commits the version bump, creates a GitHub Release with all artifacts, publishes Chrome extension to Web Store
+Runs on every push to `main` (via PR from `staging`): runs tests, builds, calls Claude (Haiku) for semver bump and release notes, creates a GitHub Release tag.
+
+### Deploy workflow (`.github/workflows/deploy-web.yml`)
+Runs on every push to `main`: builds the app and deploys to GitHub Pages at `learn.philosophers.group`.
 
 ### Branch protection
 `main` is protected: direct pushes are blocked, PRs require approval and passing status checks. By convention, `main` only accepts PRs from `staging`. Branch protection is configured via `scripts/setup-branch-protection.sh`.
 
 ### Required secrets
 - `ANTHROPIC_API_KEY` -- for Claude-powered version analysis
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` -- OAuth2 credentials for Chrome Web Store API
-- `CWS_EXTENSION_ID` -- the extension's Chrome Web Store ID
 
 ## File structure
 ```
-manifest.json            Chrome extension manifest (MV3)
-background.js            Opens the side panel on icon click
 sidepanel.html           Vite entry point (mounts React)
 sidepanel.css            Global styles
-vite.config.js           Chrome extension Vite build config
-vite.config.app.js       Native app Vite build config (no manifest/background)
-vite.config.shared.js    Shared Vite plugins and static copy targets
-capacitor.config.json    Capacitor config (iOS + Android)
+vite.config.js           Vite build config
+CNAME                    GitHub Pages custom domain
 lib/
   sql-wasm.js            Vendored sql.js (SQLite WASM engine)
   sql-wasm.wasm          SQLite WASM binary
 js/                      Service modules (vanilla JS, imported by React)
-  platform.js            Platform abstraction (resolveAssetURL, kvStorage, getPlatform)
+  platform.js            Asset URL resolution + IndexedDB kvStorage
   db.js                  SQLite database lifecycle (init, query, persist)
   storage.js             SQLite query layer + IndexedDB for uploaded images
   courseOwner.js          Course prompt loading, parsing, KB updates
@@ -137,9 +126,6 @@ js/                      Service modules (vanilla JS, imported by React)
   validators.js          Pure validation functions (used by orchestrator + tests)
   auth.js                Authentication module for learn-service (login, logout, token refresh)
   sync.js                Cloud data sync (push/pull with optimistic locking)
-electron/                Electron desktop app shell (macOS + Windows)
-  main.cjs               Main process (window creation, kvStorage IPC handlers)
-  preload.cjs            Preload script (contextBridge for renderer)
 src/                     React app
   main.jsx               Entry point: db init, React mount
   App.jsx                Routes + redirect logic
@@ -200,19 +186,17 @@ data/
   knowledge-base.md      Program knowledge base (injected into guide prompt)
 assets/                  Icons and images
 tests/
-  manifest.test.js       Manifest validation tests
   courses.test.js        Course prompt validation tests
   validators.test.js     Output validator unit tests
-  platform.test.js       Platform abstraction tests
+  platform.test.js       Platform utility tests
   storage.test.js        SQLite storage round-trip tests
-ios/                     Capacitor iOS project (generated)
-android/                 Capacitor Android project (generated)
-dist/                    Build output (gitignored)
+dist/                    Build output (gitignored, deployed to GitHub Pages)
 PRIVACY.md               Privacy policy
 .github/
   workflows/
-    release.yml          Production release (all platforms)
-    staging.yml          Release candidate (all platforms)
+    release.yml          Production release (GitHub Release tag)
+    staging.yml          Release candidate (pre-release tag)
+    deploy-web.yml       GitHub Pages deployment
 ```
 
 ## Documentation
@@ -232,7 +216,6 @@ Detailed docs live in `docs/` and are linked from `README.md`:
 6. When editing agent prompts, test with a real API key to verify JSON output format.
 7. Never commit API keys or secrets.
 8. Activities must be completable entirely in the browser -- never reference desktop apps, terminals, or file system operations.
-9. Do not manually bump the version in `manifest.json` -- the CI/CD workflows handle versioning automatically. During RC builds, `manifest.json` gains a 4-segment `version` and a `version_name` field; these are stripped on production release.
-10. Run `npm test` before submitting PRs. Tests must pass in CI on both `staging` and `main`.
+9. Run `npm test` before submitting PRs. Tests must pass in CI on both `staging` and `main`.
 11. **Data schema changes:** If you add, remove, rename, or restructure any SQLite table or column, update the `CREATE TABLE` DDL and `MIGRATIONS` array in `js/db.js`. Update any affected getter/setter functions in `js/storage.js` to handle the new shape. Update `mergeProfile()` in `src/lib/profileQueue.js` if the learner profile shape changed.
 12. **Privacy:** Never commit API keys or secrets. No telemetry is collected. Uploaded images and user data stay on-device (or on the user's learn-service account if logged in).

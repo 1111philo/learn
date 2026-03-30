@@ -147,7 +147,7 @@ export async function streamClaude({ apiKey, model, systemPrompt, messages, maxT
  * Parse an SSE stream from the Anthropic Messages API.
  * Yields text delta strings as they arrive.
  */
-async function* parseSSEStream(body, onDone) {
+export async function* parseSSEStream(body, onDone) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';

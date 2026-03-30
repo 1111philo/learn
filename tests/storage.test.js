@@ -7,10 +7,8 @@ import initSqlJs from 'sql.js';
 let SQL;
 let _db;
 
-globalThis.chrome = {
-  storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} } },
-  runtime: { getURL: (p) => p },
-};
+// No chrome mock needed — platform.js uses IndexedDB on web (not available in
+// Node tests, but storage.test.js tests the SQLite layer directly, not persistence).
 
 function run(sql, params = []) { _db.run(sql, params); }
 function query(sql, params = []) {
