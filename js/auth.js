@@ -13,7 +13,7 @@ const SERVICE_URL = 'https://account.philosophers.group';
 
 // Lambda Function URL for response streaming (API Gateway buffers responses).
 // After deploying learn-service, replace with the StreamingUrl output value.
-const STREAM_SERVICE_URL = '';  // e.g. 'https://xxx.lambda-url.us-east-2.on.aws'
+const STREAM_SERVICE_URL = 'https://k3prb3ssqoijpwdain5tylwp4m0iagzq.lambda-url.us-east-2.on.aws';
 
 // -- Session expiry event -----------------------------------------------------
 
