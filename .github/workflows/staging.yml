@@ -79,9 +79,12 @@ jobs:
           ### macOS
           1. Download the `.dmg` file.
           2. Open it and drag 1111 Learn to Applications.
+          3. **First launch:** Right-click the app and select **Open** (don't double-click). macOS will warn about an unidentified developer — click **Open** to proceed. You only need to do this once.
+          4. Alternatively, run in Terminal: `xattr -cr "/Applications/1111 Learn.app"`
 
           ### Windows
           1. Download the `-setup.exe` file and run the installer.
+          2. **SmartScreen warning:** If Windows shows "Windows protected your PC", click **More info** → **Run anyway**. This is because the app is not yet code-signed.
 
           ### What to look for
           - Verify existing course progress and learner profile are intact after updating.
