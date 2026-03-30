@@ -102,6 +102,14 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
   }
 
+  // Logged-in users go through the service proxy (non-streaming fallback)
+  if (await isLoggedIn()) {
+    const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
+    onChunk(content);
+    return content;
+  }
+
+  // Direct Anthropic API with user's own key (streaming)
   const apiKey = await getApiKey();
   if (apiKey) {
     let full = '';
@@ -110,9 +118,7 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     return full;
   }
 
-  const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
-  onChunk(content);
-  return content;
+  throw new ApiError('invalid_key', 'No AI provider configured. Sign in or add your API key in Settings.');
 }
 
 // -- Course Owner (LLM) -------------------------------------------------------
