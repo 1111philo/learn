@@ -3,7 +3,7 @@
  * parses structured JSON responses.
  */
 
-import { callClaude, streamClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
+import { callClaude, streamClaude, parseSSEStream, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiError } from './api.js';
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
 import { validateCourseKB } from './validators.js';
@@ -102,11 +102,22 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
   }
 
-  // Logged-in users go through the service proxy (non-streaming fallback)
+  // Logged-in users stream through the service proxy
   if (await isLoggedIn()) {
-    const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
-    onChunk(content);
-    return content;
+    const resp = await authenticatedFetch('/v1/ai/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL_LIGHT, max_tokens: maxTokens, system: systemPrompt, messages, stream: true }),
+    });
+    if (!resp.ok) {
+      // Fall back to non-streaming on error (proxy may not support streaming)
+      const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
+      onChunk(content);
+      return content;
+    }
+    let full = '';
+    for await (const chunk of parseSSEStream(resp.body)) { full += chunk; onChunk(full); }
+    return full;
   }
 
   // Direct Anthropic API with user's own key (streaming)
