@@ -31,6 +31,11 @@ export function AuthProvider({ children }) {
     return authUser;
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const u = await authModule.getCurrentUser();
+    setUser(u);
+  }, []);
+
   const logout = useCallback(async () => {
     await authModule.logout();
     await clearAllData();
@@ -46,7 +51,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ loggedIn, user, loading, login, logout, sessionExpired }}>
+    <AuthContext.Provider value={{ loggedIn, user, loading, login, logout, refreshUser, sessionExpired }}>
       {children}
     </AuthContext.Provider>
   );

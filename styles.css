@@ -180,6 +180,34 @@ header > * { flex-shrink: 0; }
   color: var(--color-warning);
 }
 
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.link-btn:hover { opacity: 0.8; }
+.link-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+.account-field {
+  display: flex;
+  gap: var(--space);
+  align-items: baseline;
+  margin-bottom: var(--space);
+}
+.account-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+.account-value {
+  font-size: 0.95rem;
+}
+
 /* ── Main content ───────────────────────────────────────────────────────── */
 main {
   flex: 1;
@@ -188,6 +216,10 @@ main {
   padding: var(--space);
   outline: none;
   position: relative;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 /* When course layout manages its own scrolling, main must not scroll.
@@ -1847,9 +1879,6 @@ hr {
   .header-nav { display: flex; }
   .bottom-nav { display: none; }
   main {
-    max-width: 960px;
-    margin-left: auto;
-    margin-right: auto;
     padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
   }
   header,

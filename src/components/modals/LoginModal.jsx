@@ -7,12 +7,14 @@ import { getPreferences, savePreferences } from '../../../js/storage.js';
 import * as sync from '../../../js/sync.js';
 import { loadCourses } from '../../../js/courseOwner.js';
 import { syncInBackground } from '../../lib/syncDebounce.js';
+import { forgotPassword } from '../../../js/auth.js';
 
 export default function LoginModal({ onSuccess, message }) {
   const [email, setEmail] = useState(globalThis.__envCredentials?.email || '');
   const [password, setPassword] = useState(globalThis.__envCredentials?.password || '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [view, setView] = useState('login'); // 'login' | 'forgot' | 'sent'
   const passwordRef = useRef(null);
   const { login } = useAuth();
   const { hide } = useModal();
@@ -55,13 +57,77 @@ export default function LoginModal({ onSuccess, message }) {
     }
   };
 
+  const handleForgotSubmit = async (e) => {
+    e?.preventDefault();
+    if (!email.trim()) {
+      setError('Please enter your email.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      await forgotPassword(email.trim());
+      setView('sent');
+    } catch (err) {
+      setError(err.message || 'Request failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (view === 'sent') {
+    return (
+      <>
+        <h2>Check Your Email</h2>
+        <p>If an account exists for <strong>{email}</strong>, a reset link has been sent. Check your inbox.</p>
+        <div className="action-bar">
+          <button className="primary-btn" onClick={() => { setView('login'); setError(''); }}>
+            Back to Sign In
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  if (view === 'forgot') {
+    return (
+      <>
+        <h2>Reset Password</h2>
+        <p>Enter your email and we'll send a reset link.</p>
+        <form className="settings-form" onSubmit={handleForgotSubmit} action="#">
+          <label htmlFor="modal-forgot-email">Email</label>
+          <input
+            id="modal-forgot-email"
+            type="email"
+            name="email"
+            required
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleForgotSubmit(e); }}
+            disabled={submitting}
+          />
+          {error && <div className="login-error-msg" role="status" aria-live="polite">{error}</div>}
+          <div className="action-bar">
+            <button type="button" className="secondary-btn" onClick={() => { setView('login'); setError(''); }} disabled={submitting}>
+              Back
+            </button>
+            <button type="submit" className="primary-btn" disabled={submitting}>
+              {submitting ? 'Sending...' : 'Send Reset Link'}
+            </button>
+          </div>
+        </form>
+      </>
+    );
+  }
+
   return (
     <>
       <h2>Sign In</h2>
       {message
         ? <p>{message}</p>
         : <p>Sign in to sync your data with{' '}
-            <a href="https://account.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.
+            <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.
           </p>
       }
       <form className="settings-form" onSubmit={handleSubmit} action="#">
@@ -89,6 +155,9 @@ export default function LoginModal({ onSuccess, message }) {
           required
           disabled={submitting}
         />
+        <button type="button" className="link-btn" onClick={() => { setView('forgot'); setError(''); }}>
+          Forgot password?
+        </button>
         {error && <div className="login-error-msg" role="status" aria-live="polite">{error}</div>}
         <div className="action-bar">
           <button type="button" className="secondary-btn" onClick={hide} disabled={submitting}>Cancel</button>

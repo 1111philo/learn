@@ -9,19 +9,27 @@ import {
   getLearnerProfileSummary, getLearnerProfile,
   saveLearnerProfile, saveLearnerProfileSummary,
 } from '../../js/storage.js';
+import { updateProfile } from '../../js/auth.js';
 import * as orchestrator from '../../js/orchestrator.js';
 import { syncInBackground } from '../lib/syncDebounce.js';
 import { ensureProfileExists, mergeProfile } from '../lib/profileQueue.js';
 
 export default function Settings() {
   const { state, dispatch } = useApp();
-  const { loggedIn } = useAuth();
+  const { loggedIn, user, refreshUser } = useAuth();
   const { show: showModal } = useModal();
   const [apiKey, setApiKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [keyFeedback, setKeyFeedback] = useState('');
   const [name, setName] = useState(state.preferences?.name || '');
   const [profileSummary, setProfileSummary] = useState('');
+
+  // Account section state
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordFeedback, setPasswordFeedback] = useState('');
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [nameFeedback, setNameFeedback] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -44,10 +52,47 @@ export default function Settings() {
 
   const handleSaveName = async (e) => {
     e.preventDefault();
-    const prefs = { ...state.preferences, name: name.trim() };
+    const trimmed = name.trim();
+    const prefs = { ...state.preferences, name: trimmed };
     await savePreferences(prefs);
     dispatch({ type: 'SET_PREFERENCES', preferences: prefs });
     syncInBackground('preferences');
+
+    if (loggedIn) {
+      try {
+        await updateProfile({ name: trimmed });
+        await refreshUser();
+        setNameFeedback('Saved!');
+      } catch (err) {
+        setNameFeedback(err.message || 'Failed to update');
+      }
+      setTimeout(() => setNameFeedback(''), 2000);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 8) {
+      setPasswordFeedback('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordFeedback('Passwords do not match.');
+      return;
+    }
+    setPasswordSubmitting(true);
+    setPasswordFeedback('');
+    try {
+      await updateProfile({ password: newPassword });
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordFeedback('Password changed!');
+    } catch (err) {
+      setPasswordFeedback(err.message || 'Failed to change password');
+    } finally {
+      setPasswordSubmitting(false);
+      setTimeout(() => setPasswordFeedback(''), 3000);
+    }
   };
 
   const handleProfileFeedback = () => {
@@ -60,11 +105,58 @@ export default function Settings() {
     <div className="settings-page">
       <h2>Settings</h2>
 
+      {loggedIn && (
+        <div className="settings-section">
+          <h3>Account</h3>
+          <div className="account-field">
+            <span className="account-label">Email</span>
+            <span className="account-value">{user?.email || ''}</span>
+          </div>
+          <form className="settings-form" onSubmit={handleSaveName}>
+            <label>
+              Name
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+            <button type="submit" className="primary-btn">Save</button>
+            {nameFeedback && <div className="key-feedback success">{nameFeedback}</div>}
+          </form>
+          <form className="settings-form" onSubmit={handleChangePassword} style={{ marginTop: 'var(--space)' }}>
+            <label>
+              New Password
+              <PasswordField
+                id="new-password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                disabled={passwordSubmitting}
+              />
+            </label>
+            <label>
+              Confirm Password
+              <PasswordField
+                id="confirm-password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleChangePassword(e); } }}
+                disabled={passwordSubmitting}
+              />
+            </label>
+            <button type="submit" className="primary-btn" disabled={passwordSubmitting}>
+              {passwordSubmitting ? 'Changing...' : 'Change Password'}
+            </button>
+            {passwordFeedback && <div className="key-feedback">{passwordFeedback}</div>}
+          </form>
+        </div>
+      )}
+
+      {loggedIn && <hr />}
+
       <div className="settings-section">
         <h3>AI Provider</h3>
         {loggedIn ? (
           <p className="settings-hint">
-            AI is provided by your <a href="https://account.philosophers.group" target="_blank" rel="noopener">1111 Learn</a> account.
+            AI is provided by your 1111 Learn account.
           </p>
         ) : (
           <>
