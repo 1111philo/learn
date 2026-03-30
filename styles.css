@@ -14,7 +14,7 @@
   --color-warning: #d97706;
   --radius: 8px;
   --space: 12px;
-  --content-max: 1120px;
+  --content-max: 960px;
 }
 
 html, body {
@@ -417,7 +417,7 @@ h2 {
 
 .course-layout > .course-header {
   flex-shrink: 0;
-  padding: var(--space) max(var(--space), calc((100% - 720px) / 2));
+  padding: var(--space) max(var(--space), calc((100% - var(--content-max)) / 2));
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
