@@ -8,13 +8,20 @@ All changes flow: **feature branches → staging → main**.
 
 ## Staging (release candidates)
 
-Every push to `staging` triggers `.github/workflows/staging.yml`:
+Every push to `staging` triggers `.github/workflows/staging.yml`. Both staging and production workflows build all platform variants in parallel:
 
-1. Runs tests (`npm test`)
-2. Reads `main`'s current version from `manifest.json` (e.g., `0.6.3`)
-3. Counts non-bump commits on `staging` since it diverged from `main` to determine the RC number
-4. Updates `manifest.json` with a 4-segment `version` (e.g., `0.6.3.2`) and `version_name` (e.g., `0.6.3-RC2`)
-5. Packages the extension and creates a GitHub **pre-release** with the zip attached
+| Job | Runner | Artifact |
+|-----|--------|----------|
+| `build-chrome` | ubuntu-latest | Chrome extension `.zip` |
+| `build-android` | ubuntu-latest | Android `.apk` (debug) |
+| `build-ios` | macos-latest | iOS simulator `.zip` (unsigned) |
+| `build-electron-mac` | macos-latest | macOS `.dmg` |
+| `build-electron-win` | windows-latest | Windows `-setup.exe` |
+
+Staging workflow steps:
+1. **Prepare**: runs tests, determines RC version (4-segment `version` + `version_name`), generates release notes via Claude (Haiku)
+2. **Build**: 5 parallel jobs produce platform-specific artifacts
+3. **Release**: commits the RC version bump, creates a GitHub **pre-release** with all artifacts attached
 
 RC builds are **not** published to the Chrome Web Store. The RC number resets automatically when `staging` is merged into `main`.
 
@@ -22,13 +29,9 @@ RC builds are **not** published to the Chrome Web Store. The RC number resets au
 
 When a PR from `staging` is merged into `main`, `.github/workflows/release.yml`:
 
-1. Runs tests (`npm test`)
-2. Collects commits since the last production release tag
-3. Calls Claude (Haiku) to determine the semver bump and generate release notes
-4. Updates `manifest.json` with a clean 3-segment version, strips any `version_name` from staging
-5. Packages the extension into a zip (excluding dev files)
-6. Commits the version bump and creates a GitHub Release with the zip attached
-7. Uploads the zip to the Chrome Web Store and publishes it
+1. **Prepare**: runs tests, collects commits since last release, calls Claude (Haiku) for semver bump and release notes
+2. **Build**: 5 parallel jobs produce platform-specific artifacts (same matrix as staging)
+3. **Release**: commits the version bump, creates a GitHub Release with all artifacts, publishes Chrome extension to Web Store
 
 **Do not manually bump the version in `manifest.json`** -- the workflows handle this automatically.
 
@@ -59,7 +62,7 @@ See [Chrome Web Store API docs](https://developer.chrome.com/docs/webstore/using
 | Host | Why |
 |------|-----|
 | `https://api.anthropic.com/*` | Claude API calls with the user's own key |
-| `https://learn.philosophers.group/*` | Cloud sync and authentication (optional) |
+| `https://account.philosophers.group/*` | Cloud sync and authentication (optional) |
 
 ## Course prompt format
 

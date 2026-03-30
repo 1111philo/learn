@@ -1,7 +1,7 @@
 # CLAUDE.md -- 1111 Learn
 
 ## Project overview
-1111 Learn is a Chrome extension (Manifest V3, side panel) that helps learners develop professional skills through AI-guided courses. Seven AI agents drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the Coach converses with the learner -- coaching, creating activities, and assessing submissions inline -- while enriching a growing knowledge base, repeating until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted to `chrome.storage.local` as a serialized database. Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
+1111 Learn is a multi-platform learning app that runs as a web app, Chrome extension (Manifest V3, side panel), native mobile apps (iOS, Android via Capacitor), and desktop apps (macOS, Windows via Electron). Seven AI agents drive an exemplar-driven learning loop powered by the Claude API. A course defines an exemplar (the mastery-level outcome) and learning objectives; the Coach converses with the learner -- coaching, creating activities, and assessing submissions inline -- while enriching a growing knowledge base, repeating until the learner achieves the exemplar. The user provides their own Anthropic API key via a first-run onboarding wizard, or logs in to use a managed account. All structured data is stored locally in SQLite (via sql.js WASM), persisted via a platform abstraction layer (`js/platform.js`) that routes to `chrome.storage.local` (extension), `@capacitor/filesystem` (mobile), Node `fs` via IPC (Electron), or IndexedDB (web). Binary assets (uploaded images) remain in IndexedDB, referenced by key. When logged in, the server is the source of truth and local storage acts as a read cache.
 
 ## Architecture
 Seven agents drive the learning experience. The **Coach** is the learner's companion, teacher, and assessor in one continuous conversation — it coaches toward the exemplar, evaluates responses, tracks progress, and updates the knowledge base inline.
@@ -50,7 +50,7 @@ Everything in a course happens in one continuous chat. The course header has a *
 The profile updates via `[PROFILE_UPDATE]` signals from the Coach and deeply on course completion (LLM call via Learner Profile Owner). Profile feedback from settings also triggers an LLM update via Learner Profile Update. All updates run through a sequential queue in `src/lib/profileQueue.js` to prevent concurrent updates from overwriting each other. `ensureProfileExists()` guarantees a profile exists before any update. `mergeProfile()` in `src/lib/profileQueue.js` unions array fields (`activeCourses`, `masteredCourses`), merges preferences so agent responses can never accidentally lose accumulated data.
 
 ### Storage (SQLite)
-All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted to `chrome.storage.local` under `_sqliteDb` (debounced, plus on `visibilitychange`). `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Uploaded images remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the `text_response` column of the `drafts` table.
+All structured data is stored in an in-memory SQLite database powered by sql.js (WASM). The database is serialized to a `Uint8Array` and persisted via the platform abstraction layer (`js/platform.js`) under key `_sqliteDb` (debounced, plus on `visibilitychange`). On the Chrome extension this uses `chrome.storage.local`; on mobile it uses `@capacitor/filesystem`; on desktop it uses Node `fs` via Electron IPC; on web it falls back to IndexedDB. `js/db.js` manages initialization, schema creation, persistence, and column migrations (via try/catch ALTER TABLE). `js/storage.js` provides the query API used by the rest of the app. Uploaded images remain in IndexedDB (`1111-blobs` store), referenced by `screenshot_key` in the `drafts` table. Text responses are stored directly in the `text_response` column of the `drafts` table.
 
 **Tables:** `settings`, `preferences`, `profile`, `profile_summary`, `courses` (user-created), `course_kbs`, `activity_kbs`, `activities`, `drafts`, `auth`, `pending_state`, `course_messages`.
 
@@ -76,12 +76,13 @@ The Course Owner agent transforms the course prompt into a structured course KB 
 
 ## Key conventions
 - The UI is a React app (React 18, React Router, Vite). Source lives in `src/` — pages, components, contexts, hooks, lib modules.
-- Service modules (`js/db.js`, `js/storage.js`, `js/orchestrator.js`, `js/auth.js`, `js/sync.js`, `js/api.js`, `js/validators.js`, `js/courseOwner.js`) are vanilla JS (ES modules) and stay outside `src/`. React components import from them.
-- Vite builds to `dist/` which is the loadable extension directory. CI zips `dist/` for releases.
+- Service modules (`js/db.js`, `js/storage.js`, `js/orchestrator.js`, `js/auth.js`, `js/sync.js`, `js/api.js`, `js/validators.js`, `js/courseOwner.js`, `js/platform.js`) are vanilla JS (ES modules) and stay outside `src/`. React components import from them.
+- `js/platform.js` is the cross-platform abstraction layer. It exports `resolveAssetURL()` (replaces `chrome.runtime.getURL`), `kvStorage` (replaces `chrome.storage.local`), and `getPlatform()`. All Chrome-specific API calls go through this module.
+- Vite builds to `dist/` for all platforms. `npm run build` includes Chrome extension files (manifest.json, background.js); `npm run build:app` omits them. CI zips `dist/` for releases.
 - The entry point is `sidepanel.html` → `src/main.jsx` (initializes SQLite, then mounts React).
-- Storage is abstracted in `js/storage.js` (SQLite via sql.js for structured data, IndexedDB for uploaded images). `js/db.js` manages the SQLite lifecycle.
+- Storage is abstracted in `js/storage.js` (SQLite via sql.js for structured data, IndexedDB for uploaded images). `js/db.js` manages the SQLite lifecycle. Platform-specific persistence is handled by `js/platform.js`.
 - API calls go through `js/api.js`; agent orchestration through `js/orchestrator.js`.
-- Agent system prompts are in `prompts/` as markdown files, loaded at runtime via `chrome.runtime.getURL`.
+- Agent system prompts are in `prompts/` as markdown files, loaded at runtime via `resolveAssetURL()` from `js/platform.js`.
 - Activities must be completable entirely in the browser. Learners upload images of their work or type text responses.
 - Activities end with "Upload an image of your work." or "Hit Submit to submit your response."
 - Keyboard shortcuts: Enter submits single-line inputs, Cmd/Ctrl+Enter submits textareas, Escape dismisses dialogs.
@@ -90,26 +91,20 @@ The Course Owner agent transforms the course prompt into a structured course KB 
 - View transitions: navigating deeper slides left, going back slides right, lateral navigation fades up. List items stagger in. All animations respect `prefers-reduced-motion`.
 
 ## CI/CD
-Two GitHub Actions workflows handle versioning and releases across two branches:
+Two GitHub Actions workflows handle versioning and releases across two branches. Both build all platform variants in parallel.
 
 ### Staging workflow (`.github/workflows/staging.yml`)
 Runs on every push to `staging`:
-1. Runs tests (`npm test`)
-2. Reads `main`'s current version from `manifest.json` (e.g., `0.6.3`)
-3. Counts non-bump commits on `staging` since it diverged from `main` to determine the RC number
-4. Updates `manifest.json` with 4-segment `version` (e.g., `0.6.3.2`) and `version_name` (e.g., `0.6.3-RC2`)
-5. Packages the extension and creates a GitHub **pre-release** (not published to Chrome Web Store)
-6. The RC number resets automatically when `staging` is merged into `main` (since the merge-base moves forward)
+1. **Prepare**: runs tests, determines RC version, generates release notes via Claude (Haiku)
+2. **Build** (5 parallel jobs): Chrome extension zip, Android APK, iOS simulator build, Electron macOS DMG, Electron Windows installer
+3. **Release**: commits the RC version bump, creates a GitHub **pre-release** with all artifacts attached
+4. The RC number resets automatically when `staging` is merged into `main` (since the merge-base moves forward)
 
 ### Release workflow (`.github/workflows/release.yml`)
 Runs on every push to `main` (which should only happen via PR from `staging`):
-1. Runs tests (`npm test`)
-2. Collects commits since the last production release tag
-3. Calls Claude (Haiku) to determine the semver bump and generate release notes
-4. Updates `manifest.json` with clean 3-segment version, strips any `version_name` from staging
-5. Packages the extension into a zip (excluding dev files)
-6. Commits the version bump and creates a GitHub Release with the zip attached
-7. Uploads the zip to the Chrome Web Store and publishes it
+1. **Prepare**: runs tests, collects commits since last release, calls Claude (Haiku) for semver bump and release notes
+2. **Build** (5 parallel jobs): Chrome extension zip, Android APK, iOS simulator build, Electron macOS DMG, Electron Windows installer
+3. **Release**: commits the version bump, creates a GitHub Release with all artifacts, publishes Chrome extension to Web Store
 
 ### Branch protection
 `main` is protected: direct pushes are blocked, PRs require approval and passing status checks. By convention, `main` only accepts PRs from `staging`. Branch protection is configured via `scripts/setup-branch-protection.sh`.
@@ -125,11 +120,15 @@ manifest.json            Chrome extension manifest (MV3)
 background.js            Opens the side panel on icon click
 sidepanel.html           Vite entry point (mounts React)
 sidepanel.css            Global styles
-vite.config.js           Vite build config
+vite.config.js           Chrome extension Vite build config
+vite.config.app.js       Native app Vite build config (no manifest/background)
+vite.config.shared.js    Shared Vite plugins and static copy targets
+capacitor.config.json    Capacitor config (iOS + Android)
 lib/
   sql-wasm.js            Vendored sql.js (SQLite WASM engine)
   sql-wasm.wasm          SQLite WASM binary
 js/                      Service modules (vanilla JS, imported by React)
+  platform.js            Platform abstraction (resolveAssetURL, kvStorage, getPlatform)
   db.js                  SQLite database lifecycle (init, query, persist)
   storage.js             SQLite query layer + IndexedDB for uploaded images
   courseOwner.js          Course prompt loading, parsing, KB updates
@@ -138,6 +137,9 @@ js/                      Service modules (vanilla JS, imported by React)
   validators.js          Pure validation functions (used by orchestrator + tests)
   auth.js                Authentication module for learn-service (login, logout, token refresh)
   sync.js                Cloud data sync (push/pull with optimistic locking)
+electron/                Electron desktop app shell (macOS + Windows)
+  main.cjs               Main process (window creation, kvStorage IPC handlers)
+  preload.cjs            Preload script (contextBridge for renderer)
 src/                     React app
   main.jsx               Entry point: db init, React mount
   App.jsx                Routes + redirect logic
@@ -201,13 +203,16 @@ tests/
   manifest.test.js       Manifest validation tests
   courses.test.js        Course prompt validation tests
   validators.test.js     Output validator unit tests
+  platform.test.js       Platform abstraction tests
   storage.test.js        SQLite storage round-trip tests
-dist/                    Build output (gitignored, loadable as extension)
+ios/                     Capacitor iOS project (generated)
+android/                 Capacitor Android project (generated)
+dist/                    Build output (gitignored)
 PRIVACY.md               Privacy policy
 .github/
   workflows/
-    release.yml          Production release (npm ci + build + zip dist/)
-    staging.yml          Release candidate (npm ci + build + zip dist/)
+    release.yml          Production release (all platforms)
+    staging.yml          Release candidate (all platforms)
 ```
 
 ## Documentation

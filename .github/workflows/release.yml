@@ -8,14 +8,17 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    # Skip runs triggered by the version bump commit
+  # ── Determine version and generate release notes ─────────────────────────
+  prepare:
     if: "!contains(github.event.head_commit.message, 'chore: bump version')"
     runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.claude.outputs.new_version }}
+      skip: ${{ steps.context.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history for commit analysis
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -27,18 +30,13 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build extension
-        run: npm run build
-
       - name: Get current version and commits since last release
         id: context
         run: |
           CURRENT_VERSION=$(jq -r '.version' manifest.json)
-          # Strip any 4th RC segment to get base version
           BASE_VERSION=$(echo "$CURRENT_VERSION" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
           echo "current_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Find the highest non-RC release tag
           LAST_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -v '\-RC' | head -1 || echo "")
           if [ -n "$LAST_TAG" ]; then
             HIGHEST_VERSION=$(echo "$LAST_TAG" | sed 's/^v//')
@@ -49,15 +47,12 @@ jobs:
             COMMITS=$(git log --pretty=format:"%h %s" HEAD)
           fi
 
-          # Skip if no new commits since last tag
           if [ -z "$COMMITS" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
-
-          # Save commits to file (handles multiline safely)
           echo "$COMMITS" > /tmp/commits.txt
 
       - name: Ask Claude for version and release notes
@@ -126,7 +121,6 @@ jobs:
           text = data["content"][0]["text"]
           print(f"Claude raw response: {text}")
 
-          # Strip markdown fences if present
           text = re.sub(r'^```json?\s*\n?', '', text.strip())
           text = re.sub(r'\n?```\s*$', '', text.strip())
 
@@ -135,12 +129,10 @@ jobs:
           new_version = result["version"]
           release_notes = result["release_notes"]
 
-          # Enforce: new version must be strictly greater than highest published
           def version_tuple(v):
               return tuple(int(x) for x in v.split('.'))
 
           if version_tuple(new_version) <= version_tuple(highest):
-              # Auto-fix: bump patch of highest version
               h = version_tuple(highest)
               new_version = f"{h[0]}.{h[1]}.{h[2] + 1}"
               print(f"Claude chose {result['version']} which is not greater than {highest}. Auto-fixed to {new_version}")
@@ -154,36 +146,200 @@ jobs:
               f.write(release_notes)
           PYEOF
 
-      - name: Update manifest.json version
+      - name: Upload release notes
         if: steps.context.outputs.skip != 'true'
-        run: |
-          NEW_VERSION="${{ steps.claude.outputs.new_version }}"
-          # Set clean 3-segment version and strip any RC version_name from staging merges
-          jq --arg v "$NEW_VERSION" '.version = $v | del(.version_name)' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
-          echo "Updated manifest.json to version $NEW_VERSION"
-          cat manifest.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/release_notes.md
 
-      - name: Rebuild with clean version and package zip
-        if: steps.context.outputs.skip != 'true'
-        run: |
-          NEW_VERSION="${{ steps.claude.outputs.new_version }}"
-          ZIP_NAME="1111-learn-v${NEW_VERSION}.zip"
+  # ── Chrome extension ─────────────────────────────────────────────────────
+  build-chrome:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
 
-          # Rebuild so dist/ has the clean version in manifest
+      - name: Set version in manifest
+        run: |
+          jq --arg v "${{ needs.prepare.outputs.new_version }}" \
+            '.version = $v | del(.version_name)' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+
+      - name: Build and package Chrome extension
+        run: |
           npm run build
+          cd dist && zip -r ../1111-learn-chrome-v${{ needs.prepare.outputs.new_version }}.zip . -x '.env.js' && cd ..
 
-          cd dist
-          # Exclude .env.js (dev credentials, gitignored but may be copied by viteStaticCopy)
-          zip -r "../$ZIP_NAME" . -x '.env.js'
-          cd ..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: 1111-learn-chrome-v${{ needs.prepare.outputs.new_version }}.zip
 
-          echo "zip_name=$ZIP_NAME" >> "$GITHUB_ENV"
+  # ── Android APK ──────────────────────────────────────────────────────────
+  build-android:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
-      - name: Commit version bump
-        if: steps.context.outputs.skip != 'true'
+      - run: npm ci
+      - run: npm run build:app
+      - run: npx cap sync android
+
+      - name: Build Android APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Rename APK
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             1111-learn-android-v${{ needs.prepare.outputs.new_version }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: 1111-learn-android-v${{ needs.prepare.outputs.new_version }}.apk
+
+  # ── iOS build (requires macOS + Xcode) ───────────────────────────────────
+  build-ios:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build:app
+      - run: npx cap sync ios
+
+      - name: Resolve Swift packages
+        working-directory: ios/App
+        run: xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App
+
+      - name: Build iOS (unsigned, no-code-sign)
+        working-directory: ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" 2>&1 | tail -40
+
+      - name: Package iOS build
+        run: |
+          APP_PATH=$(find ios/App/build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then echo "No .app found"; exit 1; fi
+          APP_DIR=$(dirname "$APP_PATH")
+          cd "$APP_DIR"
+          zip -r "$GITHUB_WORKSPACE/1111-learn-ios-simulator-v${{ needs.prepare.outputs.new_version }}.zip" "$(basename "$APP_PATH")"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: 1111-learn-ios-simulator-v${{ needs.prepare.outputs.new_version }}.zip
+
+  # ── Electron macOS ───────────────────────────────────────────────────────
+  build-electron-mac:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build:app
+
+      - name: Build Electron macOS
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --publish never --config.extraMetadata.version=${{ needs.prepare.outputs.new_version }}
+
+      - name: Rename artifacts
+        run: |
+          for f in release/*.dmg; do
+            [ -f "$f" ] && cp "$f" "1111-learn-macos-v${{ needs.prepare.outputs.new_version }}.dmg"
+          done
+          for f in release/*.zip; do
+            [ -f "$f" ] && cp "$f" "1111-learn-macos-v${{ needs.prepare.outputs.new_version }}.zip"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: electron-mac
+          path: 1111-learn-macos-v${{ needs.prepare.outputs.new_version }}.*
+
+  # ── Electron Windows ─────────────────────────────────────────────────────
+  build-electron-win:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build:app
+
+      - name: Build Electron Windows
+        run: npx electron-builder --win --publish never --config.extraMetadata.version=${{ needs.prepare.outputs.new_version }}
+
+      - name: Rename artifacts
+        shell: bash
+        run: |
+          for f in release/*.exe; do
+            [ -f "$f" ] && cp "$f" "1111-learn-windows-v${{ needs.prepare.outputs.new_version }}-setup.exe"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: electron-win
+          path: 1111-learn-windows-v${{ needs.prepare.outputs.new_version }}-setup.exe
+
+  # ── Create release with all artifacts ────────────────────────────────────
+  release:
+    needs: [prepare, build-chrome, build-android, build-ios, build-electron-mac, build-electron-win]
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Update manifest and commit version bump
         continue-on-error: true
         run: |
-          NEW_VERSION="${{ steps.claude.outputs.new_version }}"
+          NEW_VERSION="${{ needs.prepare.outputs.new_version }}"
+          jq --arg v "$NEW_VERSION" '.version = $v | del(.version_name)' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifest.json
@@ -191,26 +347,35 @@ jobs:
           git push || echo "Version bump push failed (branch protection). Release will still be created."
 
       - name: Create GitHub Release
-        if: steps.context.outputs.skip != 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NEW_VERSION="${{ steps.claude.outputs.new_version }}"
-          gh release create "v${NEW_VERSION}" \
-            "${{ env.zip_name }}" \
-            --title "v${NEW_VERSION}" \
-            --notes-file /tmp/release_notes.md || echo "Release already exists, continuing to publish."
+          NEW_VERSION="${{ needs.prepare.outputs.new_version }}"
 
-      - name: Publish to Chrome Web Store
-        if: steps.context.outputs.skip != 'true'
+          # Collect all built files
+          FILES=""
+          for f in artifacts/chrome-extension/*.zip; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/android-apk/*.apk; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/ios-build/*.zip; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/electron-mac/*; do [ -f "$f" ] && FILES="$FILES $f"; done
+          for f in artifacts/electron-win/*.exe; do [ -f "$f" ] && FILES="$FILES $f"; done
+
+          gh release create "v${NEW_VERSION}" \
+            $FILES \
+            --title "v${NEW_VERSION}" \
+            --notes-file artifacts/release-notes/release_notes.md || echo "Release already exists."
+
+      - name: Publish Chrome extension to Web Store
+        continue-on-error: true
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
         run: |
-          # Get access token from refresh token
+          CHROME_ZIP=$(ls artifacts/chrome-extension/*.zip | head -1)
+
           TOKEN_RESPONSE=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
             -d "client_id=${GOOGLE_CLIENT_ID}" \
             -d "client_secret=${GOOGLE_CLIENT_SECRET}" \
@@ -225,12 +390,11 @@ jobs:
             exit 1
           fi
 
-          # Upload zip to Chrome Web Store
           UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X PUT "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
             -H "x-goog-api-version: 2" \
-            -T "${{ env.zip_name }}")
+            -T "$CHROME_ZIP")
 
           HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
           BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
@@ -243,7 +407,6 @@ jobs:
             exit 1
           fi
 
-          # Publish the uploaded version
           PUBLISH_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \

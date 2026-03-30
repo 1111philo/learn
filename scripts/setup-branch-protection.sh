@@ -3,7 +3,7 @@
 # Requires: gh CLI authenticated with admin access to the repo.
 #
 # Usage: ./scripts/setup-branch-protection.sh [OWNER/REPO]
-# Example: ./scripts/setup-branch-protection.sh 1111philo/learn-extension
+# Example: ./scripts/setup-branch-protection.sh 1111philo/learn
 
 set -euo pipefail
 

@@ -4,7 +4,7 @@
 
 # 1111 Learn
 
-An agentic learning app that runs entirely in the Chrome side panel. Seven AI agents drive an exemplar-driven learning loop -- a Coach converses with the learner, coaching and assessing inline while enriching a growing knowledge base until the learner achieves the course exemplar.
+An agentic learning app that runs in the Chrome side panel and as native apps on iOS, Android, macOS, and Windows. Seven AI agents drive an exemplar-driven learning loop -- a Coach converses with the learner, coaching and assessing inline while enriching a growing knowledge base until the learner achieves the course exemplar.
 
 Built by [11:11 Philosopher's Group](https://github.com/1111philo) in collaboration with [UIC Tech Solutions](https://it.uic.edu/), [UIC TS Open Source Fund](https://osf.it.uic.edu/), [Louisiana Tech](https://www.latech.edu/), and the [ULL Louisiana Educate Program](https://louisiana.edu/educate).
 
@@ -21,8 +21,8 @@ Everything happens in the browser. Images and text responses are assessed by the
 ## Quick start
 
 ```bash
-git clone https://github.com/1111philo/learn-extension.git
-cd learn-extension
+git clone https://github.com/1111philo/learn.git
+cd learn
 npm install
 npm run build
 ```
@@ -45,12 +45,15 @@ You'll need an [Anthropic API key](https://console.anthropic.com/) or a 1111 Lea
 ## Project structure
 
 ```
-js/          Service modules (vanilla JS) -- storage, orchestration, auth, sync, courseOwner, validation
+js/          Service modules (vanilla JS) -- storage, orchestration, auth, sync, platform abstraction
 src/         React 18 app -- pages, components, contexts, hooks
 prompts/     Agent system prompts (markdown) -- edit these to change agent behavior
 data/        Course prompts (markdown files in data/courses/)
-tests/       Node built-in test runner -- manifest, courses, validators, storage
-dist/        Build output (loadable as Chrome extension)
+electron/    Electron desktop app shell (macOS + Windows)
+tests/       Node built-in test runner -- manifest, courses, validators, storage, platform
+ios/         Capacitor iOS project
+android/     Capacitor Android project
+dist/        Build output (all platforms)
 ```
 
 ## Contributing

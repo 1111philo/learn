@@ -8,7 +8,7 @@ import * as sync from '../../../js/sync.js';
 import { loadCourses } from '../../../js/courseOwner.js';
 import { syncInBackground } from '../../lib/syncDebounce.js';
 
-export default function LoginModal({ onSuccess }) {
+export default function LoginModal({ onSuccess, message }) {
   const [email, setEmail] = useState(globalThis.__envCredentials?.email || '');
   const [password, setPassword] = useState(globalThis.__envCredentials?.password || '');
   const [error, setError] = useState('');
@@ -58,9 +58,12 @@ export default function LoginModal({ onSuccess }) {
   return (
     <>
       <h2>Sign In</h2>
-      <p>Sign in to sync your data with{' '}
-        <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.
-      </p>
+      {message
+        ? <p>{message}</p>
+        : <p>Sign in to sync your data with{' '}
+            <a href="https://account.philosophers.group" target="_blank" rel="noopener">1111 Learn</a>.
+          </p>
+      }
       <form className="settings-form" onSubmit={handleSubmit} action="#">
         <label htmlFor="modal-login-email">Email</label>
         <input

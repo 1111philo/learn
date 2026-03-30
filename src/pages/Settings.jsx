@@ -64,7 +64,7 @@ export default function Settings() {
         <h3>AI Provider</h3>
         {loggedIn ? (
           <p className="settings-hint">
-            AI is provided by your <a href="https://learn.philosophers.group" target="_blank" rel="noopener">1111 Learn</a> account.
+            AI is provided by your <a href="https://account.philosophers.group" target="_blank" rel="noopener">1111 Learn</a> account.
           </p>
         ) : (
           <>
