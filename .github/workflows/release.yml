@@ -228,17 +228,22 @@ jobs:
       - run: npm run build:app
       - run: npx cap sync ios
 
+      - name: Resolve Swift packages
+        working-directory: ios/App
+        run: xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App
+
       - name: Build iOS (unsigned, no-code-sign)
         working-directory: ios/App
         run: |
-          xcodebuild -workspace App.xcworkspace \
+          set -o pipefail
+          xcodebuild -project App.xcodeproj \
             -scheme App \
             -configuration Release \
             -sdk iphonesimulator \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" | tail -20
+            CODE_SIGN_IDENTITY="" 2>&1 | tail -40
 
       - name: Package iOS build
         run: |
