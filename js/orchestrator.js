@@ -102,22 +102,24 @@ export async function converseStream(promptName, messages, onChunk, maxTokens = 
     if (kb) systemPrompt = `${systemPrompt}\n\n---\n\n## Program Knowledge Base\n\n${kb}`;
   }
 
-  // Logged-in users stream through the service proxy
+  // Logged-in users call through the service proxy
   if (await isLoggedIn()) {
     const resp = await authenticatedFetch('/v1/ai/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL_LIGHT, max_tokens: maxTokens, system: systemPrompt, messages, stream: true }),
     });
-    if (!resp.ok) {
-      // Fall back to non-streaming on error (proxy may not support streaming)
-      const { content } = await callApi({ model: MODEL_LIGHT, systemPrompt, messages, maxTokens });
-      onChunk(content);
-      return content;
+    const contentType = resp.headers.get('content-type') || '';
+    if (resp.ok && contentType.includes('text/event-stream')) {
+      // Proxy supports SSE streaming
+      let full = '';
+      for await (const chunk of parseSSEStream(resp.body)) { full += chunk; onChunk(full); }
+      return full;
     }
-    let full = '';
-    for await (const chunk of parseSSEStream(resp.body)) { full += chunk; onChunk(full); }
-    return full;
+    // Non-streaming response (proxy returned JSON)
+    const { content } = await parseResponse(resp);
+    onChunk(content);
+    return content;
   }
 
   // Direct Anthropic API with user's own key (streaming)
