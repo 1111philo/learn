@@ -76,7 +76,7 @@ export default function CourseCreate() {
 
   // -- Send message -------------------------------------------------------------
 
-  const handleSend = useCallback(async (text) => {
+  const handleSend = useCallback(async ({ text }) => {
     if (!text?.trim() || !draftId) return;
     setError('');
     setLoading('qa');
