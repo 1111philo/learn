@@ -49,7 +49,11 @@ header {
   flex-shrink: 0;
   position: relative;
   z-index: 50;
+  /* Full-width background, centered content on desktop */
+  max-width: 100%;
 }
+
+header > * { flex-shrink: 0; }
 
 .logo {
   width: 24px;
@@ -363,11 +367,14 @@ h2 {
   background: var(--color-bg);
 }
 
-/* Center course header content on wide screens */
-.course-layout > .course-header > * {
+/* Center course header/chat/compose content on wide screens */
+.course-layout > .course-header > *,
+.course-layout > .chat > *,
+.course-bottom-bar > * {
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
+  width: 100%;
 }
 
 
@@ -380,12 +387,6 @@ h2 {
   font-size: 16px;
 }
 
-/* Center chat content on wide screens while keeping full-width background */
-.course-layout > .chat > * {
-  max-width: 800px;
-  margin-left: auto;
-  margin-right: auto;
-}
 
 .action-card {
   background: var(--color-bg);
@@ -432,9 +433,6 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 800px;
-  width: 100%;
-  margin: 0 auto;
 }
 
 .action-taken-label {
@@ -1855,7 +1853,10 @@ hr {
     margin-right: auto;
     padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
   }
-  header { padding: 12px calc(var(--space) * 3); }
+  header {
+    /* Content aligns with main's 960px max-width; background spans full width */
+    padding: 12px max(calc(var(--space) * 3), calc((100% - 960px) / 2 + var(--space) * 3));
+  }
   .course-list {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
