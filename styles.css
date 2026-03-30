@@ -1793,15 +1793,22 @@ hr {
 
 /* ── Responsive breakpoints ─────────────────────────────────────────────── */
 
-/* ── Tablet ── */
+/* ── Tablet (640px+) ── */
 @media (min-width: 640px) {
+  main { padding: var(--space) calc(var(--space) * 2); }
   .modal { max-width: 480px; }
-  main { padding: 0 calc(var(--space) * 2); }
 }
 
-/* ── Desktop ── */
+/* ── Desktop (1024px+) ── */
 @media (min-width: 1024px) {
-  main { padding: 0 calc(var(--space) * 4); }
+  main {
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
+  }
+  header { padding: 12px calc(var(--space) * 3); }
+  nav { padding: 0 calc(var(--space) * 3); }
   .course-list {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1816,16 +1823,12 @@ hr {
   .settings-page > .settings-section:last-child {
     grid-column: 1 / -1;
   }
-  header { padding: 12px calc(var(--space) * 3); }
-  nav { padding: 0 calc(var(--space) * 3); }
 }
 
-/* ── Wide desktop ── */
+/* ── Wide desktop (1440px+) ── */
 @media (min-width: 1440px) {
-  main { padding: 0 calc(var(--space) * 8); }
+  main { max-width: 1200px; }
   .course-list { grid-template-columns: repeat(3, 1fr); }
-  header { padding: 12px calc(var(--space) * 6); }
-  nav { padding: 0 calc(var(--space) * 6); }
 }
 
 @media (forced-colors: active) {
