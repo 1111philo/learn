@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { resolve } from 'path';
-import { existsSync, readdirSync, writeFileSync, copyFileSync } from 'fs';
+import { existsSync, readdirSync, writeFileSync } from 'fs';
 
 /** Generate data/courses/index.json listing all .md files in the directory. */
 function courseManifestPlugin() {
@@ -32,22 +32,13 @@ export default defineConfig({
         ...(existsSync('.env.js') ? [{ src: '.env.js', dest: '', rename: '.env.js' }] : []),
       ],
     }),
-    // Copy sidepanel.html → index.html for standard web hosting
-    {
-      name: 'copy-index-html',
-      closeBundle() {
-        const outDir = resolve(import.meta.dirname, 'dist');
-        const src = resolve(outDir, 'sidepanel.html');
-        if (existsSync(src)) copyFileSync(src, resolve(outDir, 'index.html'));
-      },
-    },
   ],
   base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: resolve(import.meta.dirname, 'sidepanel.html'),
+      input: resolve(import.meta.dirname, 'index.html'),
     },
   },
 });
