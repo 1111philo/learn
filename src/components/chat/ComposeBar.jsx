@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useId } from 'react';
 import { useAutoResize } from '../../hooks/useAutoResize.js';
 
 export default function ComposeBar({
@@ -12,6 +12,7 @@ export default function ComposeBar({
   const inputRef = useRef(null);
   const fileRef = useRef(null);
   const handleResize = useAutoResize();
+  const inputId = useId();
 
   const send = () => {
     const val = text.trim();
@@ -43,10 +44,10 @@ export default function ComposeBar({
             <button className="compose-image-remove" onClick={() => setImage(null)} aria-label="Remove image">&times;</button>
           </div>
         )}
-        <label htmlFor="chat-input" className="sr-only">Your message</label>
+        <label htmlFor={inputId} className="sr-only">Your message</label>
         <textarea
           ref={inputRef}
-          id="chat-input"
+          id={inputId}
           className="chat-input"
           rows={1}
           placeholder={placeholder}

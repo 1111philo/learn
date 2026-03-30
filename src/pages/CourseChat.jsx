@@ -140,7 +140,9 @@ export default function CourseChat() {
         message="This will delete all progress. You'll start from scratch."
         confirmLabel="Reset Course"
         onConfirm={async () => { await deleteCourseProgress(courseGroupId); navigate('/courses'); }}
-      />
+      />,
+      'alertdialog',
+      'Reset course'
     );
   };
 
@@ -157,7 +159,9 @@ export default function CourseChat() {
           dispatch({ type: 'REFRESH_COURSES', courses: await loadCourses() });
           navigate('/courses');
         }}
-      />
+      />,
+      'alertdialog',
+      'Delete course'
     );
   };
 
@@ -207,7 +211,7 @@ export default function CourseChat() {
         )}
       </div>
 
-      <ChatArea>
+      <ChatArea courseName={course?.name}>
         {messages.map(renderMessage)}
         {displayText != null && displayText.length > 0 && (
           <AssistantMessage content={displayText} />
