@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**1111 Learn** -- Chrome Extension
+**1111 Learn** -- Web App
 **Data Controller:** 11:11 Philosopher's Group
 **Last Updated:** 2026-03-24
 
@@ -14,7 +14,7 @@
 
 ## 2. Data Stored Locally (Never Shared)
 
-All core learning data is stored entirely on your device in a local SQLite database (persisted via Chrome's storage API) and IndexedDB for screenshots. This data never leaves your browser unless you sign in to sync.
+All core learning data is stored entirely on your device in a local SQLite database (persisted via IndexedDB) and IndexedDB for screenshots. This data never leaves your browser unless you sign in to sync.
 
 | Data | Storage | Purpose |
 |------|---------|---------|

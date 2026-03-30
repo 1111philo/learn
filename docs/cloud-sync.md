@@ -1,6 +1,6 @@
 # Cloud Sync
 
-Login is never required -- the extension works fully offline/locally. Optional login via [learn-service](https://github.com/1111philo/learn-service) enables cross-device data persistence.
+Login is never required -- the app works fully offline/locally. Optional login via [learn-service](https://github.com/1111philo/learn-service) enables cross-device data persistence.
 
 When logged in, the server is the source of truth. Data is written to the server after every local save and pulled on startup/login. Local storage acts as a read cache.
 
@@ -46,10 +46,10 @@ Logged-in users need no API key.
 
 ## API key provisioning
 
-On login, if no local API key exists, the extension checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it. This allows organizations to provision keys for users without them needing to manage their own.
+On login, if no local API key exists, the app checks for an admin-assigned key via `/v1/me/api-key` and auto-installs it. This allows organizations to provision keys for users without them needing to manage their own.
 
 ## Startup sequence
 
 1. If logged in, `sync.loadAll()` runs before reading local data
-2. This ensures the extension reflects the server state
+2. This ensures the app reflects the server state
 3. Falls back to local cache if offline

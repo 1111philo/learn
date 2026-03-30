@@ -4,7 +4,7 @@
 
 # 1111 Learn
 
-An agentic learning app that runs in the Chrome side panel and as native apps on iOS, Android, macOS, and Windows. Seven AI agents drive an exemplar-driven learning loop -- a Coach converses with the learner, coaching and assessing inline while enriching a growing knowledge base until the learner achieves the course exemplar.
+An agentic learning app at [learn.philosophers.group](https://learn.philosophers.group). Seven AI agents drive an exemplar-driven learning loop -- a Coach converses with the learner, coaching and assessing inline while enriching a growing knowledge base until the learner achieves the course exemplar.
 
 Built by [11:11 Philosopher's Group](https://github.com/1111philo) in collaboration with [UIC Tech Solutions](https://it.uic.edu/), [UIC TS Open Source Fund](https://osf.it.uic.edu/), [Louisiana Tech](https://www.latech.edu/), and the [ULL Louisiana Educate Program](https://louisiana.edu/educate).
 
@@ -27,7 +27,7 @@ npm install
 npm run build
 ```
 
-Then load `dist/` as an unpacked extension in Chrome (`chrome://extensions` > Developer mode > Load unpacked). Click the extension icon to open the side panel and complete the onboarding wizard.
+Then serve `dist/` with any static server (e.g., `npx serve dist`) and open it in your browser. Or just visit [learn.philosophers.group](https://learn.philosophers.group).
 
 You'll need an [Anthropic API key](https://console.anthropic.com/) or a 1111 Learn account.
 
@@ -45,15 +45,12 @@ You'll need an [Anthropic API key](https://console.anthropic.com/) or a 1111 Lea
 ## Project structure
 
 ```
-js/          Service modules (vanilla JS) -- storage, orchestration, auth, sync, platform abstraction
+js/          Service modules (vanilla JS) -- storage, orchestration, auth, sync
 src/         React 18 app -- pages, components, contexts, hooks
 prompts/     Agent system prompts (markdown) -- edit these to change agent behavior
 data/        Course prompts (markdown files in data/courses/)
-electron/    Electron desktop app shell (macOS + Windows)
-tests/       Node built-in test runner -- manifest, courses, validators, storage, platform
-ios/         Capacitor iOS project
-android/     Capacitor Android project
-dist/        Build output (all platforms)
+tests/       Node built-in test runner -- courses, validators, storage, platform
+dist/        Build output (deployed to GitHub Pages)
 ```
 
 ## Contributing

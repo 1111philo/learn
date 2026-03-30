@@ -1,6 +1,6 @@
 # Architecture
 
-1111 Learn is a multi-platform learning app that runs as a web app, Chrome extension, native mobile apps (iOS, Android via Capacitor), and desktop apps (macOS, Windows via Electron). The UI is a React 18 app built with Vite. Service modules are vanilla JS (ES modules) in `js/`, imported by React components in `src/`. A platform abstraction layer (`js/platform.js`) replaces Chrome-specific APIs so all platforms share the same web code.
+1111 Learn is a web app deployed to `learn.philosophers.group` via GitHub Pages. The UI is a React 18 app built with Vite. Service modules are vanilla JS (ES modules) in `js/`, imported by React components in `src/`. All data is stored client-side in SQLite (via sql.js WASM) persisted to IndexedDB.
 
 ## Agents
 
@@ -101,9 +101,9 @@ There are no predefined units, rubrics, journeys, or summative assessments. Acti
 
 ### SQLite (structured data)
 
-All structured data lives in an in-memory SQLite database powered by [sql.js](https://github.com/sql-js/sql.js) (WASM). The database is serialized and persisted via `kvStorage` from [`js/platform.js`](../js/platform.js) under key `_sqliteDb` (debounced, plus on `visibilitychange`). The platform abstraction routes persistence to `chrome.storage.local` (extension), `@capacitor/filesystem` (mobile), Node `fs` via IPC (Electron), or IndexedDB (web fallback).
+All structured data lives in an in-memory SQLite database powered by [sql.js](https://github.com/sql-js/sql.js) (WASM). The database is serialized and persisted to IndexedDB via `kvStorage` from [`js/platform.js`](../js/platform.js) under key `_sqliteDb` (debounced, plus on `visibilitychange`).
 
-- [`js/platform.js`](../js/platform.js) -- platform detection, asset URL resolution, cross-platform key-value storage
+- [`js/platform.js`](../js/platform.js) -- asset URL resolution, IndexedDB key-value storage
 - [`js/db.js`](../js/db.js) -- database lifecycle: init, schema creation, persistence, column migrations
 - [`js/storage.js`](../js/storage.js) -- query API: getters/setters for all data types
 
@@ -149,17 +149,13 @@ Learner Profile ──── threads through every agent call as context
 ## File structure
 
 ```
-manifest.json            Chrome extension manifest (MV3)
-background.js            Opens the side panel on icon click
 sidepanel.html           Vite entry point
 sidepanel.css            Global styles
-vite.config.js           Chrome extension Vite build config
-vite.config.app.js       Native app Vite build config
-vite.config.shared.js    Shared Vite plugins and targets
-capacitor.config.json    Capacitor config (iOS + Android)
+vite.config.js           Vite build config
+CNAME                    GitHub Pages custom domain
 lib/                     Vendored sql.js (WASM)
 js/                      Service modules (vanilla JS)
-  platform.js            Platform abstraction (asset URLs, storage, detection)
+  platform.js            Asset URL resolution + IndexedDB kvStorage
   db.js                  SQLite lifecycle
   storage.js             Query layer + IndexedDB for images
   courseOwner.js          Course prompt loading + KB updates
@@ -168,9 +164,6 @@ js/                      Service modules (vanilla JS)
   validators.js          Output validators
   auth.js                Auth for learn-service
   sync.js                Cloud data sync
-electron/                Electron desktop app shell
-  main.cjs               Main process (window, IPC handlers)
-  preload.cjs            Preload script (contextBridge)
 src/                     React app
   main.jsx               Entry: db init, React mount
   App.jsx                Routes
@@ -182,9 +175,7 @@ src/                     React app
 prompts/                 Agent system prompts (markdown)
 data/courses/            Course prompt files (markdown)
 data/knowledge-base.md   Program knowledge base
-tests/                   Node test runner (manifest, courses, validators, storage, platform)
-ios/                     Capacitor iOS project (generated)
-android/                 Capacitor Android project (generated)
+tests/                   Node test runner (courses, validators, storage, platform)
 docs/                    Documentation
-dist/                    Build output (all platforms)
+dist/                    Build output (deployed to GitHub Pages)
 ```
