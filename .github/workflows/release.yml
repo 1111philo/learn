@@ -267,7 +267,7 @@ jobs:
       - name: Build Electron macOS
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac --config.extraMetadata.version=${{ needs.prepare.outputs.new_version }}
+        run: npx electron-builder --mac --publish never --config.extraMetadata.version=${{ needs.prepare.outputs.new_version }}
 
       - name: Rename artifacts
         run: |
@@ -298,7 +298,7 @@ jobs:
       - run: npm run build:app
 
       - name: Build Electron Windows
-        run: npx electron-builder --win --config.extraMetadata.version=${{ needs.prepare.outputs.new_version }}
+        run: npx electron-builder --win --publish never --config.extraMetadata.version=${{ needs.prepare.outputs.new_version }}
 
       - name: Rename artifacts
         shell: bash
