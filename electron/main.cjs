@@ -57,6 +57,7 @@ function createWindow() {
     minWidth: 360,
     minHeight: 500,
     title: '1111 Learn',
+    icon: path.join(__dirname, '..', 'dist', 'assets', 'icon-256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

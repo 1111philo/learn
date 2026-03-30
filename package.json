@@ -10,6 +10,7 @@
     "cap:android": "npm run build:app && npx cap sync android",
     "electron:dev": "npm run build:app && electron electron/main.cjs",
     "electron:build": "npm run build:app && electron-builder",
+    "build:web": "vite build --config vite.config.app.js --base /learn-extension/",
     "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
@@ -41,6 +42,7 @@
     "directories": {
       "output": "release"
     },
+    "icon": "assets/icon-512.png",
     "mac": {
       "target": ["dmg", "zip"],
       "category": "public.app-category.education"
