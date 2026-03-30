@@ -29,7 +29,7 @@ jobs:
           node-version: '22'
 
       - run: npm ci
-      - run: npm run build:web
+      - run: npm run build
       - run: cp CNAME dist/
 
       - name: Upload Pages artifact
