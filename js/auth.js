@@ -9,7 +9,7 @@ import {
   getAuthUser, saveAuthUser
 } from './storage.js';
 
-const SERVICE_URL = 'https://learn.philosophers.group';
+const SERVICE_URL = 'https://account.philosophers.group';
 
 // -- Session expiry event -----------------------------------------------------
 

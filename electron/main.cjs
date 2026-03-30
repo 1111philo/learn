@@ -32,7 +32,7 @@ ipcMain.handle('kv:remove', (_event, key) => {
 
 // -- CORS handling for API domains --------------------------------------------
 
-const API_DOMAINS = ['api.anthropic.com', 'learn.philosophers.group'];
+const API_DOMAINS = ['api.anthropic.com', 'account.philosophers.group'];
 
 function setupCors() {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {

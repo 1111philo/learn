@@ -3,7 +3,7 @@
   "appName": "1111 Learn",
   "webDir": "dist",
   "server": {
-    "allowNavigation": ["api.anthropic.com", "learn.philosophers.group"]
+    "allowNavigation": ["api.anthropic.com", "account.philosophers.group"]
   },
   "plugins": {
     "CapacitorHttp": {

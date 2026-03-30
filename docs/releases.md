@@ -62,7 +62,7 @@ See [Chrome Web Store API docs](https://developer.chrome.com/docs/webstore/using
 | Host | Why |
 |------|-----|
 | `https://api.anthropic.com/*` | Claude API calls with the user's own key |
-| `https://learn.philosophers.group/*` | Cloud sync and authentication (optional) |
+| `https://account.philosophers.group/*` | Cloud sync and authentication (optional) |
 
 ## Course prompt format
 
