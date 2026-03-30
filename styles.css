@@ -35,8 +35,6 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  max-width: 480px;
-  margin: 0 auto;
   width: 100%;
 }
 
@@ -1795,18 +1793,20 @@ hr {
 
 /* ── Responsive breakpoints ─────────────────────────────────────────────── */
 
+/* ── Tablet ── */
 @media (min-width: 640px) {
-  #root { max-width: 600px; }
   .modal { max-width: 480px; }
+  main { padding: 0 calc(var(--space) * 2); }
 }
 
+/* ── Desktop ── */
 @media (min-width: 1024px) {
-  #root { max-width: 720px; }
+  main { padding: 0 calc(var(--space) * 4); }
   .course-list {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
   }
-  .msg.msg-user { max-width: 85%; }
+  .msg.msg-user { max-width: 75%; }
   .settings-page {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1816,8 +1816,16 @@ hr {
   .settings-page > .settings-section:last-child {
     grid-column: 1 / -1;
   }
-  header { padding: 12px calc(var(--space) * 1.5); }
-  nav button { font-size: 0.85rem; padding: 12px 8px; }
+  header { padding: 12px calc(var(--space) * 3); }
+  nav { padding: 0 calc(var(--space) * 3); }
+}
+
+/* ── Wide desktop ── */
+@media (min-width: 1440px) {
+  main { padding: 0 calc(var(--space) * 8); }
+  .course-list { grid-template-columns: repeat(3, 1fr); }
+  header { padding: 12px calc(var(--space) * 6); }
+  nav { padding: 0 calc(var(--space) * 6); }
 }
 
 @media (forced-colors: active) {
