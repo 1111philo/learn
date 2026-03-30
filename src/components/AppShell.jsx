@@ -52,6 +52,10 @@ export default function AppShell({ children }) {
         <header>
           <img src="assets/icon-32.png" alt="1111" className="logo" />
           <span className="header-title">Learn</span>
+          <nav className="header-nav" aria-label="Main navigation">
+            <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
+            <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
+          </nav>
           <div className="header-spacer" />
           <div className="user-menu">
             {loggedIn ? (
@@ -84,7 +88,7 @@ export default function AppShell({ children }) {
       </main>
 
       {!isOnboarding && (
-        <nav aria-label="Main navigation">
+        <nav className="bottom-nav" aria-label="Main navigation">
           <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
           <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
         </nav>

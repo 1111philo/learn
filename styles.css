@@ -205,13 +205,39 @@ h2 {
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────── */
-nav {
+
+/* Header nav: hidden on mobile/tablet, shown on desktop */
+.header-nav {
+  display: none;
+  gap: 4px;
+  margin-left: calc(var(--space) * 2);
+}
+
+.header-nav button {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-primary-text);
+  opacity: 0.7;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.header-nav button:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
+.header-nav button[aria-current="page"] { opacity: 1; font-weight: 600; }
+.header-nav button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Bottom nav: shown on mobile/tablet, hidden on desktop */
+.bottom-nav {
   display: flex;
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
-nav button {
+.bottom-nav button {
   flex: 1;
   padding: 10px 4px;
   border: none;
@@ -222,13 +248,13 @@ nav button {
   cursor: pointer;
 }
 
-nav button[aria-current="page"] {
+.bottom-nav button[aria-current="page"] {
   color: var(--color-primary);
   font-weight: 600;
   box-shadow: inset 0 -2px 0 var(--color-primary);
 }
 
-nav button:focus-visible {
+.bottom-nav button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
@@ -1821,6 +1847,8 @@ hr {
 
 /* ── Desktop (1024px+) ── */
 @media (min-width: 1024px) {
+  .header-nav { display: flex; }
+  .bottom-nav { display: none; }
   main {
     max-width: 960px;
     margin-left: auto;
@@ -1828,7 +1856,6 @@ hr {
     padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
   }
   header { padding: 12px calc(var(--space) * 3); }
-  nav { padding: 0 calc(var(--space) * 3); }
   .course-list {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
