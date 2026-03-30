@@ -11,6 +11,26 @@ import {
 
 const SERVICE_URL = 'https://learn.philosophers.group';
 
+// -- Session expiry event -----------------------------------------------------
+
+const _sessionExpiredListeners = new Set();
+
+/**
+ * Register a listener called when the session expires on another device
+ * (refresh token was rotated). The listener receives no arguments.
+ * Returns an unsubscribe function.
+ */
+export function onSessionExpired(fn) {
+  _sessionExpiredListeners.add(fn);
+  return () => _sessionExpiredListeners.delete(fn);
+}
+
+function _notifySessionExpired() {
+  for (const fn of _sessionExpiredListeners) {
+    try { fn(); } catch { /* listener errors must not propagate */ }
+  }
+}
+
 /**
  * Log in with email and password.
  * Returns the user object on success, throws on failure.
@@ -75,7 +95,9 @@ async function refreshAccessToken() {
       body: JSON.stringify({ refreshToken: tokens.refreshToken }),
     });
     if (!res.ok) {
-      await clearAuth();
+      // Don't clear auth silently — the user's data should be preserved.
+      // Notify listeners so the UI can prompt re-login.
+      _notifySessionExpired();
       return false;
     }
     const { accessToken, refreshToken } = await res.json();

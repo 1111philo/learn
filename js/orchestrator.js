@@ -7,13 +7,14 @@ import { callClaude, streamClaude, parseResponse, MODEL_LIGHT, MODEL_HEAVY, ApiE
 import { isLoggedIn, authenticatedFetch } from './auth.js';
 import { getApiKey } from './storage.js';
 import { validateCourseKB } from './validators.js';
+import { resolveAssetURL } from './platform.js';
 
 const promptCache = {};
 let knowledgeBase = null;
 
 async function loadPrompt(name) {
   if (promptCache[name]) return promptCache[name];
-  const url = chrome.runtime.getURL(`prompts/${name}.md`);
+  const url = resolveAssetURL(`prompts/${name}.md`);
   const resp = await fetch(url);
   const text = await resp.text();
   promptCache[name] = text;
@@ -23,7 +24,7 @@ async function loadPrompt(name) {
 async function loadKnowledgeBase() {
   if (knowledgeBase) return knowledgeBase;
   try {
-    const url = chrome.runtime.getURL('data/knowledge-base.md');
+    const url = resolveAssetURL('data/knowledge-base.md');
     const resp = await fetch(url);
     knowledgeBase = await resp.text();
   } catch {

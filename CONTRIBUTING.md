@@ -15,11 +15,25 @@ To reset and re-run onboarding, clear extension storage via Chrome DevTools.
 
 ## Development workflow
 
-- Run `npm run dev` for the Vite dev server, or `npm run build` for production builds.
-- React components live in `src/`. Service modules (storage, orchestrator, auth, sync, courseOwner) live in `js/`.
+- Run `npm run dev` for the Vite dev server, or `npm run build` for the Chrome extension production build.
+- React components live in `src/`. Service modules (storage, orchestrator, auth, sync, courseOwner, platform) live in `js/`.
 - Agent system prompts live in `prompts/*.md` -- edit these to change agent behavior without touching code.
 - Course definitions live in `data/courses/*.md` -- each is a markdown file with exemplar + learning objectives.
 - Use Chrome DevTools on the side panel to inspect state and debug.
+
+### Native app builds
+
+The app also runs on iOS, Android, macOS, and Windows via Capacitor (mobile) and Electron (desktop):
+
+| Command | What it does |
+|---------|-------------|
+| `npm run build:app` | Vite build for native apps (no Chrome manifest/background) |
+| `npm run cap:ios` | Build + sync to iOS (requires Xcode) |
+| `npm run cap:android` | Build + sync to Android (requires Android Studio) |
+| `npm run electron:dev` | Build + launch Electron desktop app |
+| `npm run electron:build` | Package Electron for distribution |
+
+All platforms share the same web code. `js/platform.js` abstracts Chrome extension APIs so they work on every platform.
 
 For architecture details, see [docs/architecture.md](docs/architecture.md). For the full agent invocation flow, see [docs/agent-lifecycle.md](docs/agent-lifecycle.md).
 

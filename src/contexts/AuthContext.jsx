@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     authModule.isLoggedIn().then(async (result) => {
@@ -17,10 +18,16 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
+  // Listen for session expiry (e.g. refresh token rotated by another device)
+  useEffect(() => {
+    return authModule.onSessionExpired(() => setSessionExpired(true));
+  }, []);
+
   const login = useCallback(async (email, password) => {
     const authUser = await authModule.login(email, password);
     setLoggedIn(true);
     setUser(authUser);
+    setSessionExpired(false);
     return authUser;
   }, []);
 
@@ -28,16 +35,18 @@ export function AuthProvider({ children }) {
     await authModule.logout();
     await clearAllData();
     try {
-      const dbs = await indexedDB.databases();
-      for (const db of dbs) { if (db.name) indexedDB.deleteDatabase(db.name); }
-    } catch { /* not supported in all contexts */ }
+      if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
+        const dbs = await indexedDB.databases();
+        for (const db of dbs) { if (db.name) indexedDB.deleteDatabase(db.name); }
+      }
+    } catch { /* not supported in all WebView environments */ }
     await initDatabase();
     setLoggedIn(false);
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ loggedIn, user, loading, login, logout }}>
+    <AuthContext.Provider value={{ loggedIn, user, loading, login, logout, sessionExpired }}>
       {children}
     </AuthContext.Provider>
   );

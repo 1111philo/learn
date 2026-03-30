@@ -4,6 +4,7 @@
  */
 
 import { getUserCourses } from './storage.js';
+import { resolveAssetURL } from './platform.js';
 
 /** Max recent insights to keep in full. Older ones get summarized. */
 const MAX_RECENT_INSIGHTS = 10;
@@ -20,13 +21,13 @@ export async function loadCourses() {
   // Built-in courses from files (discovered via build-time manifest)
   const courses = [];
   try {
-    const manifestUrl = chrome.runtime.getURL('data/courses/index.json');
+    const manifestUrl = resolveAssetURL('data/courses/index.json');
     const manifestResp = await fetch(manifestUrl);
     if (manifestResp.ok) {
       const courseIds = await manifestResp.json();
       for (const id of courseIds) {
         try {
-          const url = chrome.runtime.getURL(`data/courses/${id}.md`);
+          const url = resolveAssetURL(`data/courses/${id}.md`);
           const resp = await fetch(url);
           if (!resp.ok) continue;
           const text = await resp.text();
