@@ -6,6 +6,7 @@ import PasswordField from '../PasswordField.jsx';
 import { getPreferences, savePreferences } from '../../../js/storage.js';
 import * as sync from '../../../js/sync.js';
 import { loadCourses, invalidateCoursesCache } from '../../../js/courseOwner.js';
+import { notifySyncFailure } from '../../lib/syncDebounce.js';
 import { forgotPassword } from '../../../js/auth.js';
 
 export default function LoginModal({ onSuccess, message }) {
@@ -33,7 +34,9 @@ export default function LoginModal({ onSuccess, message }) {
       // Pull server data first (server is source of truth)
       try {
         await sync.loadAll();
-      } catch { /* offline — keep local data */ }
+      } catch (err) {
+        notifySyncFailure('loadAll', err);
+      }
 
       // Sync auth name into local preferences
       if (authUser?.name) {
