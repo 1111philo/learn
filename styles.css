@@ -1930,6 +1930,28 @@ hr {
   .course-list { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* Sync status banner */
+.sync-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #fff3cd;
+  color: #664d03;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #ffecb5;
+}
+.sync-status-dismiss {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 4px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
 @media (forced-colors: active) {
   .course-card, .msg, fieldset {
     border: 1px solid CanvasText;

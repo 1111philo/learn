@@ -59,16 +59,21 @@ export async function save(syncKey) {
     return;
   } else if (res.status === 409) {
     const current = await fetchOne(syncKey);
-    if (current) {
-      const retry = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data, version: current.version }),
-      });
-      if (retry.ok) {
-        _versions[syncKey] = (await retry.json()).version;
-      }
+    if (!current) {
+      throw new Error(`Sync conflict for "${syncKey}": could not fetch current version from server`);
     }
+    const retry = await authenticatedFetch(`/v1/sync/${encodeURIComponent(syncKey)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, version: current.version }),
+    });
+    if (retry.ok) {
+      _versions[syncKey] = (await retry.json()).version;
+    } else {
+      throw new Error(`Sync conflict retry failed for "${syncKey}": server returned ${retry.status}`);
+    }
+  } else {
+    throw new Error(`Sync save failed for "${syncKey}": server returned ${res.status}`);
   }
 }
 

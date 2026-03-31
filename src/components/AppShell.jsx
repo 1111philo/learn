@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useModal } from '../contexts/ModalContext.jsx';
 import { useViewTransition } from '../hooks/useViewTransition.js';
 import LoginModal from './modals/LoginModal.jsx';
+import SyncStatusBanner from './SyncStatusBanner.jsx';
 
 export default function AppShell({ children }) {
   const location = useLocation();
@@ -84,6 +85,7 @@ export default function AppShell({ children }) {
         </header>
       )}
 
+      <SyncStatusBanner />
       <main id="main-content" className={animClass} tabIndex={-1} aria-label="App content">
         {children}
       </main>
