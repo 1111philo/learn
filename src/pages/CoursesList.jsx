@@ -4,6 +4,7 @@ import { useApp } from '../contexts/AppContext.jsx';
 import { useModal } from '../contexts/ModalContext.jsx';
 import { getCourseKB, getDraftCourseId, saveUserCourse } from '../../js/storage.js';
 import { parseCoursePrompt, invalidateCoursesCache, loadCourses } from '../../js/courseOwner.js';
+import { syncInBackground } from '../lib/syncDebounce.js';
 
 export default function CoursesList() {
   const { state, dispatch } = useApp();
@@ -57,6 +58,7 @@ export default function CoursesList() {
     }
 
     await saveUserCourse(courseId, markdown);
+    syncInBackground(`courses:${courseId}`);
     invalidateCoursesCache();
     const refreshed = await loadCourses();
     dispatch({ type: 'REFRESH_COURSES', courses: refreshed });
