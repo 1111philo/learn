@@ -16,15 +16,19 @@ import {
   getDrafts, saveDraft, deleteDraftsForCourse,
   getCourseMessages, saveCourseMessages, clearCourseMessages,
   getScreenshot, saveScreenshot,
+  getUserCourseMarkdown, saveUserCourse, deleteUserCourse,
   deleteProfile, deleteProfileSummary, deletePreferences,
 } from './storage.js';
 
 const _versions = {};
 
-// Keys the server currently accepts. New keys (activities, activityKBs, messages,
-// courseKB, onboardingComplete) are stored locally and will sync once learn-service
-// is updated. Until then, skip them to avoid 400 console noise.
-const SERVER_KNOWN_PREFIXES = ['profile', 'profileSummary', 'preferences', 'summative', 'gap', 'journey', 'progress'];
+// Keys the server accepts for sync.
+const SERVER_KNOWN_PREFIXES = [
+  'profile', 'profileSummary', 'preferences',
+  'summative', 'gap', 'journey', 'progress',
+  'courseKB', 'activities', 'activityKBs', 'drafts', 'messages',
+  'courses', 'onboardingComplete',
+];
 
 function serverAcceptsKey(syncKey) {
   return SERVER_KNOWN_PREFIXES.some(p => syncKey === p || syncKey.startsWith(p + ':'));
@@ -123,6 +127,7 @@ async function getLocalData(syncKey) {
     );
   }
   if (syncKey.startsWith('messages:')) return getCourseMessages(syncKey.slice('messages:'.length));
+  if (syncKey.startsWith('courses:')) return getUserCourseMarkdown(syncKey.slice('courses:'.length));
   return null;
 }
 
@@ -165,6 +170,15 @@ async function saveLocalData(syncKey, data) {
     const courseId = syncKey.slice('messages:'.length);
     await clearCourseMessages(courseId);
     await saveCourseMessages(courseId, Array.isArray(data) ? data : [data]);
+    return;
+  }
+  if (syncKey.startsWith('courses:')) {
+    const courseId = syncKey.slice('courses:'.length);
+    if (data) {
+      await saveUserCourse(courseId, data);
+    } else {
+      await deleteUserCourse(courseId);
+    }
     return;
   }
 }
