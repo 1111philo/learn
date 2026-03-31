@@ -41,34 +41,31 @@ export default function AppShell({ children }) {
   };
 
   const navTo = (path) => navigate(path);
-  const currentNav = (path) => {
-    if (path === '/courses') return location.pathname === '/courses' || location.pathname.startsWith('/courses/');
-    return location.pathname === path;
-  };
 
   return (
     <>
       <a href="#main-content" className="skip-link">Skip to main content</a>
       {!isOnboarding && (
         <header role="banner">
-          <img src="assets/icon-32.png" alt="1111" className="logo" />
-          <span className="header-title">Learn</span>
-          <nav className="header-nav" aria-label="Main navigation">
-            <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
-            <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
-          </nav>
+          <a href="#" className="header-home" onClick={(e) => { e.preventDefault(); navTo('/courses'); }} aria-label="Courses home">
+            <img src="assets/icon-32.png" alt="1111" className="logo" />
+            <span className="header-title">Learn</span>
+          </a>
           <div className="header-spacer" />
           <div className="user-menu">
             {loggedIn ? (
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button className="user-menu-btn" aria-label={`Account: ${user?.email || 'signed in'}`}>
-                    <span>{user?.email || 'Account'}</span>
+                    <span className="user-menu-email">{user?.email || 'Account'}</span>
                   </button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content className="user-dropdown" sideOffset={6} align="end">
                     <DropdownMenu.Label className="user-dropdown-email">{user?.email || ''}</DropdownMenu.Label>
+                    <DropdownMenu.Item className="user-dropdown-action" onSelect={() => navTo('/settings')}>
+                      Settings
+                    </DropdownMenu.Item>
                     <DropdownMenu.Item className="user-dropdown-action danger" onSelect={handleSignOut}>
                       Sign Out
                     </DropdownMenu.Item>
@@ -76,9 +73,12 @@ export default function AppShell({ children }) {
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
             ) : (
-              <button className="user-menu-btn" aria-label="Login" onClick={handleUserMenuClick}>
-                <span>Login</span>
-              </button>
+              <>
+                <button className="header-settings-btn" onClick={() => navTo('/settings')} aria-label="Settings">Settings</button>
+                <button className="user-menu-btn" aria-label="Login" onClick={handleUserMenuClick}>
+                  <span>Login</span>
+                </button>
+              </>
             )}
           </div>
         </header>
@@ -87,13 +87,6 @@ export default function AppShell({ children }) {
       <main id="main-content" className={animClass} tabIndex={-1} aria-label="App content">
         {children}
       </main>
-
-      {!isOnboarding && (
-        <nav className="bottom-nav" aria-label="Main navigation">
-          <button onClick={() => navTo('/courses')} aria-current={currentNav('/courses') ? 'page' : 'false'}>Courses</button>
-          <button onClick={() => navTo('/settings')} aria-current={currentNav('/settings') ? 'page' : 'false'}>Settings</button>
-        </nav>
-      )}
     </>
   );
 }
