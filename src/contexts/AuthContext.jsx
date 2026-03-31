@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as authModule from '../../js/auth.js';
 import { init as initDatabase, clearAllData } from '../../js/db.js';
+import { flushPendingSync } from '../lib/syncDebounce.js';
 
 const AuthContext = createContext(null);
 
@@ -37,6 +38,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    await flushPendingSync();
     await authModule.logout();
     await clearAllData();
     await initDatabase();

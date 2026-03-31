@@ -84,7 +84,9 @@ export async function loadAll() {
   if (!await isLoggedIn()) return;
 
   const res = await authenticatedFetch('/v1/sync');
-  if (!res.ok) return;
+  if (!res.ok) {
+    throw new Error(`Failed to load data from server: ${res.status}`);
+  }
 
   const items = await res.json();
   const serverKeys = new Set();

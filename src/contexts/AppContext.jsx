@@ -3,6 +3,7 @@ import { getPreferences } from '../../js/storage.js';
 import { loadCourses, invalidateCoursesCache } from '../../js/courseOwner.js';
 import * as sync from '../../js/sync.js';
 import * as auth from '../../js/auth.js';
+import { notifySyncFailure } from '../lib/syncDebounce.js';
 
 const AppContext = createContext(null);
 
@@ -36,7 +37,7 @@ export function AppProvider({ children }) {
       const courses = await loadCourses();
 
       if (await auth.isLoggedIn()) {
-        try { await sync.loadAll(); } catch { /* offline */ }
+        try { await sync.loadAll(); } catch (err) { notifySyncFailure('loadAll', err); }
       }
 
       const preferences = await getPreferences();
@@ -56,7 +57,7 @@ export function AppProvider({ children }) {
         const preferences = await getPreferences();
         const courses = await loadCourses();
         dispatch({ type: 'INIT_DATA', payload: { preferences, courses } });
-      } catch { /* offline or session expired — handled elsewhere */ }
+      } catch (err) { notifySyncFailure('loadAll', err); }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
