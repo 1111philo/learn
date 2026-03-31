@@ -76,6 +76,14 @@ header > * { flex-shrink: 0; }
   border-radius: 4px;
 }
 
+.header-home {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--color-primary-text);
+}
+
 .header-title {
   font-weight: 700;
   font-size: 1rem;
@@ -86,6 +94,9 @@ header > * { flex-shrink: 0; }
 
 /* ── User menu (header dropdown) ───────────────────────────────────────── */
 .user-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   position: relative;
   min-width: 0; /* allow shrinking */
 }
@@ -114,11 +125,27 @@ header > * { flex-shrink: 0; }
   outline-offset: 2px;
 }
 
-#user-menu-label {
+.user-menu-email {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.header-settings-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  opacity: 0.8;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.header-settings-btn:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
+.header-settings-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* Radix DropdownMenu content */
 .user-dropdown {
@@ -283,59 +310,6 @@ h2 {
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────── */
-
-/* Header nav: hidden on mobile/tablet, shown on desktop */
-.header-nav {
-  display: none;
-  gap: 4px;
-  margin-left: calc(var(--space) * 2);
-}
-
-.header-nav button {
-  padding: 6px 14px;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--color-primary-text);
-  opacity: 0.7;
-  cursor: pointer;
-  border-radius: var(--radius);
-  transition: opacity 0.15s, background 0.15s;
-}
-
-.header-nav button:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
-.header-nav button[aria-current="page"] { opacity: 1; font-weight: 600; }
-.header-nav button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-
-/* Bottom nav: shown on mobile/tablet, hidden on desktop */
-.bottom-nav {
-  display: flex;
-  border-top: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.bottom-nav button {
-  flex: 1;
-  padding: 10px 4px;
-  border: none;
-  background: var(--color-bg);
-  font: inherit;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.bottom-nav button[aria-current="page"] {
-  color: var(--color-primary);
-  font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--color-primary);
-}
-
-.bottom-nav button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-}
 
 /* ── Course list ────────────────────────────────────────────────────────── */
 .course-list {
@@ -1944,8 +1918,6 @@ hr {
 
 /* ── Desktop (1024px+) ── */
 @media (min-width: 1024px) {
-  .header-nav { display: flex; }
-  .bottom-nav { display: none; }
   .course-list {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
